@@ -28,8 +28,11 @@
     "@electron-forge/plugin-vite": "^7.8.3",
     "@electron/fuses": "^1.8.0",
     "@types/electron-squirrel-startup": "^1.0.2",
+    "@types/react": "^19.1.11",
+    "@types/react-dom": "^19.1.7",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
+    "@vitejs/plugin-react": "^5.0.1",
     "electron": "37.3.1",
     "eslint": "^8.57.1",
     "eslint-plugin-import": "^2.32.0",
@@ -37,6 +40,8 @@
     "vite": "^5.4.19"
   },
   "dependencies": {
-    "electron-squirrel-startup": "^1.0.1"
+    "electron-squirrel-startup": "^1.0.1",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
   }
 }

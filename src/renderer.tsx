@@ -23,6 +23,18 @@
  * ```
  */
 
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App';
 import './index.css';
 
-console.log('👋 此消息由 "renderer.ts" 记录，通过 Vite 包含');
+console.log('👋 React + Electron 应用启动中...');
+
+// 获取根元素并创建 React 根
+const container = document.getElementById('root');
+if (!container) {
+  throw new Error('找不到根元素！请确保 HTML 中有 id="root" 的元素。');
+}
+
+const root = createRoot(container);
+root.render(<App />);
