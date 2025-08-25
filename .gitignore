@@ -1,0 +1,92 @@
+# 日志文件
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# 诊断报告 (https://nodejs.org/api/report.html)
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# 运行时数据
+pids
+*.pid
+*.seed
+*.pid.lock
+.DS_Store
+
+# jscoverage/JSCover 生成的检测库目录
+lib-cov
+
+# istanbul 等工具使用的覆盖率目录
+coverage
+*.lcov
+
+# nyc 测试覆盖率
+.nyc_output
+
+# node-waf 配置
+.lock-wscript
+
+# 编译的二进制插件 (https://nodejs.org/api/addons.html)
+build/Release
+
+# 依赖目录
+node_modules/
+jspm_packages/
+
+# TypeScript v1 声明文件
+typings/
+
+# TypeScript 缓存
+*.tsbuildinfo
+
+# 可选的 npm 缓存目录
+.npm
+
+# 可选的 eslint 缓存
+.eslintcache
+
+# 可选的 REPL 历史记录
+.node_repl_history
+
+# 'npm pack' 的输出
+*.tgz
+
+# Yarn 完整性文件
+.yarn-integrity
+
+# dotenv 环境变量文件
+.env
+.env.test
+
+# parcel-bundler 缓存 (https://parceljs.org/)
+.cache
+
+# next.js 构建输出
+.next
+
+# nuxt.js 构建输出
+.nuxt
+
+# vuepress 构建输出
+.vuepress/dist
+
+# Serverless 目录
+.serverless/
+
+# FuseBox 缓存
+.fusebox/
+
+# DynamoDB 本地文件
+.dynamodb/
+
+# Webpack
+.webpack/
+
+# Vite
+.vite/
+
+# Electron-Forge
+out/
