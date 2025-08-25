@@ -7,6 +7,23 @@ if (started) {
   app.quit();
 }
 
+// 设置控制台错误过滤器
+const originalConsoleError = console.error;
+console.error = (...args: any[]) => {
+  const message = args.join(' ');
+  // 过滤掉 Autofill 相关的错误
+  if (message.includes('Autofill.enable') ||
+      message.includes('Autofill.setAddresses') ||
+      message.includes('devtools://devtools') ||
+      message.includes('Request Autofill')) {
+    return; // 不输出这些错误
+  }
+  originalConsoleError.apply(console, args);
+};
+
+// 应用启动日志
+console.log('🚀 React + Electron 应用启动中...');
+
 // 创建中文菜单栏
 const createMenu = () => {
   const template: any[] = [
@@ -160,6 +177,14 @@ const createWindow = () => {
     height: 600,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      // 禁用 Node.js 集成以提高安全性
+      nodeIntegration: false,
+      // 启用上下文隔离
+      contextIsolation: true,
+      // 在生产环境中启用网页安全性
+      webSecurity: true,
+      // 禁用不安全内容运行
+      allowRunningInsecureContent: false,
     },
   });
 
@@ -170,8 +195,27 @@ const createWindow = () => {
     mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
   }
 
-  // 打开开发者工具
-  mainWindow.webContents.openDevTools();
+  // 开发环境配置
+  const isDevelopment = !!MAIN_WINDOW_VITE_DEV_SERVER_URL;
+
+  if (isDevelopment) {
+    // 开发环境：延迟打开开发者工具
+    mainWindow.webContents.once('did-finish-load', () => {
+      setTimeout(() => {
+        mainWindow.webContents.openDevTools({ mode: 'detach' });
+        console.log('🔧 开发者工具已打开');
+        console.log('ℹ️  已知问题说明:');
+        console.log('   - Autofill API 错误是 Electron 开发者工具的已知问题');
+        console.log('   - 这些错误不会影响应用程序的正常功能');
+        console.log('   - 在生产环境中不会出现这些错误');
+      }, 1000);
+    });
+  }
+
+  // 添加窗口事件监听
+  mainWindow.on('ready-to-show', () => {
+    console.log('✅ 应用程序窗口已准备就绪');
+  });
 };
 
 // 当 Electron 完成初始化并准备创建浏览器窗口时，将调用此方法
