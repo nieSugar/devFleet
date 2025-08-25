@@ -1,18 +1,25 @@
 import React, { useState } from 'react';
 import TodoList from './components/TodoList';
+import ProjectManager from './components/ProjectManager';
 import './App.css';
 
 const App: React.FC = () => {
   const [count, setCount] = useState(0);
-  const [currentTab, setCurrentTab] = useState<'counter' | 'todo'>('counter');
+  const [currentTab, setCurrentTab] = useState<'counter' | 'todo' | 'projects'>('projects');
 
   return (
     <div className="app">
       <header className="app-header">
-        <h1>💖 你好世界！</h1>
-        <p>欢迎使用您的 React + Electron 应用程序</p>
+        <h1>🚀 DevFleet</h1>
+        <p>一键管理和启动你的前端项目</p>
 
         <div className="tab-buttons">
+          <button
+            className={`tab-btn ${currentTab === 'projects' ? 'active' : ''}`}
+            onClick={() => setCurrentTab('projects')}
+          >
+            🚀 项目管理
+          </button>
           <button
             className={`tab-btn ${currentTab === 'counter' ? 'active' : ''}`}
             onClick={() => setCurrentTab('counter')}
@@ -29,7 +36,9 @@ const App: React.FC = () => {
       </header>
 
       <main className="app-main">
-        {currentTab === 'counter' ? (
+        {currentTab === 'projects' ? (
+          <ProjectManager />
+        ) : currentTab === 'counter' ? (
           <>
             <div className="counter-section">
               <h2>计数器示例</h2>
