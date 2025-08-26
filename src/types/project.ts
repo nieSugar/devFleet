@@ -15,9 +15,15 @@ export interface Project {
   lastRunTime?: Date;
 }
 
+export interface AppSettings {
+  // 是否在外部终端中运行脚本（Windows: PowerShell; macOS: Terminal; Linux: 常见终端）
+  runInExternalTerminal: boolean;
+}
+
 export interface ProjectConfig {
   projects: Project[];
   lastUpdated: Date;
+  settings?: AppSettings;
 }
 
 export interface ProcessInfo {

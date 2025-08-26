@@ -1,4 +1,4 @@
-import { Project, NpmScript, ProjectConfig } from '../types/project';
+import { Project, NpmScript, ProjectConfig, AppSettings } from '../types/project';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -33,16 +33,16 @@ export function getPackageScripts(projectPath: string): NpmScript[] {
  */
 export function getProjectName(projectPath: string): string {
   try {
-    const packageJsonPath = path.join(projectPath, 'package.json');
+    // 采用package.json的名称
+    // const packageJsonPath = path.join(projectPath, 'package.json');
     
-    if (fs.existsSync(packageJsonPath)) {
-      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-      if (packageJson.name) {
-        return packageJson.name;
-      }
-    }
+    // if (fs.existsSync(packageJsonPath)) {
+    //   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+    //   if (packageJson.name) {
+    //     return packageJson.name;
+    //   }
+    // }
     
-    // 如果没有 package.json 或没有 name 字段，使用文件夹名称
     return path.basename(projectPath);
   } catch (error) {
     console.error('Error getting project name:', error);
@@ -86,12 +86,14 @@ export function createProject(projectPath: string): Project | null {
   const id = generateProjectId();
   const name = getProjectName(projectPath);
   const scripts = getPackageScripts(projectPath);
+  const selectedScript = scripts[0]?.name;
 
   return {
     id,
     name,
     path: projectPath,
     scripts,
+    selectedScript,
     isRunning: false
   };
 }
@@ -119,6 +121,10 @@ export function loadProjectConfig(): ProjectConfig {
         if (isValidProjectPath(project.path)) {
           // 更新脚本信息
           project.scripts = getPackageScripts(project.path);
+          // 兼容从 JSON 恢复的时间字段
+          if ((project as any).lastRunTime) {
+            try { (project as any).lastRunTime = new Date((project as any).lastRunTime); } catch (_e) { /* ignore invalid date */ }
+          }
           return true;
         }
         return false;
@@ -135,7 +141,8 @@ export function loadProjectConfig(): ProjectConfig {
 
   return {
     projects: [],
-    lastUpdated: new Date()
+    lastUpdated: new Date(),
+    settings: { runInExternalTerminal: true }
   };
 }
 
@@ -145,10 +152,15 @@ export function loadProjectConfig(): ProjectConfig {
 export function saveProjectConfig(config: ProjectConfig): boolean {
   try {
     const configPath = getConfigPath();
-    const configData = JSON.stringify({
+    // 合并默认设置
+    const defaults: AppSettings = { runInExternalTerminal: false };
+    const merged: ProjectConfig = {
       ...config,
+      settings: { ...defaults, ...(config.settings || {}) },
       lastUpdated: new Date()
-    }, null, 2);
+    };
+
+    const configData = JSON.stringify(merged, null, 2);
     
     fs.writeFileSync(configPath, configData, 'utf-8');
     return true;

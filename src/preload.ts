@@ -14,8 +14,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPackageScripts: (projectPath: string): Promise<IpcResponse> =>
     ipcRenderer.invoke('get-package-scripts', projectPath),
 
-  // 运行 npm 脚本
-  runScript: (params: { projectPath: string; scriptName: string; projectId: string }): Promise<IpcResponse> =>
+  // 运行 npm 脚本（支持外部终端）
+  runScript: (params: { projectPath: string; scriptName: string; projectId: string;}): Promise<IpcResponse> =>
     ipcRenderer.invoke('run-script', params),
 
   // 停止脚本
@@ -25,6 +25,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 检查脚本运行状态
   checkScriptStatus: (projectId: string): Promise<IpcResponse> =>
     ipcRenderer.invoke('check-script-status', projectId),
+
+  // 检测编辑器安装情况
+  detectEditors: (): Promise<IpcResponse> =>
+    ipcRenderer.invoke('detect-editors'),
+
+  // 用编辑器打开项目
+  openInEditor: (params: { editor: 'vscode' | 'cursor' | 'webstorm'; projectPath: string }): Promise<IpcResponse> =>
+    ipcRenderer.invoke('open-in-editor', params),
 
   // 加载项目配置
   loadProjectConfig: (): Promise<IpcResponse> =>
@@ -49,9 +57,11 @@ declare global {
     electronAPI: {
       selectFolder: () => Promise<IpcResponse>;
       getPackageScripts: (projectPath: string) => Promise<IpcResponse>;
-      runScript: (params: { projectPath: string; scriptName: string; projectId: string }) => Promise<IpcResponse>;
+      runScript: (params: { projectPath: string; scriptName: string; projectId: string; }) => Promise<IpcResponse>;
       stopScript: (projectId: string) => Promise<IpcResponse>;
       checkScriptStatus: (projectId: string) => Promise<IpcResponse>;
+      detectEditors: () => Promise<IpcResponse>;
+      openInEditor: (params: { editor: 'vscode' | 'cursor' | 'webstorm'; projectPath: string }) => Promise<IpcResponse>;
       loadProjectConfig: () => Promise<IpcResponse>;
       saveProjectConfig: (config: any) => Promise<IpcResponse>;
       addProjectToConfig: (projectPath: string) => Promise<IpcResponse>;

@@ -1,7 +1,7 @@
 .project-manager {
   padding: 20px;
   max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
 }
 
 .project-manager-header {
@@ -60,7 +60,6 @@
 }
 
 .btn-success {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
   color: white;
 }
 
@@ -111,37 +110,31 @@
   font-size: 16px;
 }
 
-.projects-table {
+.projects-table-native {
   width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
 }
-
-.table-header {
-  display: grid;
-  grid-template-columns: 2fr 3fr 2fr 2fr;
-  gap: 15px;
-  padding: 15px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+.projects-table-native thead th {
+  text-align: left;
+  padding: 12px 14px;
+  color: #333;
   font-weight: 600;
-  font-size: 14px;
 }
-
-.table-row {
-  display: grid;
-  grid-template-columns: 2fr 3fr 2fr 2fr;
-  gap: 15px;
-  padding: 15px 20px;
-  border-bottom: 1px solid #e0e0e0;
-  align-items: center;
-  transition: background-color 0.2s ease;
+.projects-table-native tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #eee;
+  vertical-align: middle;
+  text-align: left;
 }
-
-.table-row:hover {
-  background-color: #f8f9fa;
+.projects-table-native tbody tr:hover {
+  background: #f8f9fa;
 }
-
-.table-row:last-child {
-  border-bottom: none;
+.projects-table-native thead th:first-child {
+  border-top-left-radius: 8px;
+}
+.projects-table-native thead th:last-child {
+  border-top-right-radius: 8px;
 }
 
 .col-name,
@@ -180,15 +173,21 @@
 }
 
 @keyframes pulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.7; }
-  100% { opacity: 1; }
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 .path {
   color: #666;
   font-size: 13px;
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
   word-break: break-all;
   line-height: 1.4;
 }

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, spawnSync, ChildProcess } from 'child_process';
 import {
   getPackageScripts,
   isValidProjectPath,
@@ -9,7 +9,6 @@ import {
   saveProjectConfig,
   addProjectToConfig,
   removeProjectFromConfig,
-  createProject
 } from './utils/projectManager';
 
 // 处理在 Windows 上安装/卸载时创建/删除快捷方式
@@ -34,156 +33,11 @@ console.error = (...args: any[]) => {
 // 应用启动日志
 console.log('🚀 React + Electron 应用启动中...');
 
-// 创建中文菜单栏
-const createMenu = () => {
-  const template: any[] = [
-    {
-      label: '文件',
-      submenu: [
-        {
-          label: '新建',
-          accelerator: 'CmdOrCtrl+N',
-          click: () => {
-            console.log('新建文件');
-          }
-        },
-        {
-          label: '打开',
-          accelerator: 'CmdOrCtrl+O',
-          click: () => {
-            console.log('打开文件');
-          }
-        },
-        { type: 'separator' },
-        {
-          label: '退出',
-          accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
-          click: () => {
-            app.quit();
-          }
-        }
-      ]
-    },
-    {
-      label: '编辑',
-      submenu: [
-        {
-          label: '撤销',
-          accelerator: 'CmdOrCtrl+Z',
-          role: 'undo'
-        },
-        {
-          label: '重做',
-          accelerator: 'Shift+CmdOrCtrl+Z',
-          role: 'redo'
-        },
-        { type: 'separator' },
-        {
-          label: '剪切',
-          accelerator: 'CmdOrCtrl+X',
-          role: 'cut'
-        },
-        {
-          label: '复制',
-          accelerator: 'CmdOrCtrl+C',
-          role: 'copy'
-        },
-        {
-          label: '粘贴',
-          accelerator: 'CmdOrCtrl+V',
-          role: 'paste'
-        }
-      ]
-    },
-    {
-      label: '查看',
-      submenu: [
-        {
-          label: '重新加载',
-          accelerator: 'CmdOrCtrl+R',
-          click: (_item: any, focusedWindow: any) => {
-            if (focusedWindow) focusedWindow.reload();
-          }
-        },
-        {
-          label: '强制重新加载',
-          accelerator: 'CmdOrCtrl+Shift+R',
-          click: (_item: any, focusedWindow: any) => {
-            if (focusedWindow) focusedWindow.webContents.reloadIgnoringCache();
-          }
-        },
-        {
-          label: '切换开发者工具',
-          accelerator: process.platform === 'darwin' ? 'Alt+Cmd+I' : 'Ctrl+Shift+I',
-          click: (_item: any, focusedWindow: any) => {
-            if (focusedWindow) focusedWindow.webContents.toggleDevTools();
-          }
-        },
-        { type: 'separator' },
-        {
-          label: '实际大小',
-          accelerator: 'CmdOrCtrl+0',
-          role: 'resetZoom'
-        },
-        {
-          label: '放大',
-          accelerator: 'CmdOrCtrl+Plus',
-          role: 'zoomIn'
-        },
-        {
-          label: '缩小',
-          accelerator: 'CmdOrCtrl+-',
-          role: 'zoomOut'
-        },
-        { type: 'separator' },
-        {
-          label: '切换全屏',
-          accelerator: process.platform === 'darwin' ? 'Ctrl+Cmd+F' : 'F11',
-          click: (_item: any, focusedWindow: any) => {
-            if (focusedWindow) focusedWindow.setFullScreen(!focusedWindow.isFullScreen());
-          }
-        }
-      ]
-    },
-    {
-      label: '窗口',
-      submenu: [
-        {
-          label: '最小化',
-          accelerator: 'CmdOrCtrl+M',
-          role: 'minimize'
-        },
-        {
-          label: '关闭',
-          accelerator: 'CmdOrCtrl+W',
-          role: 'close'
-        }
-      ]
-    },
-    {
-      label: '帮助',
-      submenu: [
-        {
-          label: '关于',
-          click: () => {
-            console.log('关于应用程序');
-          }
-        }
-      ]
-    }
-  ];
-
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
-};
-
 const createWindow = () => {
-  // 创建中文菜单栏
-  createMenu();
 
   // 创建浏览器窗口
   const mainWindow = new BrowserWindow({
-    width: 800,
+    width: 1000,
     height: 600,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -230,6 +84,68 @@ const createWindow = () => {
 
 // 存储运行中的进程
 const runningProcesses = new Map<string, ChildProcess>();
+
+// 支持的编辑器类型
+ type EditorId = 'vscode' | 'cursor' | 'webstorm';
+
+ // 判断命令是否可用
+ function isCommandAvailable(cmd: string, args: string[] = ['--version']): boolean {
+   try {
+     const res = spawnSync(cmd, args, { stdio: 'ignore',shell: true });
+     return !res.error;
+   } catch {
+     return false;
+   }
+ }
+
+ // 用指定编辑器打开项目目录
+ function openWithEditor(editor: EditorId, projectPath: string): boolean {
+   const isWin = process.platform === 'win32';
+   const isMac = process.platform === 'darwin';
+   try {
+     if (editor === 'vscode') {
+       if (isMac) {
+         spawn('open', ['-a', 'Visual Studio Code', projectPath], { shell: true });
+       } else if (isWin) {
+         // 通过 cmd start 调用 code
+         spawn('code', [projectPath], {  shell: true });
+       } else {
+         spawn('code', [projectPath], { shell: true  });
+       }
+       return true;
+     }
+     if (editor === 'cursor') {
+       if (isMac) {
+         spawn('open', ['-a', 'Cursor', projectPath], { shell: true });
+       } else if (isWin) {
+         spawn('cursor', [ projectPath], { shell: true });
+       } else {
+         spawn('cursor', [projectPath], { shell: true });
+       }
+       return true;
+     }
+     if (editor === 'webstorm') {
+       if (isMac) {
+         spawn('open', ['-a', 'WebStorm', projectPath], { detached: true });
+         return true;
+       }
+       if (isWin) {
+         const exe = isCommandAvailable('webstorm64.exe') ? 'webstorm64.exe' : (isCommandAvailable('webstorm.exe') ? 'webstorm.exe' : null);
+         if (!exe) return false;
+         spawn('webstorm', [projectPath], { shell: true });
+         return true;
+       }
+       const cmd = isCommandAvailable('webstorm') ? 'webstorm' : (isCommandAvailable('jetbrains-webstorm') ? 'jetbrains-webstorm' : null);
+       if (!cmd) return false;
+       spawn(cmd, [projectPath], { detached: true });
+       return true;
+     }
+   } catch {
+     return false;
+   }
+   return false;
+ }
+
 
 // IPC 处理程序
 const setupIpcHandlers = () => {
@@ -297,55 +213,41 @@ const setupIpcHandlers = () => {
   // 运行 npm 脚本
   ipcMain.handle('run-script', async (_, { projectPath, scriptName, projectId }) => {
     try {
-      // 检查是否已有进程在运行
-      if (runningProcesses.has(projectId)) {
-        return {
-          success: false,
-          error: '该项目已有脚本在运行中'
-        };
-      }
-
-      // 使用 npm run 命令
       const isWindows = process.platform === 'win32';
-      const command = isWindows ? 'npm.cmd' : 'npm';
-      const args = ['run', scriptName];
 
-      const childProcess = spawn(command, args, {
-        cwd: projectPath,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        shell: isWindows
-      });
-
-      // 存储进程引用
-      runningProcesses.set(projectId, childProcess);
-
-      // 处理进程输出
-      childProcess.stdout?.on('data', (data) => {
-        console.log(`[${projectId}] ${data.toString()}`);
-      });
-
-      childProcess.stderr?.on('data', (data) => {
-        console.error(`[${projectId}] ${data.toString()}`);
-      });
-
-      // 处理进程结束
-      childProcess.on('close', (code) => {
-        console.log(`[${projectId}] 进程结束，退出码: ${code}`);
-        runningProcesses.delete(projectId);
-      });
-
-      childProcess.on('error', (error) => {
-        console.error(`[${projectId}] 进程错误:`, error);
-        runningProcesses.delete(projectId);
-      });
-
-      return {
-        success: true,
-        data: {
-          pid: childProcess.pid,
-          message: `脚本 "${scriptName}" 已启动`
+        if (isWindows) {
+          // 用新的 PowerShell 窗口
+          spawn('cmd.exe', ['/c', 'start', '""', 'powershell',
+            '-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+            '-Command', `npm run ${scriptName}`
+          ], { cwd: projectPath, windowsHide: false });
+        } else if (process.platform === 'darwin') {
+          // macOS 使用 Terminal.app 打开
+          const osa = `tell application "Terminal"
+  activate
+  do script "cd ${projectPath.replace(/"/g, '\\"')} && npm run ${scriptName}"
+end tell`;
+          spawn('osascript', ['-e', osa]);
+        } else {
+          // Linux: 尝试常见终端
+          const terms = [
+            ['gnome-terminal', ['--', 'bash', '-lc', `npm run ${scriptName}; exec bash`]],
+            ['konsole', ['-e', `bash -lc "npm run ${scriptName}; exec bash"`]],
+            ['xterm', ['-e', `bash -lc "npm run ${scriptName}; exec bash"`]],
+            ['alacritty', ['-e', 'bash', '-lc', `npm run ${scriptName}; exec bash`]]
+          ] as const;
+          let started = false;
+          for (const [cmd, args] of terms) {
+            const p = spawn(cmd, args, { cwd: projectPath });
+            p.on('error', () => { /* ignore */ });
+            p.on('spawn', () => { started = true; });
+            // 简单地尝试第一个能启动的
+            await new Promise(r => setTimeout(r, 150));
+            if (started) break;
+          }
         }
-      };
+        return { success: true, data: { message: '已在外部终端启动' } };
+
     } catch (error) {
       return {
         success: false,
@@ -354,12 +256,49 @@ const setupIpcHandlers = () => {
     }
   });
 
+  // 检测编辑器是否已安装
+  ipcMain.handle('detect-editors', async () => {
+    try {
+      const isWin = process.platform === 'win32';
+      const isMac = process.platform === 'darwin';
+      // VS Code 可以通过 command line 工具 code 检测
+      const vscode = isMac ? true : isCommandAvailable('code');
+      // Cursor
+      const cursor = isMac ? true : isCommandAvailable('cursor');
+      // WebStorm
+      let webstorm = false;
+      if (isMac) {
+        webstorm = true;
+      } else if (isWin) {
+        webstorm = isCommandAvailable('webstorm64.exe') || isCommandAvailable('webstorm.exe');
+      } else {
+        webstorm = isCommandAvailable('webstorm') || isCommandAvailable('jetbrains-webstorm');
+      }
+      return { success: true, data: { vscode, cursor, webstorm } };
+    } catch (error) {
+      return { success: false, error: `检测编辑器失败: ${error instanceof Error ? error.message : String(error)}` };
+    }
+  });
+
+  // 用指定编辑器打开项目
+  ipcMain.handle('open-in-editor', async (_evt, params: { editor: EditorId; projectPath: string }) => {
+    const { editor, projectPath } = params;
+    try {
+      const ok = openWithEditor(editor, projectPath);
+      if (!ok) return { success: false, error: '未找到对应编辑器或命令不可用' };
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: `打开编辑器失败: ${error instanceof Error ? error.message : String(error)}` };
+    }
+  });
+
+
   // 停止脚本
   ipcMain.handle('stop-script', async (_, projectId: string) => {
     try {
-      const process = runningProcesses.get(projectId);
+      const cp = runningProcesses.get(projectId);
 
-      if (!process) {
+      if (!cp) {
         return {
           success: false,
           error: '未找到运行中的进程'
@@ -368,12 +307,12 @@ const setupIpcHandlers = () => {
 
       // 终止进程
       const isWindows = process.platform === 'win32';
-      if (isWindows && process.pid) {
+      if (isWindows && cp.pid) {
         // Windows 上使用 taskkill
-        spawn('taskkill', ['/pid', process.pid.toString(), '/t', '/f']);
+        spawn('taskkill', ['/pid', cp.pid.toString(), '/t', '/f']);
       } else {
         // Unix 系统使用 SIGTERM
-        process.kill('SIGTERM');
+        cp.kill('SIGTERM');
       }
 
       runningProcesses.delete(projectId);

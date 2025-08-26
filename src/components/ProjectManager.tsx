@@ -1,15 +1,38 @@
-import React, { useState, useEffect } from 'react';
-import { Project, NpmScript } from '../types/project';
-import './ProjectManager.css';
+import React, { useState, useEffect } from "react";
+import { Project } from "../types/project";
+import "./ProjectManager.css";
+import { Table, Button, Space, Select, Typography, message } from "antd";
+import {
+  PlusOutlined,
+  ReloadOutlined,
+  PlayCircleOutlined,
+  DeleteOutlined,
+} from "@ant-design/icons";
+import vscodeSvg from "../img/vscode.svg";
+import cursorSvg from "../img/cursor.svg";
+import webstormSvg from "../img/webstorm.svg";
 
 const ProjectManager: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [messageApi, contextHolder] = message.useMessage();
+  const [availableEditors, setAvailableEditors] = useState<{
+    vscode: boolean;
+    cursor: boolean;
+    webstorm: boolean;
+  } | null>(null);
 
   // 加载项目配置
   useEffect(() => {
     loadProjects();
+    // 检测编辑器
+    (async () => {
+      try {
+        const result = await window.electronAPI.detectEditors();
+
+        if (result.success) setAvailableEditors(result.data);
+      } catch (e) {}
+    })();
   }, []);
 
   const loadProjects = async () => {
@@ -18,16 +41,16 @@ const ProjectManager: React.FC = () => {
       if (result.success && result.data) {
         setProjects(result.data.projects);
       } else {
-        showMessage('error', result.error || '加载项目配置失败');
+        showMessage("error", result.error || "加载项目配置失败");
       }
     } catch (error) {
-      showMessage('error', '加载项目配置失败');
+      showMessage("error", "加载项目配置失败");
     }
   };
 
-  const showMessage = (type: 'success' | 'error', text: string) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 3000);
+  const showMessage = (type: "success" | "error", text: string) => {
+    if (type === "success") messageApi.success(text);
+    else messageApi.error(text);
   };
 
   // 添加项目
@@ -37,20 +60,22 @@ const ProjectManager: React.FC = () => {
       const result = await window.electronAPI.selectFolder();
 
       if (result.success && result.data) {
-        const addResult = await window.electronAPI.addProjectToConfig(result.data.path);
+        const addResult = await window.electronAPI.addProjectToConfig(
+          result.data.path
+        );
         if (addResult.success && addResult.data) {
-          setProjects(prev => [...prev, addResult.data]);
-          showMessage('success', `项目 "${addResult.data.name}" 添加成功`);
+          setProjects((prev) => [...prev, addResult.data]);
+          showMessage("success", `项目 "${addResult.data.name}" 添加成功`);
         } else {
-          showMessage('error', addResult.error || '添加项目失败');
+          showMessage("error", addResult.error || "添加项目失败");
         }
       } else {
-        if (result.error && !result.error.includes('用户取消')) {
-          showMessage('error', result.error);
+        if (result.error && !result.error.includes("用户取消")) {
+          showMessage("error", result.error);
         }
       }
     } catch (error) {
-      showMessage('error', '添加项目时出错');
+      showMessage("error", "添加项目时出错");
     } finally {
       setLoading(false);
     }
@@ -58,17 +83,18 @@ const ProjectManager: React.FC = () => {
 
   // 删除项目
   const handleRemoveProject = async (projectId: string) => {
-    if (window.confirm('确定要删除这个项目吗？')) {
+    if (window.confirm("确定要删除这个项目吗？")) {
       try {
-        const result = await window.electronAPI.removeProjectFromConfig(projectId);
+        const result =
+          await window.electronAPI.removeProjectFromConfig(projectId);
         if (result.success) {
-          setProjects(prev => prev.filter(p => p.id !== projectId));
-          showMessage('success', '项目删除成功');
+          setProjects((prev) => prev.filter((p) => p.id !== projectId));
+          showMessage("success", "项目删除成功");
         } else {
-          showMessage('error', result.error || '删除项目失败');
+          showMessage("error", result.error || "删除项目失败");
         }
       } catch (error) {
-        showMessage('error', '删除项目时出错');
+        showMessage("error", "删除项目时出错");
       }
     }
   };
@@ -76,7 +102,7 @@ const ProjectManager: React.FC = () => {
   // 选择脚本
   const handleScriptChange = async (projectId: string, scriptName: string) => {
     // 更新本地状态
-    const updatedProjects = projects.map(project =>
+    const updatedProjects = projects.map((project) =>
       project.id === projectId
         ? { ...project, selectedScript: scriptName }
         : project
@@ -87,18 +113,18 @@ const ProjectManager: React.FC = () => {
     try {
       const config = {
         projects: updatedProjects,
-        lastUpdated: new Date()
+        lastUpdated: new Date(),
       };
       await window.electronAPI.saveProjectConfig(config);
     } catch (error) {
-      console.error('保存配置失败:', error);
+      console.error("保存配置失败:", error);
     }
   };
 
   // 运行脚本
   const handleRunScript = async (project: Project) => {
     if (!project.selectedScript) {
-      showMessage('error', '请先选择要运行的脚本');
+      showMessage("error", "请先选择要运行的脚本");
       return;
     }
 
@@ -107,187 +133,191 @@ const ProjectManager: React.FC = () => {
       const result = await window.electronAPI.runScript({
         projectPath: project.path,
         scriptName: project.selectedScript,
-        projectId: project.id
+        projectId: project.id,
       });
 
       if (result.success) {
-        setProjects(prev => prev.map(p => 
-          p.id === project.id 
-            ? { ...p, isRunning: true, lastRunTime: new Date() }
-            : p
-        ));
-        showMessage('success', `脚本 "${project.selectedScript}" 启动成功`);
+        showMessage("success", `脚本 "${project.selectedScript}" 启动成功`);
       } else {
-        showMessage('error', result.error || '启动脚本失败');
+        showMessage("error", result.error || "启动脚本失败");
       }
     } catch (error) {
-      showMessage('error', '启动脚本时出错');
+      showMessage("error", "启动脚本时出错");
     } finally {
       setLoading(false);
     }
   };
-
-  // 停止脚本
-  const handleStopScript = async (project: Project) => {
-    setLoading(true);
-    try {
-      const result = await window.electronAPI.stopScript(project.id);
-
-      if (result.success) {
-        setProjects(prev => prev.map(p => 
-          p.id === project.id 
-            ? { ...p, isRunning: false }
-            : p
-        ));
-        showMessage('success', '脚本已停止');
-      } else {
-        showMessage('error', result.error || '停止脚本失败');
-      }
-    } catch (error) {
-      showMessage('error', '停止脚本时出错');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 检查脚本状态
-  const checkScriptStatus = async (projectId: string) => {
-    try {
-      const result = await window.electronAPI.checkScriptStatus(projectId);
-      if (result.success) {
-        setProjects(prev => prev.map(p => 
-          p.id === projectId 
-            ? { ...p, isRunning: result.data.isRunning }
-            : p
-        ));
-      }
-    } catch (error) {
-      console.error('检查脚本状态失败:', error);
-    }
-  };
-
-  // 定期检查脚本状态
-  useEffect(() => {
-    const interval = setInterval(() => {
-      projects.forEach(project => {
-        if (project.isRunning) {
-          checkScriptStatus(project.id);
-        }
-      });
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [projects]);
 
   return (
     <div className="project-manager">
+      {contextHolder}
       <div className="project-manager-header">
         <h2>项目管理</h2>
-        <div className="header-actions">
-          <button 
-            className="btn btn-primary" 
+        <Space>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
             onClick={handleAddProject}
-            disabled={loading}
+            loading={loading}
           >
-            {loading ? '添加中...' : '📁 添加项目'}
-          </button>
-          <button 
-            className="btn btn-secondary" 
+            添加项目
+          </Button>
+          <Button
+            icon={<ReloadOutlined />}
             onClick={loadProjects}
             disabled={loading}
           >
-            🔄 刷新
-          </button>
-        </div>
+            刷新
+          </Button>
+        </Space>
       </div>
 
-      {message && (
-        <div className={`message ${message.type}`}>
-          {message.text}
-        </div>
-      )}
-
       <div className="projects-container">
-        {projects.length === 0 ? (
-          <div className="empty-state">
-            <p>还没有添加任何项目</p>
-            <p>点击"添加项目"按钮开始管理你的项目</p>
-          </div>
-        ) : (
-          <div className="projects-table">
-            <div className="table-header">
-              <div className="col-name">项目名称</div>
-              <div className="col-path">项目路径</div>
-              <div className="col-script">npm 脚本</div>
-              <div className="col-actions">操作</div>
-            </div>
-            
-            {projects.map(project => (
-              <div key={project.id} className="table-row">
-                <div className="col-name">
-                  <div className="project-name">
-                    <span className="name">{project.name}</span>
-                    {project.isRunning && (
-                      <span className="status running">运行中</span>
-                    )}
-                  </div>
-                </div>
-                
-                <div className="col-path">
-                  <span className="path" title={project.path}>
-                    {project.path}
-                  </span>
-                </div>
-                
-                <div className="col-script">
-                  <select
-                    value={project.selectedScript || ''}
-                    onChange={(e) => handleScriptChange(project.id, e.target.value)}
-                    className="script-select"
-                    disabled={project.scripts.length === 0}
+        <Table
+          rowKey="id"
+          dataSource={projects}
+          pagination={false}
+          columns={[
+            {
+              title: "项目名称",
+              dataIndex: "name",
+              width: 150,
+            },
+            {
+              title: "项目路径",
+              dataIndex: "path",
+              render: (text: string, record: Project) => {
+                const showVSCode = availableEditors?.vscode;
+                const showCursor = availableEditors?.cursor;
+                const showWebStorm = availableEditors?.webstorm;
+                return (
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
                   >
-                    <option value="">选择脚本</option>
-                    {project.scripts.map(script => (
-                      <option key={script.name} value={script.name}>
-                        {script.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="col-actions">
-                  <div className="action-buttons">
-                    {project.isRunning ? (
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => handleStopScript(project)}
-                        disabled={loading}
-                      >
-                        ⏹️ 停止
-                      </button>
-                    ) : (
-                      <button
-                        className="btn btn-success btn-sm"
-                        onClick={() => handleRunScript(project)}
-                        disabled={loading || !project.selectedScript}
-                      >
-                        ▶️ 运行
-                      </button>
-                    )}
-                    
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={() => handleRemoveProject(project.id)}
-                      disabled={loading}
+                    <Typography.Text copyable ellipsis={{ tooltip: text }}>
+                      {text}
+                    </Typography.Text>
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 6 }}
                     >
-                      🗑️ 删除
-                    </button>
+                      {showVSCode && (
+                        <Button
+                          size="small"
+                          type="text"
+                          title="使用 VS Code 打开"
+                          onClick={async () => {
+                            const res = await window.electronAPI.openInEditor({
+                              editor: "vscode",
+                              projectPath: record.path,
+                            });
+                            if (!res.success)
+                              showMessage(
+                                "error",
+                                res.error || "打开 VS Code 失败"
+                              );
+                          }}
+                        >
+                          <img
+                            alt="VS Code"
+                            src={vscodeSvg}
+                            style={{ width: 16, height: 16 }}
+                          />
+                        </Button>
+                      )}
+                      {showCursor && (
+                        <Button
+                          size="small"
+                          type="text"
+                          title="使用 Cursor 打开"
+                          onClick={async () => {
+                            const res = await window.electronAPI.openInEditor({
+                              editor: "cursor",
+                              projectPath: record.path,
+                            });
+                            if (!res.success)
+                              showMessage(
+                                "error",
+                                res.error || "打开 Cursor 失败"
+                              );
+                          }}
+                        >
+                          <img
+                            alt="Cursor"
+                            src={cursorSvg}
+                            style={{ width: 16, height: 16 }}
+                          />
+                        </Button>
+                      )}
+                      {showWebStorm && (
+                        <Button
+                          size="small"
+                          type="text"
+                          title="使用 WebStorm 打开"
+                          onClick={async () => {
+                            const res = await window.electronAPI.openInEditor({
+                              editor: "webstorm",
+                              projectPath: record.path,
+                            });
+                            if (!res.success)
+                              showMessage(
+                                "error",
+                                res.error || "打开 WebStorm 失败"
+                              );
+                          }}
+                        >
+                          <img
+                            alt="WebStorm"
+                            src={webstormSvg}
+                            style={{ width: 16, height: 16 }}
+                          />
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+                );
+              },
+            },
+            {
+              title: "npm 脚本",
+              dataIndex: "scripts",
+              width: 150,
+              render: (_: any, record: Project) => (
+                <Select
+                  value={record.selectedScript}
+                  style={{ width: 150 }}
+                  onChange={(v) => handleScriptChange(record.id, v)}
+                  options={record.scripts.map((s) => ({
+                    label: s.name,
+                    value: s.name,
+                  }))}
+                />
+              ),
+            },
+            {
+              title: "操作",
+              width: 150,
+              render: (_: any, record: Project) => (
+                <Space>
+                  <Button
+                    type="primary"
+                    icon={<PlayCircleOutlined />}
+                    disabled={!record.selectedScript}
+                    onClick={() => handleRunScript(record)}
+                  >
+                    运行
+                  </Button>
+                  <Button
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={() => handleRemoveProject(record.id)}
+                  >
+                    删除
+                  </Button>
+                </Space>
+              ),
+            },
+          ]}
+        />
       </div>
     </div>
   );
