@@ -11,7 +11,9 @@ export function getPackageScripts(projectPath: string): NpmScript[] {
   try {
     const packageJsonPath = path.join(projectPath, 'package.json');
     
-    if (!fs.existsSync(packageJsonPath)) {
+    try {
+      fs.accessSync(packageJsonPath, fs.constants.F_OK);
+    } catch {
       return [];
     }
 
@@ -36,11 +38,14 @@ export function getProjectName(projectPath: string): string {
     // 采用package.json的名称
     // const packageJsonPath = path.join(projectPath, 'package.json');
     
-    // if (fs.existsSync(packageJsonPath)) {
+    // try {
+    //   fs.accessSync(packageJsonPath, fs.constants.F_OK);
     //   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
     //   if (packageJson.name) {
     //     return packageJson.name;
     //   }
+    // } catch {
+    //   // package.json 不存在或无法读取
     // }
     
     return path.basename(projectPath);
@@ -56,7 +61,9 @@ export function getProjectName(projectPath: string): string {
 export function isValidProjectPath(projectPath: string): boolean {
   try {
     // 检查路径是否存在
-    if (!fs.existsSync(projectPath)) {
+    try {
+      fs.accessSync(projectPath, fs.constants.F_OK);
+    } catch {
       return false;
     }
 
@@ -68,7 +75,12 @@ export function isValidProjectPath(projectPath: string): boolean {
 
     // 检查是否包含 package.json
     const packageJsonPath = path.join(projectPath, 'package.json');
-    return fs.existsSync(packageJsonPath);
+    try {
+      fs.accessSync(packageJsonPath, fs.constants.F_OK);
+      return true;
+    } catch {
+      return false;
+    }
   } catch (error) {
     console.error('Error validating project path:', error);
     return false;
@@ -112,7 +124,8 @@ export function loadProjectConfig(): ProjectConfig {
   try {
     const configPath = getConfigPath();
     
-    if (fs.existsSync(configPath)) {
+    try {
+      fs.accessSync(configPath, fs.constants.F_OK);
       const configData = fs.readFileSync(configPath, 'utf-8');
       const config = JSON.parse(configData);
       
@@ -134,6 +147,8 @@ export function loadProjectConfig(): ProjectConfig {
         projects: validProjects,
         lastUpdated: new Date(config.lastUpdated || Date.now())
       };
+    } catch {
+      // 配置文件不存在，返回默认配置
     }
   } catch (error) {
     console.error('Error loading project config:', error);
@@ -180,7 +195,9 @@ function getConfigPath(): string {
   const appDataPath = path.join(userDataPath, 'devfleet');
   
   // 确保目录存在
-  if (!fs.existsSync(appDataPath)) {
+  try {
+    fs.accessSync(appDataPath, fs.constants.F_OK);
+  } catch {
     fs.mkdirSync(appDataPath, { recursive: true });
   }
   
