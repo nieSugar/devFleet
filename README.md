@@ -1,6 +1,7 @@
-# React + Electron 应用程序
+# de  
 
 这是一个使用 React、TypeScript、Vite 和 Electron 构建的现代桌面应用程序。
+devFleet 是一个用于开发和调试的桌面应用程序，支持 VSCode、Cursor、WebStorm 等编辑器。
 
 ## 🚀 功能特性
 

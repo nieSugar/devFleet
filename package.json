@@ -2,10 +2,11 @@
   "name": "devfleet",
   "productName": "devfleet",
   "version": "1.0.0",
-  "description": "我的 Electron 应用程序描述",
+  "description": "用于快速启动项目与编辑器",
   "main": ".vite/build/main.js",
   "scripts": {
     "start": "electron-forge start",
+    "start:debug": "electron-forge start --inspect-electron",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
@@ -13,10 +14,14 @@
   },
   "keywords": [],
   "author": {
-    "name": "NieRiFeng",
-    "email": "17673376360@163.com"
+    "name": "nieSugar",
+    "email": "niesuger@gmail.com"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nieSugar/devFleet"
+  },
   "devDependencies": {
     "@electron-forge/cli": "^7.8.3",
     "@electron-forge/maker-deb": "^7.8.3",
@@ -26,6 +31,7 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.8.3",
     "@electron-forge/plugin-fuses": "^7.8.3",
     "@electron-forge/plugin-vite": "^7.8.3",
+    "@electron-forge/publisher-github": "^7.8.3",
     "@electron/fuses": "^1.8.0",
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/node": "^24.3.0",

@@ -23,14 +23,12 @@
  * ```
  */
 
-import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
 
-console.log('👋 React + Electron 应用启动中...');
+console.log('👋 devFleet 启动中...');
 
-// 获取根元素并创建 React 根
 const container = document.getElementById('root');
 if (!container) {
   throw new Error('找不到根元素！请确保 HTML 中有 id="root" 的元素。');

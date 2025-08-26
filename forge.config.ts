@@ -10,9 +10,20 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    name: "devFleet",
   },
   rebuildConfig: {},
-  makers: [new MakerSquirrel({}), new MakerZIP({}, ['darwin']), new MakerRpm({}), new MakerDeb({})],
+  buildIdentifier:"prod",
+  makers: [
+    new MakerSquirrel({
+        authors: "nieSugar",
+      },
+      ["win32", "darwin"],
+    ),
+    new MakerZIP({}, ["darwin"]),
+    new MakerRpm({}),
+    new MakerDeb({}),
+  ],
   plugins: [
     new VitePlugin({
       // `build` 可以指定多个入口构建，可以是主进程、预加载脚本、工作进程等
@@ -48,6 +59,15 @@ const config: ForgeConfig = {
       [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
       [FuseV1Options.OnlyLoadAppFromAsar]: true,
     }),
+  ],
+  publishers: [
+    {
+      name: "@electron-forge/publisher-github",
+      config: {
+        prerelease: true,
+        draft: true,
+      },
+    },
   ],
 };
 

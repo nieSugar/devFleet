@@ -15,6 +15,7 @@ import {
 if (started) {
   app.quit();
 }
+app.setName('devFleet');
 
 // 设置控制台错误过滤器
 const originalConsoleError = console.error;
