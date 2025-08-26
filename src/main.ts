@@ -31,7 +31,7 @@ console.error = (...args: any[]) => {
 };
 
 // 应用启动日志
-console.log('🚀 React + Electron 应用启动中...');
+console.log('🚀 devFleet 启动中...');
 
 const createWindow = () => {
 
@@ -39,6 +39,8 @@ const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 1000,
     height: 600,
+    autoHideMenuBar: true, 
+    title: 'devFleet',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       // 禁用 Node.js 集成以提高安全性
@@ -92,7 +94,7 @@ const runningProcesses = new Map<string, ChildProcess>();
  function isCommandAvailable(cmd: string, args: string[] = ['--version']): boolean {
    try {
      const res = spawnSync(cmd, args, { stdio: 'ignore',shell: true });
-     return !res.error;
+     return res.status === 0;
    } catch {
      return false;
    }
@@ -258,6 +260,8 @@ end tell`;
 
   // 检测编辑器是否已安装
   ipcMain.handle('detect-editors', async () => {
+    console.log('detect-editors');
+    
     try {
       const isWin = process.platform === 'win32';
       const isMac = process.platform === 'darwin';

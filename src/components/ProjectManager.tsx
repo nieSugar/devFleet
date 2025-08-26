@@ -29,6 +29,7 @@ const ProjectManager: React.FC = () => {
     (async () => {
       try {
         const result = await window.electronAPI.detectEditors();
+        console.log(result, "result");
 
         if (result.success) setAvailableEditors(result.data);
       } catch (e) {}
@@ -204,6 +205,7 @@ const ProjectManager: React.FC = () => {
                         <Button
                           size="small"
                           type="text"
+                          className="ideaAction"
                           title="使用 VS Code 打开"
                           onClick={async () => {
                             const res = await window.electronAPI.openInEditor({
