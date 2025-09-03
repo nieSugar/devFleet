@@ -13,6 +13,7 @@ export interface Project {
   selectedScript?: string;
   isRunning?: boolean;
   lastRunTime?: Date;
+  packageManager?: string;
 }
 
 export interface AppSettings {

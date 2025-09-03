@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { spawn, spawnSync, ChildProcess } from 'child_process';
+import fs from 'node:fs';
 import {
   getPackageScripts,
   isValidProjectPath,
@@ -35,7 +36,6 @@ console.error = (...args: any[]) => {
 console.log('🚀 devFleet 启动中...');
 
 const createWindow = () => {
-
   // 创建浏览器窗口
   const mainWindow = new BrowserWindow({
     width: 1000,
@@ -44,13 +44,9 @@ const createWindow = () => {
     title: 'devFleet',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      // 禁用 Node.js 集成以提高安全性
       nodeIntegration: false,
-      // 启用上下文隔离
       contextIsolation: true,
-      // 在生产环境中启用网页安全性
       webSecurity: true,
-      // 禁用不安全内容运行
       allowRunningInsecureContent: false,
     },
   });
@@ -89,66 +85,147 @@ const createWindow = () => {
 const runningProcesses = new Map<string, ChildProcess>();
 
 // 支持的编辑器类型
- type EditorId = 'vscode' | 'cursor' | 'webstorm';
+type EditorId = 'vscode' | 'cursor' | 'webstorm';
 
- // 判断命令是否可用
- function isCommandAvailable(cmd: string, args: string[] = ['--version']): boolean {
-   try {
-     const res = spawnSync(cmd, args, { stdio: 'ignore',shell: true });
-     return res.status === 0;
-   } catch {
-     return false;
-   }
- }
+// 支持的包管理器类型
+type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
 
- // 用指定编辑器打开项目目录
- function openWithEditor(editor: EditorId, projectPath: string): boolean {
-   const isWin = process.platform === 'win32';
-   const isMac = process.platform === 'darwin';
-   try {
-     if (editor === 'vscode') {
-       if (isMac) {
-         spawn('open', ['-a', 'Visual Studio Code', projectPath], { shell: true });
-       } else if (isWin) {
-         // 通过 cmd start 调用 code
-         spawn('code', [projectPath], {  shell: true });
-       } else {
-         spawn('code', [projectPath], { shell: true  });
-       }
-       return true;
-     }
-     if (editor === 'cursor') {
-       if (isMac) {
-         spawn('open', ['-a', 'Cursor', projectPath], { shell: true });
-       } else if (isWin) {
-         spawn('cursor', [ projectPath], { shell: true });
-       } else {
-         spawn('cursor', [projectPath], { shell: true });
-       }
-       return true;
-     }
-     if (editor === 'webstorm') {
-       if (isMac) {
-         spawn('open', ['-a', 'WebStorm', projectPath], { detached: true });
-         return true;
-       }
-       if (isWin) {
-         const exe = isCommandAvailable('webstorm64.exe') ? 'webstorm64.exe' : (isCommandAvailable('webstorm.exe') ? 'webstorm.exe' : null);
-         if (!exe) return false;
-         spawn('webstorm', [projectPath], { shell: true });
-         return true;
-       }
-       const cmd = isCommandAvailable('webstorm') ? 'webstorm' : (isCommandAvailable('jetbrains-webstorm') ? 'jetbrains-webstorm' : null);
-       if (!cmd) return false;
-       spawn(cmd, [projectPath], { detached: true });
-       return true;
-     }
-   } catch {
-     return false;
-   }
-   return false;
- }
+// 判断命令是否可用
+function isCommandAvailable(cmd: string, args: string[] = ['--version']): boolean {
+  try {
+    const res = spawnSync(cmd, args, { 
+      stdio: 'ignore',
+      shell: process.platform === 'win32' 
+    });
+    return res.status === 0;
+  } catch {
+    return false;
+  }
+}
 
+// 检测项目使用的包管理器
+function detectPackageManager(projectPath: string): PackageManager {
+  try {
+    // 检查锁文件来确定包管理器
+    const hasPackageLock = fs.existsSync(path.join(projectPath, 'package-lock.json'));
+    const hasYarnLock = fs.existsSync(path.join(projectPath, 'yarn.lock'));
+    const hasPnpmLock = fs.existsSync(path.join(projectPath, 'pnpm-lock.yaml'));
+    const hasBunLock = fs.existsSync(path.join(projectPath, 'bun.lockb'));
+    
+    // 根据锁文件判断
+    if (hasBunLock) return 'bun';
+    if (hasPnpmLock) return 'pnpm';
+    if (hasYarnLock) return 'yarn';
+    if (hasPackageLock) return 'npm';
+    
+    // 如果没有锁文件，检查 packageManager 字段
+    const packageJsonPath = path.join(projectPath, 'package.json');
+    if (fs.existsSync(packageJsonPath)) {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+      if (packageJson.packageManager) {
+        const manager = packageJson.packageManager.split('@')[0];
+        if (['npm', 'yarn', 'pnpm', 'bun'].includes(manager)) {
+          return manager as PackageManager;
+        }
+      }
+    }
+    
+    // 默认使用 npm
+    return 'npm';
+  } catch (error) {
+    console.error('检测包管理器失败:', error);
+    return 'npm';
+  }
+}
+
+// 获取运行脚本的命令
+function getRunCommand(packageManager: PackageManager, scriptName: string): string {
+  switch (packageManager) {
+    case 'pnpm':
+      // pnpm 可以直接运行脚本，不需要 run
+      return `pnpm ${scriptName}`;
+    case 'yarn':
+      // yarn 也可以直接运行脚本
+      return `yarn ${scriptName}`;
+    case 'bun':
+      // bun 同样可以直接运行
+      return `bun ${scriptName}`;
+    case 'npm':
+    default:
+      // npm 需要 run 关键字
+      return `npm run ${scriptName}`;
+  }
+}
+
+// 检查 macOS 上的应用是否安装
+function isMacAppInstalled(appName: string): boolean {
+  try {
+    const result = spawnSync('mdfind', [
+      `kMDItemKind == "Application" && kMDItemDisplayName == "${appName}"`
+    ], { encoding: 'utf8' });
+    return result.status === 0 && result.stdout.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+// 用指定编辑器打开项目目录
+function openWithEditor(editor: EditorId, projectPath: string): boolean {
+  const isWin = process.platform === 'win32';
+  const isMac = process.platform === 'darwin';
+  
+  try {
+    if (editor === 'vscode') {
+      if (isMac) {
+        spawn('open', ['-a', 'Visual Studio Code', projectPath], { shell: false });
+      } else {
+        // Windows 和 Linux 都使用 code 命令
+        spawn('code', [projectPath], { shell: true });
+      }
+      return true;
+    }
+    
+    if (editor === 'cursor') {
+      if (isMac) {
+        spawn('open', ['-a', 'Cursor', projectPath], { shell: false });
+      } else {
+        spawn('cursor', [projectPath], { shell: true });
+      }
+      return true;
+    }
+    
+    if (editor === 'webstorm') {
+      if (isMac) {
+        spawn('open', ['-a', 'WebStorm', projectPath], { shell: false });
+        return true;
+      }
+      if (isWin) {
+        // Windows: 尝试多种可能的命令
+        const commands = ['webstorm', 'webstorm64', 'webstorm.exe', 'webstorm64.exe'];
+        for (const cmd of commands) {
+          if (isCommandAvailable(cmd)) {
+            spawn(cmd, [projectPath], { shell: true });
+            return true;
+          }
+        }
+        return false;
+      }
+      // Linux
+      const linuxCommands = ['webstorm', 'jetbrains-webstorm', 'webstorm.sh'];
+      for (const cmd of linuxCommands) {
+        if (isCommandAvailable(cmd)) {
+          spawn(cmd, [projectPath], { detached: true });
+          return true;
+        }
+      }
+      return false;
+    }
+  } catch (error) {
+    console.error(`打开编辑器 ${editor} 失败:`, error);
+    return false;
+  }
+  return false;
+}
 
 // IPC 处理程序
 const setupIpcHandlers = () => {
@@ -174,12 +251,14 @@ const setupIpcHandlers = () => {
       }
 
       const scripts = getPackageScripts(selectedPath);
+      const packageManager = detectPackageManager(selectedPath);
 
       return {
         success: true,
         data: {
           path: selectedPath,
-          scripts
+          scripts,
+          packageManager
         }
       };
     } catch (error) {
@@ -190,7 +269,7 @@ const setupIpcHandlers = () => {
     }
   });
 
-  // 获取项目的 npm 脚本
+  // 获取项目的 npm 脚本和包管理器
   ipcMain.handle('get-package-scripts', async (_, projectPath: string) => {
     try {
       if (!isValidProjectPath(projectPath)) {
@@ -201,9 +280,14 @@ const setupIpcHandlers = () => {
       }
 
       const scripts = getPackageScripts(projectPath);
+      const packageManager = detectPackageManager(projectPath);
+      
       return {
         success: true,
-        data: scripts
+        data: {
+          scripts,
+          packageManager
+        }
       };
     } catch (error) {
       return {
@@ -213,43 +297,79 @@ const setupIpcHandlers = () => {
     }
   });
 
-  // 运行 npm 脚本
-  ipcMain.handle('run-script', async (_, { projectPath, scriptName, projectId }) => {
+  // 检测项目的包管理器
+  ipcMain.handle('detect-package-manager', async (_, projectPath: string) => {
+    try {
+      const packageManager = detectPackageManager(projectPath);
+      return {
+        success: true,
+        data: { packageManager }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `检测包管理器失败: ${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+  });
+
+  // 运行脚本
+  ipcMain.handle('run-script', async (_, { projectPath, scriptName, projectId, packageManager }) => {
     try {
       const isWindows = process.platform === 'win32';
+      
+      // 如果没有传入包管理器，则自动检测
+      const pm = packageManager || detectPackageManager(projectPath);
+      const runCommand = getRunCommand(pm, scriptName);
 
-        if (isWindows) {
-          // 用新的 PowerShell 窗口
-          spawn('cmd.exe', ['/c', 'start', '""', 'powershell',
-            '-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass',
-            '-Command', `npm run ${scriptName}`
-          ], { cwd: projectPath, windowsHide: false });
-        } else if (process.platform === 'darwin') {
-          // macOS 使用 Terminal.app 打开
-          const osa = `tell application "Terminal"
+      if (isWindows) {
+        // Windows: 用新的 PowerShell 窗口
+        spawn('cmd.exe', ['/c', 'start', '""', 'powershell',
+          '-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+          '-Command', `cd "${projectPath}"; ${runCommand}`
+        ], { cwd: projectPath, windowsHide: false });
+      } else if (process.platform === 'darwin') {
+        // macOS: 使用 Terminal.app 打开
+        const osa = `tell application "Terminal"
   activate
-  do script "cd ${projectPath.replace(/"/g, '\\"')} && npm run ${scriptName}"
+  do script "cd ${projectPath.replace(/"/g, '\\"')} && ${runCommand}"
 end tell`;
-          spawn('osascript', ['-e', osa]);
-        } else {
-          // Linux: 尝试常见终端
-          const terms = [
-            ['gnome-terminal', ['--', 'bash', '-lc', `npm run ${scriptName}; exec bash`]],
-            ['konsole', ['-e', `bash -lc "npm run ${scriptName}; exec bash"`]],
-            ['xterm', ['-e', `bash -lc "npm run ${scriptName}; exec bash"`]],
-            ['alacritty', ['-e', 'bash', '-lc', `npm run ${scriptName}; exec bash`]]
-          ] as const;
-          let started = false;
-          for (const [cmd, args] of terms) {
-            const p = spawn(cmd, args, { cwd: projectPath });
-            p.on('error', () => { /* ignore */ });
-            p.on('spawn', () => { started = true; });
-            // 简单地尝试第一个能启动的
-            await new Promise(r => setTimeout(r, 150));
-            if (started) break;
-          }
+        spawn('osascript', ['-e', osa]);
+      } else {
+        // Linux: 尝试常见终端
+        const terms = [
+          ['gnome-terminal', ['--', 'bash', '-lc', `${runCommand}; exec bash`]],
+          ['konsole', ['-e', `bash -lc "${runCommand}; exec bash"`]],
+          ['xterm', ['-e', `bash -lc "${runCommand}; exec bash"`]],
+          ['alacritty', ['-e', 'bash', '-lc', `${runCommand}; exec bash`]]
+        ] as const;
+        
+        let started = false;
+        for (const [cmd, args] of terms) {
+          const p = spawn(cmd, args, { cwd: projectPath });
+          p.on('error', () => { /* ignore */ });
+          p.on('spawn', () => { started = true; });
+          // 简单地尝试第一个能启动的
+          await new Promise(r => setTimeout(r, 150));
+          if (started) break;
         }
-        return { success: true, data: { message: '已在外部终端启动' } };
+        
+        if (!started) {
+          return {
+            success: false,
+            error: '无法找到可用的终端程序'
+          };
+        }
+      }
+      
+      return { 
+        success: true, 
+        data: { 
+          message: '已在外部终端启动',
+          command: runCommand,
+          packageManager: pm
+        }
+      };
 
     } catch (error) {
       return {
@@ -261,27 +381,50 @@ end tell`;
 
   // 检测编辑器是否已安装
   ipcMain.handle('detect-editors', async () => {
-    console.log('detect-editors');
+    console.log('开始检测编辑器...');
     
     try {
       const isWin = process.platform === 'win32';
       const isMac = process.platform === 'darwin';
-      // VS Code 可以通过 command line 工具 code 检测
-      const vscode = isMac ? true : isCommandAvailable('code');
-      // Cursor
-      const cursor = isMac ? true : isCommandAvailable('cursor');
-      // WebStorm
+      
+      let vscode = false;
+      let cursor = false;
       let webstorm = false;
+      
       if (isMac) {
-        webstorm = true;
+        // macOS: 检查应用是否安装
+        vscode = isMacAppInstalled('Visual Studio Code') || isCommandAvailable('code');
+        cursor = isMacAppInstalled('Cursor') || isCommandAvailable('cursor');
+        webstorm = isMacAppInstalled('WebStorm');
       } else if (isWin) {
-        webstorm = isCommandAvailable('webstorm64.exe') || isCommandAvailable('webstorm.exe');
+        // Windows: 检查命令是否可用
+        vscode = isCommandAvailable('code');
+        cursor = isCommandAvailable('cursor');
+        webstorm = isCommandAvailable('webstorm') || 
+                   isCommandAvailable('webstorm64') ||
+                   isCommandAvailable('webstorm.exe') || 
+                   isCommandAvailable('webstorm64.exe');
       } else {
-        webstorm = isCommandAvailable('webstorm') || isCommandAvailable('jetbrains-webstorm');
+        // Linux: 检查命令是否可用
+        vscode = isCommandAvailable('code');
+        cursor = isCommandAvailable('cursor');
+        webstorm = isCommandAvailable('webstorm') || 
+                   isCommandAvailable('jetbrains-webstorm') ||
+                   isCommandAvailable('webstorm.sh');
       }
-      return { success: true, data: { vscode, cursor, webstorm } };
+      
+      console.log('编辑器检测结果:', { vscode, cursor, webstorm });
+      
+      return { 
+        success: true, 
+        data: { vscode, cursor, webstorm } 
+      };
     } catch (error) {
-      return { success: false, error: `检测编辑器失败: ${error instanceof Error ? error.message : String(error)}` };
+      console.error('检测编辑器失败:', error);
+      return { 
+        success: false, 
+        error: `检测编辑器失败: ${error instanceof Error ? error.message : String(error)}` 
+      };
     }
   });
 
@@ -290,13 +433,20 @@ end tell`;
     const { editor, projectPath } = params;
     try {
       const ok = openWithEditor(editor, projectPath);
-      if (!ok) return { success: false, error: '未找到对应编辑器或命令不可用' };
+      if (!ok) {
+        return { 
+          success: false, 
+          error: '未找到对应编辑器或命令不可用' 
+        };
+      }
       return { success: true };
     } catch (error) {
-      return { success: false, error: `打开编辑器失败: ${error instanceof Error ? error.message : String(error)}` };
+      return { 
+        success: false, 
+        error: `打开编辑器失败: ${error instanceof Error ? error.message : String(error)}` 
+      };
     }
   });
-
 
   // 停止脚本
   ipcMain.handle('stop-script', async (_, projectId: string) => {
@@ -347,6 +497,14 @@ end tell`;
   ipcMain.handle('load-project-config', async () => {
     try {
       const config = loadProjectConfig();
+      // 为每个项目添加包管理器信息
+      if (config.projects) {
+        for (const project of config.projects) {
+          if (!project.packageManager) {
+            project.packageManager = detectPackageManager(project.path);
+          }
+        }
+      }
       return {
         success: true,
         data: config
@@ -380,6 +538,10 @@ end tell`;
   ipcMain.handle('add-project-to-config', async (_, projectPath: string) => {
     try {
       const project = addProjectToConfig(projectPath);
+      if (project) {
+        // 添加包管理器信息
+        project.packageManager = detectPackageManager(projectPath);
+      }
       return {
         success: !!project,
         data: project,
@@ -412,14 +574,12 @@ end tell`;
 };
 
 // 当 Electron 完成初始化并准备创建浏览器窗口时，将调用此方法
-// 某些 API 只能在此事件发生后使用
 app.on('ready', () => {
   createWindow();
   setupIpcHandlers();
 });
 
-// 当所有窗口都关闭时退出，除了在 macOS 上。在 macOS 上，应用程序和它们的菜单栏
-// 通常保持活动状态，直到用户使用 Cmd + Q 明确退出
+// 当所有窗口都关闭时退出，除了在 macOS 上
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
@@ -434,5 +594,3 @@ app.on('activate', () => {
   }
 });
 
-// 在此文件中，您可以包含应用程序特定主进程的其余代码
-// 您也可以将它们放在单独的文件中并在此处导入

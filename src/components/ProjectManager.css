@@ -19,15 +19,15 @@
   font-size: 24px;
 }
 
-.ideaAction {
-  padding: 0;
-}
-
 .projects-container {
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   overflow: hidden;
+}
+
+.ant-btn-sm {
+  padding: unset;
 }
 
 /* 响应式设计 */

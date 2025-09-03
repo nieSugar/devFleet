@@ -66,7 +66,11 @@ const config: ForgeConfig = {
       config: {
         prerelease: true,
         draft: true,
+        owner: "nieSugar",
+        repo: "devFleet",
+        token: process.env.GITHUB_TOKEN,
       },
+      
     },
   ],
 };
