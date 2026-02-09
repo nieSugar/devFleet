@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { Project } from "../types/project";
 import "./ProjectManager.css";
-import { Table, Button, Space, Select, Typography, message } from "antd";
+import { Table, Button, Space, Select, Typography, message, Tag } from "antd";
 import {
   PlusOutlined,
   ReloadOutlined,
   PlayCircleOutlined,
   DeleteOutlined,
+  NodeIndexOutlined,
 } from "@ant-design/icons";
 import vscodeSvg from "../img/vscode.svg";
 import cursorSvg from "../img/cursor.svg";
 import webstormSvg from "../img/webstorm.svg";
+import { NodeVersion, NvmInfo } from "../types/project";
 
 const ProjectManager: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -21,6 +23,7 @@ const ProjectManager: React.FC = () => {
     cursor: boolean;
     webstorm: boolean;
   } | null>(null);
+  const [nvmInfo, setNvmInfo] = useState<NvmInfo | null>(null);
 
   // 加载项目配置
   useEffect(() => {
@@ -33,6 +36,17 @@ const ProjectManager: React.FC = () => {
 
         if (result.success) setAvailableEditors(result.data);
       } catch (e) {}
+    })();
+    // 获取 NVM 信息
+    (async () => {
+      try {
+        const result = await window.electronAPI.getNvmInfo();
+        if (result.success) {
+          setNvmInfo(result.data);
+        }
+      } catch (e) {
+        console.error("获取 NVM 信息失败:", e);
+      }
     })();
   }, []);
 
@@ -122,6 +136,39 @@ const ProjectManager: React.FC = () => {
     }
   };
 
+  // 选择 Node 版本
+  const handleNodeVersionChange = async (
+    projectId: string,
+    nodeVersion: string
+  ) => {
+    try {
+      const result = await window.electronAPI.setProjectNodeVersion({
+        projectId,
+        nodeVersion,
+      });
+
+      if (result.success) {
+        // 更新本地状态
+        setProjects((prev) =>
+          prev.map((project) =>
+            project.id === projectId ? { ...project, nodeVersion: nodeVersion || undefined } : project
+          )
+        );
+
+        // 根据操作类型显示不同的提示信息
+        const successMessage = !nodeVersion || nodeVersion.trim() === ''
+          ? result.data?.message || "Node 版本配置已删除"
+          : result.data?.message || `Node 版本已设置为 ${nodeVersion}`;
+
+        showMessage("success", successMessage);
+      } else {
+        showMessage("error", result.error || "设置 Node 版本失败");
+      }
+    } catch (error) {
+      showMessage("error", "设置 Node 版本时出错");
+    }
+  };
+
   // 运行脚本
   const handleRunScript = async (project: Project) => {
     if (!project.selectedScript) {
@@ -135,10 +182,17 @@ const ProjectManager: React.FC = () => {
         projectPath: project.path,
         scriptName: project.selectedScript,
         projectId: project.id,
+        nodeVersion: project.nodeVersion,
       });
 
       if (result.success) {
-        showMessage("success", `脚本 "${project.selectedScript}" 启动成功`);
+        const versionInfo = project.nodeVersion
+          ? ` (Node ${project.nodeVersion})`
+          : "";
+        showMessage(
+          "success",
+          `脚本 "${project.selectedScript}"${versionInfo} 启动成功`
+        );
       } else {
         showMessage("error", result.error || "启动脚本失败");
       }
@@ -281,11 +335,11 @@ const ProjectManager: React.FC = () => {
             {
               title: "npm 脚本",
               dataIndex: "scripts",
-              width: 150,
+              width: 130,
               render: (_: any, record: Project) => (
                 <Select
                   value={record.selectedScript}
-                  style={{ width: 150 }}
+                  style={{ width: 130 }}
                   onChange={(v) => handleScriptChange(record.id, v)}
                   options={record.scripts.map((s) => ({
                     label: s.name,
@@ -293,6 +347,63 @@ const ProjectManager: React.FC = () => {
                   }))}
                 />
               ),
+            },
+            {
+              title: () => (
+                <Space>
+                  <NodeIndexOutlined />
+                  Node 版本
+                  {nvmInfo?.isInstalled && nvmInfo.manager !== "none" && (
+                    <Tag
+                      color="blue"
+                      style={{ fontSize: 10, marginLeft: 4 }}
+                    >
+                      {nvmInfo.manager === "nvm-windows" ? "nvm-win" : nvmInfo.manager}
+                    </Tag>
+                  )}
+                </Space>
+              ),
+              dataIndex: "nodeVersion",
+              width: 220,
+              render: (_: any, record: Project) => {
+                if (!nvmInfo?.isInstalled) {
+                  return (
+                    <Tag color="default" style={{ cursor: "not-allowed" }}>
+                      未安装版本管理器
+                    </Tag>
+                  );
+                }
+
+                return (
+                  <Select
+                    value={record.nodeVersion || undefined}
+                    placeholder="选择版本"
+                    style={{ width: 140 }}
+                    allowClear
+                    onChange={(v) => handleNodeVersionChange(record.id, v)}
+                    options={[
+                      ...(nvmInfo?.availableVersions || []).map((v) => ({
+                        label: (
+                          <Space size={4}>
+                            {v.version}
+                            {v.isCurrent && (
+                              <Tag color="green" style={{ fontSize: 10, padding: '0 4px' }}>
+                                系统
+                              </Tag>
+                            )}
+                            {record.nodeVersion === v.version && (
+                              <Tag color="blue" style={{ fontSize: 10, padding: '0 4px' }}>
+                                项目
+                              </Tag>
+                            )}
+                          </Space>
+                        ),
+                        value: v.version,
+                      })),
+                    ]}
+                  />
+                );
+              },
             },
             {
               title: "操作",

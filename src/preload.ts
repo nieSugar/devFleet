@@ -49,6 +49,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 从配置中移除项目
   removeProjectFromConfig: (projectId: string): Promise<IpcResponse> =>
     ipcRenderer.invoke('remove-project-from-config', projectId),
+
+  // ============= NVM 相关 API =============
+
+  // 获取 NVM 信息
+  getNvmInfo: (): Promise<IpcResponse> =>
+    ipcRenderer.invoke('get-nvm-info'),
+
+  // 检测项目推荐的 Node 版本
+  detectProjectNodeVersion: (projectPath: string): Promise<IpcResponse> =>
+    ipcRenderer.invoke('detect-project-node-version', projectPath),
+
+  // 设置项目的 Node 版本
+  setProjectNodeVersion: (params: { projectId: string; nodeVersion: string }): Promise<IpcResponse> =>
+    ipcRenderer.invoke('set-project-node-version', params),
 });
 
 // 声明全局类型，以便 TypeScript 识别
@@ -57,7 +71,7 @@ declare global {
     electronAPI: {
       selectFolder: () => Promise<IpcResponse>;
       getPackageScripts: (projectPath: string) => Promise<IpcResponse>;
-      runScript: (params: { projectPath: string; scriptName: string; projectId: string; }) => Promise<IpcResponse>;
+      runScript: (params: { projectPath: string; scriptName: string; projectId: string; nodeVersion?: string }) => Promise<IpcResponse>;
       stopScript: (projectId: string) => Promise<IpcResponse>;
       checkScriptStatus: (projectId: string) => Promise<IpcResponse>;
       detectEditors: () => Promise<IpcResponse>;
@@ -66,6 +80,9 @@ declare global {
       saveProjectConfig: (config: any) => Promise<IpcResponse>;
       addProjectToConfig: (projectPath: string) => Promise<IpcResponse>;
       removeProjectFromConfig: (projectId: string) => Promise<IpcResponse>;
+      getNvmInfo: () => Promise<IpcResponse>;
+      detectProjectNodeVersion: (projectPath: string) => Promise<IpcResponse>;
+      setProjectNodeVersion: (params: { projectId: string; nodeVersion: string }) => Promise<IpcResponse>;
     };
   }
 }

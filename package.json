@@ -1,7 +1,7 @@
 {
   "name": "devfleet",
   "productName": "devfleet",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "用于快速启动项目与编辑器",
   "main": ".vite/build/main.js",
   "scripts": {

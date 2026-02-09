@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { spawn, spawnSync, ChildProcess } from 'child_process';
@@ -10,7 +10,10 @@ import {
   saveProjectConfig,
   addProjectToConfig,
   removeProjectFromConfig,
+  getProjectNodeVersion,
+  setProjectNodeVersionFile,
 } from './utils/projectManager';
+import { NodeVersion, NvmInfo, NodeVersionManager } from './types/project';
 
 // 处理在 Windows 上安装/卸载时创建/删除快捷方式
 if (started) {
@@ -155,6 +158,194 @@ function getRunCommand(packageManager: PackageManager, scriptName: string): stri
       // npm 需要 run 关键字
       return `npm run ${scriptName}`;
   }
+}
+
+// ============= NVM 相关功能函数 =============
+
+// 检测系统安装的 Node 版本管理器
+function detectNodeVersionManager(): NodeVersionManager {
+  try {
+    // 1. 优先检测 nvmd（跨平台）
+    const nvmdResult = spawnSync('nvmd', ['--help'], {
+      stdio: 'pipe',
+      shell: process.platform === 'win32'
+    });
+    if (nvmdResult.status === 0) {
+      return 'nvmd';
+    }
+
+    // 2. 检测 nvs（跨平台）
+    const nvsResult = spawnSync('nvs', ['--version'], {
+      stdio: 'pipe',
+      shell: process.platform === 'win32'
+    });
+    if (nvsResult.status === 0) {
+      return 'nvs';
+    }
+
+    // 3. 检测 nvm（Windows 或 Unix）
+    const isWin = process.platform === 'win32';
+    if (isWin) {
+      // Windows: 检测 nvm-windows
+      const nvmWinResult = spawnSync('nvm', ['version'], {
+        stdio: 'pipe',
+        shell: true
+      });
+      if (nvmWinResult.status === 0) {
+        return 'nvm-windows';
+      }
+    } else {
+      // macOS/Linux: 检测 nvm
+      const nvmResult = spawnSync('bash', ['-c', 'command -v nvm'], {
+        stdio: 'pipe'
+      });
+      if (nvmResult.status === 0) {
+        return 'nvm';
+      }
+    }
+
+    return 'none';
+  } catch {
+    return 'none';
+  }
+}
+
+// 检查版本管理器是否已安装
+function isVersionManagerInstalled(manager?: NodeVersionManager): boolean {
+  const detectedManager = manager || detectNodeVersionManager();
+  return detectedManager !== 'none';
+}
+
+// 获取当前系统使用的 Node 版本
+function getCurrentNodeVersion(): string | null {
+  try {
+    const result = spawnSync('node', ['--version'], {
+      encoding: 'utf8',
+      shell: process.platform === 'win32'
+    });
+    if (result.status === 0 && result.stdout) {
+      return result.stdout.trim().replace('v', '');
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// 获取所有已安装的 Node 版本
+function getNodeVersions(manager: NodeVersionManager): NodeVersion[] {
+  try {
+    const currentVersion = getCurrentNodeVersion();
+    let result;
+
+    switch (manager) {
+      case 'nvmd':
+        // nvmd: 使用 nvmd ls 或 nvmd list
+        result = spawnSync('nvmd', ['ls'], {
+          encoding: 'utf8',
+          shell: true
+        });
+        break;
+
+      case 'nvs':
+        // nvs: 使用 nvs ls 列出所有已安装版本
+        result = spawnSync('nvs', ['ls'], {
+          encoding: 'utf8',
+          shell: process.platform === 'win32'
+        });
+        break;
+
+      case 'nvm-windows':
+        // Windows: 使用 nvm list
+        result = spawnSync('nvm', ['list'], {
+          encoding: 'utf8',
+          shell: true
+        });
+        break;
+
+      case 'nvm':
+        // macOS/Linux: 使用 bash 执行 nvm ls
+        result = spawnSync('bash', ['-c', 'source ~/.nvm/nvm.sh && nvm ls'], {
+          encoding: 'utf8'
+        });
+        break;
+
+      default:
+        return [];
+    }
+
+    if (result.status !== 0) {
+      return [];
+    }
+
+    // nvmd 的输出在 stderr 中，其他版本管理器在 stdout 中
+    const output = manager === 'nvmd' ? result.stderr : result.stdout;
+
+    if (!output) {
+      return [];
+    }
+
+    const lines = output.split('\n');
+    const versions: NodeVersion[] = [];
+
+    for (const line of lines) {
+      // 匹配版本号：18.18.0, v18.18.0, v20.5.1 (currently) 等格式
+      // nvs 格式：node/20.11.0/x64
+      const match = line.match(/(?:node\/)?v?(\d+\.\d+\.\d+)/);
+      if (match) {
+        const version = match[1];
+        const fullVersion = `v${version}`;
+        // nvmd 格式：v20.5.1 (currently)
+        // nvm 格式：当前版本带箭头或标记
+        // nvs 格式：带 > 前缀表示当前版本
+        const isCurrent = currentVersion === version ||
+                         line.includes('(currently)') ||
+                         line.includes('(current)') ||
+                         line.trim().startsWith('>');
+
+        versions.push({
+          version,
+          fullVersion,
+          isCurrent
+        });
+      }
+    }
+
+    // 去重并排序
+    const uniqueVersions = Array.from(
+      new Map(versions.map(v => [v.version, v])).values()
+    );
+
+    return uniqueVersions.sort((a, b) => {
+      // 按版本号降序排序
+      const aParts = a.version.split('.').map(Number);
+      const bParts = b.version.split('.').map(Number);
+      for (let i = 0; i < 3; i++) {
+        if (aParts[i] !== bParts[i]) {
+          return bParts[i] - aParts[i];
+        }
+      }
+      return 0;
+    });
+  } catch (error) {
+    console.error('获取 Node 版本失败:', error);
+    return [];
+  }
+}
+
+// 获取版本管理器信息
+function getNvmInfo(): NvmInfo {
+  const manager = detectNodeVersionManager();
+  const isInstalled = manager !== 'none';
+  const currentVersion = getCurrentNodeVersion();
+  const availableVersions = isInstalled ? getNodeVersions(manager) : [];
+
+  return {
+    isInstalled,
+    manager,
+    currentVersion: currentVersion || undefined,
+    availableVersions
+  };
 }
 
 // 检查 macOS 上的应用是否安装
@@ -314,13 +505,16 @@ const setupIpcHandlers = () => {
   });
 
   // 运行脚本
-  ipcMain.handle('run-script', async (_, { projectPath, scriptName, projectId, packageManager }) => {
+  ipcMain.handle('run-script', async (_, { projectPath, scriptName, projectId, packageManager, nodeVersion }) => {
     try {
       const isWindows = process.platform === 'win32';
-      
+
       // 如果没有传入包管理器，则自动检测
       const pm = packageManager || detectPackageManager(projectPath);
       const runCommand = getRunCommand(pm, scriptName);
+
+      // 注意：不再在命令中拼接版本切换命令
+      // 版本管理器会自动读取项目目录下的 .nvmdrc 或 .nvmrc 文件
 
       if (isWindows) {
         // Windows: 用新的 PowerShell 窗口
@@ -343,7 +537,7 @@ end tell`;
           ['xterm', ['-e', `bash -lc "${runCommand}; exec bash"`]],
           ['alacritty', ['-e', 'bash', '-lc', `${runCommand}; exec bash`]]
         ] as const;
-        
+
         let started = false;
         for (const [cmd, args] of terms) {
           const p = spawn(cmd, args, { cwd: projectPath });
@@ -353,7 +547,7 @@ end tell`;
           await new Promise(r => setTimeout(r, 150));
           if (started) break;
         }
-        
+
         if (!started) {
           return {
             success: false,
@@ -361,13 +555,14 @@ end tell`;
           };
         }
       }
-      
-      return { 
-        success: true, 
-        data: { 
+
+      return {
+        success: true,
+        data: {
           message: '已在外部终端启动',
           command: runCommand,
-          packageManager: pm
+          packageManager: pm,
+          nodeVersion
         }
       };
 
@@ -568,6 +763,95 @@ end tell`;
       return {
         success: false,
         error: `删除项目失败: ${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+  });
+
+  // ============= NVM 相关 IPC Handlers =============
+
+  // 获取 NVM 信息
+  ipcMain.handle('get-nvm-info', async () => {
+    try {
+      const nvmInfo = getNvmInfo();
+      return {
+        success: true,
+        data: nvmInfo
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `获取 NVM 信息失败: ${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+  });
+
+  // 检测项目推荐的 Node 版本
+  ipcMain.handle('detect-project-node-version', async (_, projectPath: string) => {
+    try {
+      const version = getProjectNodeVersion(projectPath);
+      return {
+        success: true,
+        data: { version }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `检测项目 Node 版本失败: ${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+  });
+
+  // 设置项目的 Node 版本
+  ipcMain.handle('set-project-node-version', async (_, { projectId, nodeVersion }: { projectId: string; nodeVersion: string | null }) => {
+    try {
+      const config = loadProjectConfig();
+      const project = config.projects.find(p => p.id === projectId);
+
+      if (!project) {
+        return {
+          success: false,
+          error: '项目不存在'
+        };
+      }
+
+      // 检测版本管理器类型
+      const versionManager = detectNodeVersionManager();
+      if (versionManager === 'none') {
+        return {
+          success: false,
+          error: '未检测到 Node 版本管理器（nvmd/nvm）'
+        };
+      }
+
+      // 在项目目录下创建或删除版本配置文件
+      const fileCreated = setProjectNodeVersionFile(project.path, nodeVersion, versionManager);
+      if (!fileCreated) {
+        return {
+          success: false,
+          error: '操作版本配置文件失败'
+        };
+      }
+
+      // 更新配置
+      project.nodeVersion = nodeVersion || undefined;
+      const success = saveProjectConfig(config);
+
+      const fileName = versionManager === 'nvmd' ? '.nvmdrc' :
+                       versionManager === 'nvs' ? '.node-version' : '.nvmrc';
+
+      const message = !nodeVersion || nodeVersion.trim() === ''
+        ? `已删除 ${fileName} 文件`
+        : `已创建 ${fileName} 文件并设置 Node 版本为 ${nodeVersion}`;
+
+      return {
+        success,
+        data: success ? { message, project } : null,
+        error: success ? null : '保存配置失败'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `设置 Node 版本失败: ${error instanceof Error ? error.message : String(error)}`
       };
     }
   });
