@@ -1,0 +1,124 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (leave empty to use package.json version)'
+        required: false
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+      release_notes:
+        description: 'Release notes'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+      upload_url: ${{ steps.create-release.outputs.upload_url }}
+      release_id: ${{ steps.create-release.outputs.id }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Get version
+        id: get-version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Using version: $VERSION"
+
+      - name: Create Release
+        id: create-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.get-version.outputs.version }}
+          release_name: devFleet v${{ steps.get-version.outputs.version }}
+          body: ${{ github.event.inputs.release_notes }}
+          draft: false
+          prerelease: ${{ github.event.inputs.prerelease }}
+
+  build:
+    needs: create-release
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run make
+
+      - name: Upload artifacts (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./out/make/squirrel.windows/x64/devFleet-${{ needs.create-release.outputs.version }} Setup.exe
+          asset_name: devFleet-${{ needs.create-release.outputs.version }}-win-x64-setup.exe
+          asset_content_type: application/octet-stream
+
+      - name: Upload artifacts (macOS)
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./out/make/zip/darwin/x64/devFleet-darwin-x64-${{ needs.create-release.outputs.version }}.zip
+          asset_name: devFleet-${{ needs.create-release.outputs.version }}-mac-x64.zip
+          asset_content_type: application/zip
+
+      - name: Upload artifacts (Linux DEB)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./out/make/deb/x64/devfleet_${{ needs.create-release.outputs.version }}_amd64.deb
+          asset_name: devFleet-${{ needs.create-release.outputs.version }}-linux-amd64.deb
+          asset_content_type: application/vnd.debian.binary-package
+
+      - name: Upload artifacts (Linux RPM)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./out/make/rpm/x64/devfleet-${{ needs.create-release.outputs.version }}-1.x86_64.rpm
+          asset_name: devFleet-${{ needs.create-release.outputs.version }}-linux-x86_64.rpm
+          asset_content_type: application/x-rpm
