@@ -11,6 +11,7 @@ const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     name: "devFleet",
+    executableName: "devfleet",
   },
   rebuildConfig: {},
   buildIdentifier:"prod",

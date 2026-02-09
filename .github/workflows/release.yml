@@ -65,12 +65,12 @@ jobs:
         with:
           name: build-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
-            out/make/**/*.exe
-            out/make/**/*.nupkg
-            out/make/**/*.zip
-            out/make/**/*.deb
-            out/make/**/*.rpm
-            out/make/**/*.dmg
+            out/prod/make/**/*.exe
+            out/prod/make/**/*.nupkg
+            out/prod/make/**/*.zip
+            out/prod/make/**/*.deb
+            out/prod/make/**/*.rpm
+            out/prod/make/**/*.dmg
           if-no-files-found: error
           retention-days: 3
 
