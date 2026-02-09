@@ -18,50 +18,27 @@ on:
         type: string
         default: ''
 
+permissions:
+  contents: write
+
 jobs:
-  create-release:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.get-version.outputs.version }}
-      upload_url: ${{ steps.create-release.outputs.upload_url }}
-      release_id: ${{ steps.create-release.outputs.id }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Get version
-        id: get-version
-        run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            VERSION=$(node -p "require('./package.json').version")
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Using version: $VERSION"
-
-      - name: Create Release
-        id: create-release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ steps.get-version.outputs.version }}
-          release_name: devFleet v${{ steps.get-version.outputs.version }}
-          body: ${{ github.event.inputs.release_notes }}
-          draft: false
-          prerelease: ${{ github.event.inputs.prerelease }}
-
   build:
-    needs: create-release
     strategy:
+      fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            platform: win
+            arch: x64
+          - os: macos-13
+            platform: mac
+            arch: x64
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
@@ -73,52 +50,77 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Install RPM tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
       - name: Install dependencies
         run: npm ci
 
       - name: Build application
-        run: npm run make
+        run: npx electron-forge make --arch=${{ matrix.arch }}
 
-      - name: Upload artifacts (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./out/make/squirrel.windows/x64/devFleet-${{ needs.create-release.outputs.version }} Setup.exe
-          asset_name: devFleet-${{ needs.create-release.outputs.version }}-win-x64-setup.exe
-          asset_content_type: application/octet-stream
+          name: build-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            out/make/**/*.exe
+            out/make/**/*.nupkg
+            out/make/**/*.zip
+            out/make/**/*.deb
+            out/make/**/*.rpm
+            out/make/**/*.dmg
+          if-no-files-found: error
+          retention-days: 3
 
-      - name: Upload artifacts (macOS)
-        if: matrix.os == 'macos-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./out/make/zip/darwin/x64/devFleet-darwin-x64-${{ needs.create-release.outputs.version }}.zip
-          asset_name: devFleet-${{ needs.create-release.outputs.version }}-mac-x64.zip
-          asset_content_type: application/zip
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Upload artifacts (Linux DEB)
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./out/make/deb/x64/devfleet_${{ needs.create-release.outputs.version }}_amd64.deb
-          asset_name: devFleet-${{ needs.create-release.outputs.version }}-linux-amd64.deb
-          asset_content_type: application/vnd.debian.binary-package
+          node-version: '20'
 
-      - name: Upload artifacts (Linux RPM)
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-release-asset@v1
+      - name: Get version
+        id: get-version
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Using version: $VERSION"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./out/make/rpm/x64/devfleet-${{ needs.create-release.outputs.version }}-1.x86_64.rpm
-          asset_name: devFleet-${{ needs.create-release.outputs.version }}-linux-x86_64.rpm
-          asset_content_type: application/x-rpm
+          path: artifacts
+
+      - name: List downloaded artifacts
+        run: find artifacts -type f
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get-version.outputs.version }}
+          name: devFleet v${{ steps.get-version.outputs.version }}
+          body: ${{ github.event.inputs.release_notes }}
+          draft: true
+          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
+          files: |
+            artifacts/**/*.exe
+            artifacts/**/*.zip
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.dmg
+          fail_on_unmatched_files: false
+          generate_release_notes: true
+          make_latest: true
