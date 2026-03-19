@@ -1,0 +1,405 @@
+// 这个文件负责「检测」：包管理器、编辑器、Node 版本管理器
+// 核心思路：通过检查 lock 文件是否存在、CLI 命令是否可用来判断用户安装了什么
+
+use crate::models::{NodeVersion, NodeVersionManager, NvmInfo, PackageManager};
+use std::path::Path;
+// Command 用于执行操作系统的命令行程序（类似 Node.js 的 child_process.exec）
+use std::process::Command;
+
+// ── 包管理器检测 ──
+
+/// 通过 lock 文件来判断项目使用的包管理器
+/// 优先级：bun > pnpm > yarn > npm（lock 文件最可靠）
+/// 如果没有 lock 文件，回退到读 package.json 的 packageManager 字段
+pub fn detect_package_manager(project_path: &str) -> PackageManager {
+    // Path::new() 创建路径对象，.join() 拼接路径（自动处理路径分隔符）
+    let p = Path::new(project_path);
+
+    if p.join("bun.lockb").exists() || p.join("bun.lock").exists() {
+        return PackageManager::Bun;
+    }
+    if p.join("pnpm-lock.yaml").exists() {
+        return PackageManager::Pnpm;
+    }
+    if p.join("yarn.lock").exists() {
+        return PackageManager::Yarn;
+    }
+    if p.join("package-lock.json").exists() {
+        return PackageManager::Npm;
+    }
+
+    // 没有 lock 文件时，检查 package.json 的 "packageManager" 字段
+    // 这是 Node.js 的 corepack 规范，格式如 "pnpm@8.15.0"
+    let pkg_path = p.join("package.json");
+    if let Ok(content) = std::fs::read_to_string(&pkg_path) {
+        if let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(pm) = pkg.get("packageManager").and_then(|v| v.as_str()) {
+                // "pnpm@8.15.0" → split('@') 取第一段 → "pnpm" → parse 成枚举
+                let name = pm.split('@').next().unwrap_or("");
+                if let Ok(m) = name.parse::<PackageManager>() {
+                    return m;
+                }
+            }
+        }
+    }
+
+    // 兜底默认值
+    PackageManager::Npm
+}
+
+// ── 编辑器检测 ──
+
+/// 通过执行 `cmd --version` 检测命令行工具是否可用
+fn is_command_available(cmd: &str) -> bool {
+    // cfg!() 是编译时宏，返回 bool
+    // 注意：cfg!() 不会排除代码（两个分支都会编译），只是条件分支
+    // 而 #[cfg()] 属性会真正排除代码（不编译另一个分支）
+    let result = if cfg!(target_os = "windows") {
+        Command::new("cmd")
+            .args(["/C", &format!("{} --version", cmd)])
+            // Stdio::null() 丢弃输出，不需要看 --version 输出什么，只关心退出码
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+    } else {
+        // Unix 用 `command -v` 检查命令是否存在（比 which 更标准）
+        Command::new("sh")
+            .args(["-c", &format!("command -v {} >/dev/null 2>&1", cmd)])
+            .status()
+    };
+    // matches!() 宏：模式匹配 + 布尔返回，相当于 match + true/false
+    // Ok(s) if s.success() → 命令执行成功且退出码为 0
+    matches!(result, Ok(s) if s.success())
+}
+
+/// macOS 特有：用 Spotlight 搜索检查 .app 是否安装
+#[cfg(target_os = "macos")]
+fn is_mac_app_installed(app_name: &str) -> bool {
+    let result = Command::new("mdfind")
+        .arg(format!(
+            "kMDItemKind == \"Application\" && kMDItemDisplayName == \"{}\"",
+            app_name
+        ))
+        .output();
+    matches!(result, Ok(o) if o.status.success() && !o.stdout.is_empty())
+}
+
+/// 检测三种编辑器是否可用，返回 (vscode, cursor, webstorm) 布尔元组
+/// 每个平台的检测方式不同：macOS 可以搜索 .app，Windows/Linux 只能检查 CLI
+pub fn detect_editors() -> (bool, bool, bool) {
+    #[cfg(target_os = "macos")]
+    {
+        let vscode = is_mac_app_installed("Visual Studio Code") || is_command_available("code");
+        let cursor = is_mac_app_installed("Cursor") || is_command_available("cursor");
+        let webstorm = is_mac_app_installed("WebStorm");
+        return (vscode, cursor, webstorm);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let vscode = is_command_available("code");
+        let cursor = is_command_available("cursor");
+        let webstorm = is_command_available("webstorm")
+            || is_command_available("webstorm64");
+        return (vscode, cursor, webstorm);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let vscode = is_command_available("code");
+        let cursor = is_command_available("cursor");
+        let webstorm = is_command_available("webstorm")
+            || is_command_available("jetbrains-webstorm")
+            || is_command_available("webstorm.sh");
+        return (vscode, cursor, webstorm);
+    }
+
+    // 理论上不会走到这里（上面三个平台已覆盖），但 Rust 要求所有分支都有返回值
+    #[allow(unreachable_code)]
+    (false, false, false)
+}
+
+/// 用指定编辑器打开项目目录
+/// macOS 用 `open -a` 打开 .app，Windows/Linux 直接执行 CLI 命令
+pub fn open_editor(editor: &str, project_path: &str) -> bool {
+    let result = match editor {
+        "vscode" => {
+            if cfg!(target_os = "macos") {
+                Command::new("open")
+                    .args(["-a", "Visual Studio Code", project_path])
+                    .spawn()
+            } else {
+                // shell_spawn() 是下面定义的 trait 扩展方法
+                // Windows 下需要通过 cmd /C 间接执行，否则某些 PATH 里的命令找不到
+                Command::new("code")
+                    .arg(project_path)
+                    .shell_spawn()
+            }
+        }
+        "cursor" => {
+            if cfg!(target_os = "macos") {
+                Command::new("open")
+                    .args(["-a", "Cursor", project_path])
+                    .spawn()
+            } else {
+                Command::new("cursor")
+                    .arg(project_path)
+                    .shell_spawn()
+            }
+        }
+        "webstorm" => {
+            if cfg!(target_os = "macos") {
+                Command::new("open")
+                    .args(["-a", "WebStorm", project_path])
+                    .spawn()
+            } else if cfg!(target_os = "windows") {
+                // WebStorm 在 Windows 上的可执行文件名不确定，逐个尝试
+                for cmd in &["webstorm", "webstorm64", "webstorm.exe", "webstorm64.exe"] {
+                    if is_command_available(cmd) {
+                        if Command::new(cmd).arg(project_path).shell_spawn().is_ok() {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            } else {
+                for cmd in &["webstorm", "jetbrains-webstorm", "webstorm.sh"] {
+                    if is_command_available(cmd) {
+                        if Command::new(cmd).arg(project_path).spawn().is_ok() {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+        }
+        // _ 是通配符，匹配所有未列出的情况（类似 switch 的 default）
+        _ => return false,
+    };
+    result.is_ok()
+}
+
+// ── Node 版本管理器检测 ──
+
+/// 检测 Unix 系统下 nvm 是否安装
+/// nvm 是 shell 函数不是可执行文件，所以不能用 is_command_available 检测
+/// 必须先 source nvm.sh 再检查 command -v nvm
+fn is_unix_nvm_installed() -> bool {
+    let result = Command::new("bash")
+        .args([
+            "-lc",
+            // r#"..."# 是 Rust 的原始字符串语法，里面的 \ 和 " 不需要转义
+            r#"export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && command -v nvm >/dev/null 2>&1"#,
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    matches!(result, Ok(s) if s.success())
+}
+
+/// 检测系统中安装了哪种 Node 版本管理器
+/// 优先级：nvmd > nvs > nvm/nvm-windows
+pub fn detect_node_version_manager() -> NodeVersionManager {
+    // nvmd（跨平台 GUI 版本管理器）
+    if let Ok(r) = Command::new(if cfg!(target_os = "windows") { "cmd" } else { "nvmd" })
+        .args(if cfg!(target_os = "windows") { vec!["/C", "nvmd", "--help"] } else { vec!["--help"] })
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+    {
+        if r.success() {
+            return NodeVersionManager::Nvmd;
+        }
+    }
+
+    // nvs（跨平台）
+    let nvs_result = if cfg!(target_os = "windows") {
+        Command::new("cmd")
+            .args(["/C", "nvs", "--version"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+    } else {
+        Command::new("nvs")
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+    };
+    if matches!(nvs_result, Ok(s) if s.success()) {
+        return NodeVersionManager::Nvs;
+    }
+
+    // nvm / nvm-windows
+    if cfg!(target_os = "windows") {
+        let r = Command::new("cmd")
+            .args(["/C", "nvm", "version"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+        if matches!(r, Ok(s) if s.success()) {
+            return NodeVersionManager::NvmWindows;
+        }
+    } else if is_unix_nvm_installed() {
+        return NodeVersionManager::Nvm;
+    }
+
+    NodeVersionManager::None
+}
+
+/// 获取当前系统正在使用的 Node.js 版本号
+pub fn get_current_node_version() -> Option<String> {
+    let output = if cfg!(target_os = "windows") {
+        Command::new("cmd")
+            .args(["/C", "node", "--version"])
+            .output()
+    } else {
+        Command::new("node").arg("--version").output()
+    };
+
+    // 链式处理 Result → Option：
+    // .ok() 把 Result 转成 Option（Err → None）
+    // .and_then() 在 Some 上执行进一步处理
+    output.ok().and_then(|o| {
+        if o.status.success() {
+            // from_utf8_lossy：把字节转成字符串，遇到非法 UTF-8 用 ? 替代（不会 panic）
+            let v = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            // 去掉版本号前面的 'v' 前缀：v18.17.0 → 18.17.0
+            Some(v.trim_start_matches('v').to_string())
+        } else {
+            None
+        }
+    })
+}
+
+/// 获取指定版本管理器已安装的所有 Node 版本列表
+pub fn get_node_versions(manager: &NodeVersionManager) -> Vec<NodeVersion> {
+    let current = get_current_node_version();
+
+    // 不同版本管理器用不同的命令列出已安装版本
+    let output = match manager {
+        NodeVersionManager::Nvmd => {
+            if cfg!(target_os = "windows") {
+                Command::new("cmd").args(["/C", "nvmd", "ls"]).output()
+            } else {
+                Command::new("nvmd").arg("ls").output()
+            }
+        }
+        NodeVersionManager::Nvs => {
+            if cfg!(target_os = "windows") {
+                Command::new("cmd").args(["/C", "nvs", "ls"]).output()
+            } else {
+                Command::new("nvs").arg("ls").output()
+            }
+        }
+        NodeVersionManager::NvmWindows => {
+            Command::new("cmd").args(["/C", "nvm", "list"]).output()
+        }
+        NodeVersionManager::Nvm => {
+            Command::new("bash")
+                .args(["-lc", r#"export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm ls"#])
+                .output()
+        }
+        NodeVersionManager::None => return vec![],
+    };
+
+    let output = match output {
+        Ok(o) if o.status.success() => o,
+        _ => return vec![],
+    };
+
+    // nvmd 把版本列表输出到 stderr 而不是 stdout（它的特殊行为）
+    let text = if *manager == NodeVersionManager::Nvmd {
+        String::from_utf8_lossy(&output.stderr).to_string()
+    } else {
+        String::from_utf8_lossy(&output.stdout).to_string()
+    };
+
+    // 正则匹配版本号：支持 "v18.17.0"、"node/v18.17.0"、"18.17.0" 等格式
+    let version_re = regex_lite::Regex::new(r"(?:node/)?v?(\d+\.\d+\.\d+)").unwrap();
+    // HashMap 用于去重，同一版本号只保留第一次出现的
+    let mut seen = std::collections::HashMap::new();
+
+    for line in text.lines() {
+        if let Some(caps) = version_re.captures(line) {
+            // caps[1] 是正则的第一个捕获组（括号里的部分）
+            let ver = caps[1].to_string();
+            if seen.contains_key(&ver) {
+                continue;
+            }
+            // 多种方式判断是否为当前使用的版本
+            let is_current = current.as_deref() == Some(&ver)
+                || line.contains("(currently)")
+                || line.contains("(current)")
+                || line.trim().starts_with('>');
+
+            seen.insert(
+                ver.clone(),
+                NodeVersion {
+                    full_version: format!("v{}", ver),
+                    version: ver,
+                    path: None,
+                    is_current: Some(is_current),
+                },
+            );
+        }
+    }
+
+    // into_values() 消耗 HashMap，只取 values（丢弃 keys）
+    let mut versions: Vec<NodeVersion> = seen.into_values().collect();
+    // 按版本号降序排列（最新版在前）
+    versions.sort_by(|a, b| {
+        let parse = |v: &str| -> Vec<u32> { v.split('.').filter_map(|s| s.parse().ok()).collect() };
+        parse(&b.version).cmp(&parse(&a.version))
+    });
+    versions
+}
+
+/// 汇总 Node 版本管理器的完整信息
+pub fn get_nvm_info() -> NvmInfo {
+    let manager = detect_node_version_manager();
+    let is_installed = manager != NodeVersionManager::None;
+    let current_version = get_current_node_version();
+    let available_versions = if is_installed {
+        get_node_versions(&manager)
+    } else {
+        vec![]
+    };
+
+    NvmInfo {
+        is_installed,
+        manager,
+        current_version,
+        available_versions,
+    }
+}
+
+// ── Helper Trait：扩展 Command 的能力 ──
+
+// trait 类似 TS 的 interface，定义一组方法签名
+// 区别：Rust 的 trait 可以为已有类型添加方法（扩展方法），TS 的 interface 不行
+// 这里为标准库的 Command 类型添加了 shell_spawn 方法
+trait CommandShellSpawn {
+    fn shell_spawn(&mut self) -> std::io::Result<std::process::Child>;
+}
+
+// impl Trait for Type：为已有类型实现 trait（类似 JS 的原型扩展，但更安全）
+impl CommandShellSpawn for Command {
+    /// Windows 上通过 cmd /C 间接执行命令
+    /// 原因：某些通过 PATH 注册的命令（如 code、cursor），直接 spawn 找不到
+    /// 必须通过 cmd.exe 的 PATH 解析才能找到
+    fn shell_spawn(&mut self) -> std::io::Result<std::process::Child> {
+        if cfg!(target_os = "windows") {
+            // get_program() 和 get_args() 是 Command 的内省方法，获取已设置的程序名和参数
+            let prog = format!("{:?}", self.get_program());
+            let args: Vec<String> = self.get_args().map(|a| a.to_string_lossy().to_string()).collect();
+            Command::new("cmd")
+                .arg("/C")
+                .arg(prog.trim_matches('"'))
+                .args(args)
+                .spawn()
+        } else {
+            self.spawn()
+        }
+    }
+}

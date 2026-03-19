@@ -1,0 +1,62 @@
+# Cargo.toml 是 Rust 的项目清单文件（类似 package.json）
+# 定义项目元信息、依赖、编译选项等
+
+[package]
+name = "devfleet"
+version = "2.0.0"
+description = "用于快速启动项目与编辑器"
+authors = ["nieSugar"]
+# edition 指定 Rust 版本规范（不是编译器版本，是语言特性集）
+# 2021 是目前主流的 edition，决定了哪些语法特性可用
+edition = "2021"
+
+[lib]
+# lib 段定义库的编译方式
+name = "devfleet_lib"
+# crate-type 指定编译产物类型：
+#   lib = 标准 Rust 库（给其他 Rust 代码 use）
+#   cdylib = C 动态链接库（Tauri 移动端需要）
+#   staticlib = 静态链接库（Tauri 移动端需要）
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+# 仅在编译期使用的依赖（给 build.rs 用的）
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# 运行时依赖（类似 package.json 的 dependencies）
+# version = "2" 表示 >=2.0.0, <3.0.0（语义化版本的 ^2 简写）
+
+# Tauri 核心框架
+tauri = { version = "2", features = [] }
+# Tauri 文件对话框插件（选择文件夹功能）
+tauri-plugin-dialog = "2"
+
+# serde: Rust 生态的序列化/反序列化框架
+# features = ["derive"] 启用 #[derive(Serialize, Deserialize)] 宏
+serde = { version = "1", features = ["derive"] }
+# serde_json: JSON 格式的 serde 实现（类似 JSON.parse/stringify）
+serde_json = "1"
+
+# dirs: 跨平台获取标准目录路径（如配置目录、主目录）
+dirs = "6"
+# chrono: 日期时间处理库（类似 JS 的 dayjs/moment）
+# features = ["serde"] 让时间类型可以序列化为 JSON
+chrono = { version = "0.4", features = ["serde"] }
+# rand: 随机数生成（用于生成项目 ID）
+rand = "0.8"
+# regex-lite: 轻量级正则引擎（比标准 regex 包更小，适合简单匹配场景）
+regex-lite = "0.1"
+
+[profile.release]
+# release 编译优化配置（cargo build --release 时生效）
+# panic = "abort": panic 时直接终止进程（不展开栈帧），减小二进制体积
+panic = "abort"
+# codegen-units = 1: 单线程编译（更慢，但允许更激进的优化）
+codegen-units = 1
+# lto = true: 链接时优化（Link Time Optimization），跨 crate 优化，显著减小体积
+lto = true
+# opt-level = "s": 优先优化体积（"s" = size），而非速度（"3" = speed）
+opt-level = "s"
+# strip = true: 去除调试符号，进一步减小体积
+strip = true

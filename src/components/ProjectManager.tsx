@@ -1,10 +1,27 @@
-import React, { useState, useEffect } from "react";
-import { Project } from "../types/project";
+import React, { useState, useEffect, useMemo } from "react";
+import { Project, ProjectConfig } from "../types/project";
+import { tauriAPI } from "../lib/tauri";
+import { useProjects } from "../hooks/useProjects";
+import { useEditors } from "../hooks/useEditors";
+import { useNvmInfo } from "../hooks/useNvmInfo";
+import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
+import EditorButton from "./EditorButton";
+import NodeVersionSelect from "./NodeVersionSelect";
+import ProjectHeader from "./ProjectHeader";
+import LogPanel from "./LogPanel";
 import "./ProjectManager.css";
-import { Table, Button, Space, Select, Typography, message, Tag } from "antd";
 import {
-  PlusOutlined,
-  ReloadOutlined,
+  Table,
+  Button,
+  Space,
+  Select,
+  Typography,
+  message,
+  Tag,
+  Modal,
+  Empty,
+} from "antd";
+import {
   PlayCircleOutlined,
   DeleteOutlined,
   NodeIndexOutlined,
@@ -12,226 +29,183 @@ import {
 import vscodeSvg from "../img/vscode.svg";
 import cursorSvg from "../img/cursor.svg";
 import webstormSvg from "../img/webstorm.svg";
-import { NodeVersion, NvmInfo } from "../types/project";
 
 const ProjectManager: React.FC = () => {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(false);
+  const {
+    projects,
+    setProjects,
+    loading,
+    loadProjects,
+    addProject,
+    removeProject,
+    updateScriptSelection,
+    runScript,
+  } = useProjects();
+  const { editors, openInEditor } = useEditors();
+  const { nvmInfo, changeNodeVersion } = useNvmInfo();
   const [messageApi, contextHolder] = message.useMessage();
-  const [availableEditors, setAvailableEditors] = useState<{
-    vscode: boolean;
-    cursor: boolean;
-    webstorm: boolean;
+  const [searchText, setSearchText] = useState("");
+  const [activeLogProject, setActiveLogProject] = useState<{
+    id: string;
+    name: string;
   } | null>(null);
-  const [nvmInfo, setNvmInfo] = useState<NvmInfo | null>(null);
 
-  // 加载项目配置
   useEffect(() => {
-    loadProjects();
-    // 检测编辑器
-    (async () => {
-      try {
-        const result = await window.electronAPI.detectEditors();
-        console.log(result, "result");
-
-        if (result.success) setAvailableEditors(result.data);
-      } catch (e) {}
-    })();
-    // 获取 NVM 信息
-    (async () => {
-      try {
-        const result = await window.electronAPI.getNvmInfo();
-        if (result.success) {
-          setNvmInfo(result.data);
-        }
-      } catch (e) {
-        console.error("获取 NVM 信息失败:", e);
+    loadProjects().then((r) => {
+      if (r && !r.success) {
+        messageApi.error(r.error || "加载项目配置失败");
       }
-    })();
-  }, []);
+    });
+  }, [loadProjects, messageApi]);
 
-  const loadProjects = async () => {
-    try {
-      const result = await window.electronAPI.loadProjectConfig();
-      if (result.success && result.data) {
-        setProjects(result.data.projects);
-      } else {
-        showMessage("error", result.error || "加载项目配置失败");
-      }
-    } catch (error) {
-      showMessage("error", "加载项目配置失败");
-    }
-  };
+  useKeyboardShortcuts({
+    onAddProject: () => handleAdd(),
+    onRefresh: () =>
+      loadProjects().then((r) => {
+        if (r && !r.success) messageApi.error(r.error || "刷新失败");
+      }),
+  });
 
-  const showMessage = (type: "success" | "error", text: string) => {
+  const showMsg = (type: "success" | "error", text: string) => {
     if (type === "success") messageApi.success(text);
     else messageApi.error(text);
   };
 
-  // 添加项目
-  const handleAddProject = async () => {
-    setLoading(true);
-    try {
-      const result = await window.electronAPI.selectFolder();
-
-      if (result.success && result.data) {
-        const addResult = await window.electronAPI.addProjectToConfig(
-          result.data.path
-        );
-        if (addResult.success && addResult.data) {
-          setProjects((prev) => [...prev, addResult.data]);
-          showMessage("success", `项目 "${addResult.data.name}" 添加成功`);
-        } else {
-          showMessage("error", addResult.error || "添加项目失败");
-        }
-      } else {
-        if (result.error && !result.error.includes("用户取消")) {
-          showMessage("error", result.error);
-        }
-      }
-    } catch (error) {
-      showMessage("error", "添加项目时出错");
-    } finally {
-      setLoading(false);
+  const handleAdd = async () => {
+    const result = await addProject();
+    if (!result) return;
+    if (result.success && result.data) {
+      showMsg("success", `项目 "${result.data.name}" 添加成功`);
+    } else {
+      showMsg("error", result.error || "添加项目失败");
     }
   };
 
-  // 删除项目
-  const handleRemoveProject = async (projectId: string) => {
-    if (window.confirm("确定要删除这个项目吗？")) {
-      try {
-        const result =
-          await window.electronAPI.removeProjectFromConfig(projectId);
-        if (result.success) {
-          setProjects((prev) => prev.filter((p) => p.id !== projectId));
-          showMessage("success", "项目删除成功");
-        } else {
-          showMessage("error", result.error || "删除项目失败");
+  const handleRemove = (projectId: string, projectName: string) => {
+    Modal.confirm({
+      title: "确认删除",
+      content: `确定要删除项目「${projectName}」吗？此操作不会删除项目文件。`,
+      okText: "删除",
+      okType: "danger",
+      cancelText: "取消",
+      onOk: async () => {
+        try {
+          const result = await removeProject(projectId);
+          if (result.success) {
+            showMsg("success", "项目删除成功");
+          } else {
+            showMsg("error", result.error || "删除项目失败");
+          }
+        } catch {
+          showMsg("error", "删除项目时出错");
         }
-      } catch (error) {
-        showMessage("error", "删除项目时出错");
-      }
-    }
+      },
+    });
   };
 
-  // 选择脚本
   const handleScriptChange = async (projectId: string, scriptName: string) => {
-    // 更新本地状态
-    const updatedProjects = projects.map((project) =>
-      project.id === projectId
-        ? { ...project, selectedScript: scriptName }
-        : project
-    );
-    setProjects(updatedProjects);
-
-    // 保存配置到主进程
-    try {
-      const config = {
-        projects: updatedProjects,
-        lastUpdated: new Date(),
-      };
-      await window.electronAPI.saveProjectConfig(config);
-    } catch (error) {
-      console.error("保存配置失败:", error);
+    const result = await updateScriptSelection(projectId, scriptName);
+    if (!result.success) {
+      showMsg("error", result.error || "保存配置失败");
     }
   };
 
-  // 选择 Node 版本
   const handleNodeVersionChange = async (
     projectId: string,
-    nodeVersion: string
+    nodeVersion: string | null | undefined
   ) => {
     try {
-      const result = await window.electronAPI.setProjectNodeVersion({
-        projectId,
-        nodeVersion,
-      });
-
-      if (result.success) {
-        // 更新本地状态
+      const result = await changeNodeVersion(projectId, nodeVersion);
+      if (result.success && result.data) {
         setProjects((prev) =>
-          prev.map((project) =>
-            project.id === projectId ? { ...project, nodeVersion: nodeVersion || undefined } : project
+          prev.map((p) =>
+            p.id === projectId
+              ? { ...p, nodeVersion: nodeVersion || undefined }
+              : p
           )
         );
-
-        // 根据操作类型显示不同的提示信息
-        const successMessage = !nodeVersion || nodeVersion.trim() === ''
-          ? result.data?.message || "Node 版本配置已删除"
-          : result.data?.message || `Node 版本已设置为 ${nodeVersion}`;
-
-        showMessage("success", successMessage);
+        showMsg("success", result.data.message || "Node 版本已更新");
       } else {
-        showMessage("error", result.error || "设置 Node 版本失败");
+        showMsg("error", result.error || "设置 Node 版本失败");
       }
-    } catch (error) {
-      showMessage("error", "设置 Node 版本时出错");
+    } catch {
+      showMsg("error", "设置 Node 版本时出错");
     }
   };
 
-  // 运行脚本
-  const handleRunScript = async (project: Project) => {
-    if (!project.selectedScript) {
-      showMessage("error", "请先选择要运行的脚本");
-      return;
+  const handleRun = async (project: Project) => {
+    const result = await runScript(project);
+    if (result.success) {
+      const vi = project.nodeVersion ? ` (Node ${project.nodeVersion})` : "";
+      showMsg("success", `脚本 "${project.selectedScript}"${vi} 启动成功`);
+      if (result.data?.mode === "managed") {
+        setActiveLogProject({ id: project.id, name: project.name });
+      }
+    } else {
+      showMsg("error", result.error || "启动脚本失败");
     }
+  };
 
-    setLoading(true);
+  const handleNoteChange = async (projectId: string, note: string) => {
+    const trimmed = note.trim() || undefined;
+    setProjects((prev) =>
+      prev.map((p) => (p.id === projectId ? { ...p, note: trimmed } : p))
+    );
     try {
-      const result = await window.electronAPI.runScript({
-        projectPath: project.path,
-        scriptName: project.selectedScript,
-        projectId: project.id,
-        nodeVersion: project.nodeVersion,
-      });
-
-      if (result.success) {
-        const versionInfo = project.nodeVersion
-          ? ` (Node ${project.nodeVersion})`
-          : "";
-        showMessage(
-          "success",
-          `脚本 "${project.selectedScript}"${versionInfo} 启动成功`
+      const cfgResult = await tauriAPI.loadProjectConfig();
+      if (cfgResult.success && cfgResult.data) {
+        const updatedProjects = cfgResult.data.projects.map((p: Project) =>
+          p.id === projectId ? { ...p, note: trimmed } : p
         );
-      } else {
-        showMessage("error", result.error || "启动脚本失败");
+        const config: ProjectConfig = {
+          ...cfgResult.data,
+          projects: updatedProjects,
+          lastUpdated: new Date().toISOString(),
+        };
+        await tauriAPI.saveProjectConfig(config);
       }
-    } catch (error) {
-      showMessage("error", "启动脚本时出错");
-    } finally {
-      setLoading(false);
+    } catch {
+      showMsg("error", "保存备注失败");
     }
   };
+
+  const filteredProjects = useMemo(() => {
+    if (!searchText.trim()) return projects;
+    const q = searchText.toLowerCase();
+    return projects.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.path.toLowerCase().includes(q) ||
+        (p.note && p.note.toLowerCase().includes(q))
+    );
+  }, [projects, searchText]);
 
   return (
     <div className="project-manager">
       {contextHolder}
-      <div className="project-manager-header">
-        <h2>项目管理</h2>
-        <Space>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={handleAddProject}
-            loading={loading}
-          >
-            添加项目
-          </Button>
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={loadProjects}
-            disabled={loading}
-          >
-            刷新
-          </Button>
-        </Space>
-      </div>
+      <ProjectHeader
+        loading={loading}
+        searchText={searchText}
+        onAdd={handleAdd}
+        onRefresh={() =>
+          loadProjects().then((r) => {
+            if (r && !r.success) showMsg("error", r.error || "刷新失败");
+          })
+        }
+        onSearch={setSearchText}
+      />
 
       <div className="projects-container">
         <Table
           rowKey="id"
-          dataSource={projects}
+          dataSource={filteredProjects}
+          loading={loading}
           pagination={false}
+          locale={{
+            emptyText: (
+              <Empty description="暂无项目，点击上方「添加项目」开始" />
+            ),
+          }}
           columns={[
             {
               title: "项目名称",
@@ -241,103 +215,91 @@ const ProjectManager: React.FC = () => {
             {
               title: "项目路径",
               dataIndex: "path",
-              render: (text: string, record: Project) => {
-                const showVSCode = availableEditors?.vscode;
-                const showCursor = availableEditors?.cursor;
-                const showWebStorm = availableEditors?.webstorm;
-                return (
+              render: (text: string, record: Project) => (
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: 8 }}
+                >
+                  <Typography.Text copyable ellipsis={{ tooltip: text }}>
+                    {text}
+                  </Typography.Text>
                   <div
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    style={{ display: "flex", alignItems: "center", gap: 6 }}
                   >
-                    <Typography.Text copyable ellipsis={{ tooltip: text }}>
-                      {text}
-                    </Typography.Text>
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 6 }}
-                    >
-                      {showVSCode && (
-                        <Button
-                          size="small"
-                          type="text"
-                          title="使用 VS Code 打开"
-                          onClick={async () => {
-                            const res = await window.electronAPI.openInEditor({
-                              editor: "vscode",
-                              projectPath: record.path,
-                            });
-                            if (!res.success)
-                              showMessage(
-                                "error",
-                                res.error || "打开 VS Code 失败"
-                              );
-                          }}
-                        >
-                          <img
-                            alt="VS Code"
-                            src={vscodeSvg}
-                            style={{ width: 16, height: 16 }}
-                          />
-                        </Button>
-                      )}
-                      {showCursor && (
-                        <Button
-                          size="small"
-                          type="text"
-                          title="使用 Cursor 打开"
-                          onClick={async () => {
-                            const res = await window.electronAPI.openInEditor({
-                              editor: "cursor",
-                              projectPath: record.path,
-                            });
-                            if (!res.success)
-                              showMessage(
-                                "error",
-                                res.error || "打开 Cursor 失败"
-                              );
-                          }}
-                        >
-                          <img
-                            alt="Cursor"
-                            src={cursorSvg}
-                            style={{ width: 16, height: 16 }}
-                          />
-                        </Button>
-                      )}
-                      {showWebStorm && (
-                        <Button
-                          size="small"
-                          type="text"
-                          title="使用 WebStorm 打开"
-                          onClick={async () => {
-                            const res = await window.electronAPI.openInEditor({
-                              editor: "webstorm",
-                              projectPath: record.path,
-                            });
-                            if (!res.success)
-                              showMessage(
-                                "error",
-                                res.error || "打开 WebStorm 失败"
-                              );
-                          }}
-                        >
-                          <img
-                            alt="WebStorm"
-                            src={webstormSvg}
-                            style={{ width: 16, height: 16 }}
-                          />
-                        </Button>
-                      )}
-                    </div>
+                    {editors?.vscode && (
+                      <EditorButton
+                        icon={vscodeSvg}
+                        alt="VS Code"
+                        title="使用 VS Code 打开"
+                        onClick={async () => {
+                          const res = await openInEditor(
+                            "vscode",
+                            record.path
+                          );
+                          if (!res.success)
+                            showMsg("error", res.error || "打开 VS Code 失败");
+                        }}
+                      />
+                    )}
+                    {editors?.cursor && (
+                      <EditorButton
+                        icon={cursorSvg}
+                        alt="Cursor"
+                        title="使用 Cursor 打开"
+                        onClick={async () => {
+                          const res = await openInEditor(
+                            "cursor",
+                            record.path
+                          );
+                          if (!res.success)
+                            showMsg("error", res.error || "打开 Cursor 失败");
+                        }}
+                      />
+                    )}
+                    {editors?.webstorm && (
+                      <EditorButton
+                        icon={webstormSvg}
+                        alt="WebStorm"
+                        title="使用 WebStorm 打开"
+                        onClick={async () => {
+                          const res = await openInEditor(
+                            "webstorm",
+                            record.path
+                          );
+                          if (!res.success)
+                            showMsg(
+                              "error",
+                              res.error || "打开 WebStorm 失败"
+                            );
+                        }}
+                      />
+                    )}
                   </div>
-                );
-              },
+                </div>
+              ),
+            },
+            {
+              title: "备注",
+              dataIndex: "note",
+              width: 160,
+              render: (_: string | undefined, record: Project) => (
+                <Typography.Paragraph
+                  editable={{
+                    onChange: (val) => handleNoteChange(record.id, val),
+                    tooltip: "点击编辑",
+                  }}
+                  style={{ marginBottom: 0 }}
+                  ellipsis={{ rows: 1, tooltip: true }}
+                >
+                  {record.note || ""}
+                </Typography.Paragraph>
+              ),
             },
             {
               title: "npm 脚本",
               dataIndex: "scripts",
               width: 130,
-              render: (_: any, record: Project) => (
-                <Select
+              render: (_: Project["scripts"], record: Project) => (
+                <Select<string>
                   value={record.selectedScript}
                   style={{ width: 130 }}
                   onChange={(v) => handleScriptChange(record.id, v)}
@@ -358,70 +320,40 @@ const ProjectManager: React.FC = () => {
                       color="blue"
                       style={{ fontSize: 10, marginLeft: 4 }}
                     >
-                      {nvmInfo.manager === "nvm-windows" ? "nvm-win" : nvmInfo.manager}
+                      {nvmInfo.manager === "nvm-windows"
+                        ? "nvm-win"
+                        : nvmInfo.manager}
                     </Tag>
                   )}
                 </Space>
               ),
               dataIndex: "nodeVersion",
               width: 220,
-              render: (_: any, record: Project) => {
-                if (!nvmInfo?.isInstalled) {
-                  return (
-                    <Tag color="default" style={{ cursor: "not-allowed" }}>
-                      未安装版本管理器
-                    </Tag>
-                  );
-                }
-
-                return (
-                  <Select
-                    value={record.nodeVersion || undefined}
-                    placeholder="选择版本"
-                    style={{ width: 140 }}
-                    allowClear
-                    onChange={(v) => handleNodeVersionChange(record.id, v)}
-                    options={[
-                      ...(nvmInfo?.availableVersions || []).map((v) => ({
-                        label: (
-                          <Space size={4}>
-                            {v.version}
-                            {v.isCurrent && (
-                              <Tag color="green" style={{ fontSize: 10, padding: '0 4px' }}>
-                                系统
-                              </Tag>
-                            )}
-                            {record.nodeVersion === v.version && (
-                              <Tag color="blue" style={{ fontSize: 10, padding: '0 4px' }}>
-                                项目
-                              </Tag>
-                            )}
-                          </Space>
-                        ),
-                        value: v.version,
-                      })),
-                    ]}
-                  />
-                );
-              },
+              render: (_: Project["nodeVersion"], record: Project) => (
+                <NodeVersionSelect
+                  record={record}
+                  nvmInfo={nvmInfo}
+                  onChange={handleNodeVersionChange}
+                />
+              ),
             },
             {
               title: "操作",
               width: 150,
-              render: (_: any, record: Project) => (
+              render: (_: unknown, record: Project) => (
                 <Space>
                   <Button
                     type="primary"
                     icon={<PlayCircleOutlined />}
                     disabled={!record.selectedScript}
-                    onClick={() => handleRunScript(record)}
+                    onClick={() => handleRun(record)}
                   >
                     运行
                   </Button>
                   <Button
                     danger
                     icon={<DeleteOutlined />}
-                    onClick={() => handleRemoveProject(record.id)}
+                    onClick={() => handleRemove(record.id, record.name)}
                   >
                     删除
                   </Button>
@@ -431,6 +363,11 @@ const ProjectManager: React.FC = () => {
           ]}
         />
       </div>
+
+      <LogPanel
+        projectId={activeLogProject?.id ?? null}
+        projectName={activeLogProject?.name ?? ""}
+      />
     </div>
   );
 };

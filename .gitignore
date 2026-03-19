@@ -8,6 +8,7 @@ lerna-debug.log*
 
 # 构建目录
 dist
+out/
 
 .vscode
 
@@ -95,5 +96,9 @@ typings/
 # Vite
 .vite/
 
-# Electron-Forge
-out/
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+src-tauri/icons/*.png
+src-tauri/icons/*.ico
+src-tauri/icons/*.icns
