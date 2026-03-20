@@ -1,0 +1,98 @@
+.titlebar {
+  height: var(--titlebar-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 0 14px;
+  background: var(--bg-deep);
+  border-bottom: 1px solid var(--border-subtle);
+  user-select: none;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 100;
+  transition: background-color var(--transition-slow),
+    border-color var(--transition-slow);
+}
+
+.titlebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.titlebar-logo {
+  width: 14px;
+  height: 14px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  border-radius: 3.5px;
+  position: relative;
+  flex-shrink: 0;
+}
+.titlebar-logo::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  background: var(--bg-deep);
+  border-radius: 2px;
+  transition: background-color var(--transition-slow);
+}
+
+.titlebar-name {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 800;
+  color: var(--text-secondary);
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+}
+
+/* ── Buttons ── */
+.titlebar-actions {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+.tb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  outline: none;
+}
+
+.theme-btn {
+  width: 38px;
+  height: 100%;
+  margin-right: 2px;
+}
+.theme-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.theme-btn:active {
+  background: var(--bg-active);
+}
+
+/* ── Window Controls ── */
+.tb-win-controls {
+  display: flex;
+  height: 100%;
+}
+
+.win-btn {
+  width: 46px;
+  height: 100%;
+}
+.win-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.close-btn:hover {
+  background: #e81123 !important;
+  color: #fff !important;
+}

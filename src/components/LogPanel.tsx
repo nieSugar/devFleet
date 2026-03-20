@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Collapse, Button, Typography, Empty } from "antd";
 import {
   ClearOutlined,
   VerticalAlignBottomOutlined,
 } from "@ant-design/icons";
 import { tauriAPI } from "../lib/tauri";
+import "./LogPanel.css";
 
 interface LogPanelProps {
   projectId: string | null;
@@ -17,22 +17,19 @@ const LogPanelInner: React.FC<{ projectId: string; projectName: string }> = ({
 }) => {
   const [output, setOutput] = useState("");
   const [autoScroll, setAutoScroll] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
   const logRef = useRef<HTMLPreElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval>>(null);
 
   useEffect(() => {
-
     const poll = async () => {
       try {
         const result = await tauriAPI.getScriptOutput(projectId);
-        if (result.success && result.data) {
-          setOutput(result.data.output || "");
-        }
+        if (result.success && result.data) setOutput(result.data.output || "");
       } catch {
-        // silently fail
+        /* silently fail */
       }
     };
-
     poll();
     intervalRef.current = setInterval(poll, 1500);
     return () => {
@@ -41,70 +38,70 @@ const LogPanelInner: React.FC<{ projectId: string; projectName: string }> = ({
   }, [projectId]);
 
   useEffect(() => {
-    if (autoScroll && logRef.current) {
+    if (autoScroll && logRef.current)
       logRef.current.scrollTop = logRef.current.scrollHeight;
-    }
   }, [output, autoScroll]);
 
   return (
-    <Collapse
-      size="small"
-      style={{ marginTop: 16 }}
-      items={[
-        {
-          key: "log",
-          label: `脚本输出 - ${projectName}`,
-          extra: (
-            <span onClick={(e) => e.stopPropagation()}>
-              <Button
-                size="small"
-                type="text"
-                icon={<VerticalAlignBottomOutlined />}
-                onClick={() => setAutoScroll(!autoScroll)}
-                title={autoScroll ? "关闭自动滚动" : "开启自动滚动"}
-                style={{ color: autoScroll ? "#0d9488" : undefined }}
-              />
-              <Button
-                size="small"
-                type="text"
-                icon={<ClearOutlined />}
-                onClick={() => setOutput("")}
-                title="清空日志"
-              />
-            </span>
-          ),
-          children: output ? (
-            <pre
-              ref={logRef}
+    <div className="log-panel">
+      <div className="log-header" onClick={() => setCollapsed((c) => !c)}>
+        <div className="log-title">
+          <span className="log-dot" />
+          <span className="log-label">输出</span>
+          <span className="log-project-name">{projectName}</span>
+        </div>
+        <div className="log-controls" onClick={(e) => e.stopPropagation()}>
+          <button
+            className="log-ctrl-btn"
+            onClick={() => setAutoScroll((a) => !a)}
+            title={autoScroll ? "关闭自动滚动" : "开启自动滚动"}
+          >
+            <VerticalAlignBottomOutlined
+              style={{ color: autoScroll ? "var(--accent)" : undefined }}
+            />
+          </button>
+          <button
+            className="log-ctrl-btn"
+            onClick={() => setOutput("")}
+            title="清空"
+          >
+            <ClearOutlined />
+          </button>
+          <button
+            className="log-ctrl-btn"
+            onClick={() => setCollapsed((c) => !c)}
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
               style={{
-                maxHeight: 300,
-                overflow: "auto",
-                background: "#1e1e1e",
-                color: "#d4d4d4",
-                padding: 12,
-                borderRadius: 4,
-                fontSize: 12,
-                lineHeight: 1.5,
-                margin: 0,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-all",
+                transform: collapsed ? "rotate(-90deg)" : "rotate(0)",
+                transition: "transform 200ms ease",
               }}
             >
+              <path d="M3 4.5L6 7.5L9 4.5" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {!collapsed && (
+        <div className="log-body">
+          {output ? (
+            <pre ref={logRef} className="log-output">
               {output}
             </pre>
           ) : (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={
-                <Typography.Text type="secondary">
-                  暂无输出，请确保脚本在托管模式下运行
-                </Typography.Text>
-              }
-            />
-          ),
-        },
-      ]}
-    />
+            <div className="log-empty">等待输出...</div>
+          )}
+        </div>
+      )}
+    </div>
   );
 };
 

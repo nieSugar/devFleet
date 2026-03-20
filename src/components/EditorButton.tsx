@@ -1,5 +1,5 @@
 import React from "react";
-import { Button } from "antd";
+import { Tooltip } from "antd";
 
 interface EditorButtonProps {
   icon: string;
@@ -14,9 +14,11 @@ const EditorButton: React.FC<EditorButtonProps> = ({
   title,
   onClick,
 }) => (
-  <Button size="small" type="text" title={title} aria-label={title} onClick={onClick}>
-    <img alt={alt} src={icon} style={{ width: 16, height: 16 }} />
-  </Button>
+  <Tooltip title={title} placement="top" mouseEnterDelay={0.4}>
+    <button className="editor-btn" onClick={onClick} aria-label={title}>
+      <img alt={alt} src={icon} draggable={false} />
+    </button>
+  </Tooltip>
 );
 
 export default EditorButton;

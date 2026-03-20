@@ -1,0 +1,352 @@
+/* ═══════════════════════════════════════
+   Project Card
+   ═══════════════════════════════════════ */
+
+.project-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  animation: fadeInUp 0.3s ease both;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-slow);
+}
+.project-card:hover {
+  border-color: var(--border-default);
+}
+
+/* Accent top bar — thin left edge */
+.card-accent-bar {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  width: 2px;
+  border-radius: 0 1px 1px 0;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.project-card:hover .card-accent-bar {
+  opacity: 1;
+}
+
+/* Header */
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.card-name {
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+
+.card-pm-badge {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.card-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  opacity: 0;
+  font-size: 12px;
+}
+.project-card:hover .card-delete {
+  opacity: 1;
+}
+.card-delete:hover {
+  color: var(--danger);
+  background: var(--danger-muted);
+}
+
+/* Path */
+.card-path {
+  margin-top: 8px;
+}
+.card-path .card-path-text,
+.card-path .ant-typography {
+  font-family: var(--font-mono) !important;
+  font-size: var(--text-xs) !important;
+  color: var(--text-secondary) !important;
+  line-height: 1.4 !important;
+}
+.card-path .ant-typography-copy {
+  color: var(--text-secondary) !important;
+  font-size: 11px !important;
+}
+
+/* Note */
+.card-note {
+  margin-top: 2px;
+  min-height: 22px;
+}
+.card-note .card-note-text,
+.card-note .ant-typography {
+  font-size: var(--text-xs) !important;
+  color: var(--text-secondary) !important;
+  margin-bottom: 0 !important;
+  font-style: italic;
+}
+.card-note .ant-typography-edit {
+  color: var(--text-muted) !important;
+  font-size: 11px !important;
+}
+
+/* Divider */
+.card-divider {
+  height: 0;
+  margin: 8px 0;
+}
+
+/* Meta row: editors + node version */
+.card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.card-editors {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-node {
+  flex-shrink: 0;
+}
+
+/* Editor buttons (used by EditorButton component) */
+.editor-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  outline: none;
+  padding: 0;
+}
+.editor-btn:hover {
+  background: var(--bg-hover);
+}
+.editor-btn:active {
+  background: var(--bg-active);
+}
+.editor-btn img {
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+
+/* Actions */
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.card-script-select {
+  flex: none;
+  width: 110px;
+}
+
+/* ── Run Button ── */
+.run-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  outline: none;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+.run-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--text-inverse);
+}
+.run-btn:active:not(:disabled) {
+  background: var(--accent-active);
+  border-color: var(--accent-active);
+}
+.run-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  border-color: var(--border-default);
+  color: var(--text-muted);
+}
+.run-btn-icon {
+  flex-shrink: 0;
+  transition: transform var(--transition-fast);
+}
+.run-btn:hover:not(:disabled) .run-btn-icon {
+  transform: scale(1.15);
+}
+
+/* ═══════════════════════════════════════
+   Add Project Card
+   ═══════════════════════════════════════ */
+
+.add-project-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  min-height: 200px;
+  background: transparent;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  animation: fadeInUp 0.3s ease both;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+.add-project-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+.add-project-card:hover .add-icon {
+  color: var(--accent);
+  transform: scale(1.1);
+  background: var(--accent-subtle);
+}
+
+.add-icon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 20px;
+  transition: all var(--transition-spring);
+}
+
+.add-label {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.add-shortcut {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  padding: 2px 10px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-xs);
+  opacity: 0.6;
+}
+
+/* ═══════════════════════════════════════
+   Empty State
+   ═══════════════════════════════════════ */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 80px 24px 64px;
+  text-align: center;
+  animation: fadeIn 0.4s ease both;
+}
+
+.empty-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--accent-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 28px;
+  margin-bottom: 4px;
+}
+
+.empty-title {
+  font-family: var(--font-sans);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.empty-desc {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  max-width: 280px;
+  line-height: 1.6;
+}
+
+.empty-shortcut {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: 4px;
+}

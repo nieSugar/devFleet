@@ -5,30 +5,12 @@ import { useProjects } from "../hooks/useProjects";
 import { useEditors } from "../hooks/useEditors";
 import { useNvmInfo } from "../hooks/useNvmInfo";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
-import EditorButton from "./EditorButton";
-import NodeVersionSelect from "./NodeVersionSelect";
 import ProjectHeader from "./ProjectHeader";
+import ProjectCard from "./ProjectCard";
 import LogPanel from "./LogPanel";
+import { PlusOutlined, FolderOpenOutlined } from "@ant-design/icons";
+import { message, Modal, Button } from "antd";
 import "./ProjectManager.css";
-import {
-  Table,
-  Button,
-  Space,
-  Select,
-  Typography,
-  message,
-  Tag,
-  Modal,
-  Empty,
-} from "antd";
-import {
-  PlayCircleOutlined,
-  DeleteOutlined,
-  NodeIndexOutlined,
-} from "@ant-design/icons";
-import vscodeSvg from "../img/vscode.svg";
-import cursorSvg from "../img/cursor.svg";
-import webstormSvg from "../img/webstorm.svg";
 
 const ProjectManager: React.FC = () => {
   const {
@@ -52,9 +34,7 @@ const ProjectManager: React.FC = () => {
 
   useEffect(() => {
     loadProjects().then((r) => {
-      if (r && !r.success) {
-        messageApi.error(r.error || "加载项目配置失败");
-      }
+      if (r && !r.success) messageApi.error(r.error || "加载项目配置失败");
     });
   }, [loadProjects, messageApi]);
 
@@ -74,11 +54,9 @@ const ProjectManager: React.FC = () => {
   const handleAdd = async () => {
     const result = await addProject();
     if (!result) return;
-    if (result.success && result.data) {
+    if (result.success && result.data)
       showMsg("success", `项目 "${result.data.name}" 添加成功`);
-    } else {
-      showMsg("error", result.error || "添加项目失败");
-    }
+    else showMsg("error", result.error || "添加项目失败");
   };
 
   const handleRemove = (projectId: string, projectName: string) => {
@@ -91,11 +69,8 @@ const ProjectManager: React.FC = () => {
       onOk: async () => {
         try {
           const result = await removeProject(projectId);
-          if (result.success) {
-            showMsg("success", "项目删除成功");
-          } else {
-            showMsg("error", result.error || "删除项目失败");
-          }
+          if (result.success) showMsg("success", "项目删除成功");
+          else showMsg("error", result.error || "删除项目失败");
         } catch {
           showMsg("error", "删除项目时出错");
         }
@@ -105,14 +80,12 @@ const ProjectManager: React.FC = () => {
 
   const handleScriptChange = async (projectId: string, scriptName: string) => {
     const result = await updateScriptSelection(projectId, scriptName);
-    if (!result.success) {
-      showMsg("error", result.error || "保存配置失败");
-    }
+    if (!result.success) showMsg("error", result.error || "保存配置失败");
   };
 
   const handleNodeVersionChange = async (
     projectId: string,
-    nodeVersion: string | null | undefined
+    nodeVersion: string | null | undefined,
   ) => {
     try {
       const result = await changeNodeVersion(projectId, nodeVersion);
@@ -121,8 +94,8 @@ const ProjectManager: React.FC = () => {
           prev.map((p) =>
             p.id === projectId
               ? { ...p, nodeVersion: nodeVersion || undefined }
-              : p
-          )
+              : p,
+          ),
         );
         showMsg("success", result.data.message || "Node 版本已更新");
       } else {
@@ -149,13 +122,13 @@ const ProjectManager: React.FC = () => {
   const handleNoteChange = async (projectId: string, note: string) => {
     const trimmed = note.trim() || undefined;
     setProjects((prev) =>
-      prev.map((p) => (p.id === projectId ? { ...p, note: trimmed } : p))
+      prev.map((p) => (p.id === projectId ? { ...p, note: trimmed } : p)),
     );
     try {
       const cfgResult = await tauriAPI.loadProjectConfig();
       if (cfgResult.success && cfgResult.data) {
         const updatedProjects = cfgResult.data.projects.map((p: Project) =>
-          p.id === projectId ? { ...p, note: trimmed } : p
+          p.id === projectId ? { ...p, note: trimmed } : p,
         );
         const config: ProjectConfig = {
           ...cfgResult.data,
@@ -176,15 +149,18 @@ const ProjectManager: React.FC = () => {
       (p) =>
         p.name.toLowerCase().includes(q) ||
         p.path.toLowerCase().includes(q) ||
-        (p.note && p.note.toLowerCase().includes(q))
+        (p.note && p.note.toLowerCase().includes(q)),
     );
   }, [projects, searchText]);
 
   return (
     <div className="project-manager">
       {contextHolder}
+
       <ProjectHeader
         loading={loading}
+        projectCount={filteredProjects.length}
+        totalCount={projects.length}
         searchText={searchText}
         onAdd={handleAdd}
         onRefresh={() =>
@@ -195,182 +171,70 @@ const ProjectManager: React.FC = () => {
         onSearch={setSearchText}
       />
 
-      <div className="projects-container">
-        <Table
-          rowKey="id"
-          dataSource={filteredProjects}
-          loading={loading}
-          pagination={false}
-          scroll={{ x: "max-content" }}
-          locale={{
-            emptyText: (
-              <Empty description="暂无项目，点击上方「添加项目」开始" />
-            ),
-          }}
-          columns={[
-            {
-              title: "项目名称",
-              dataIndex: "name",
-              width: 130,
-              ellipsis: true,
-            },
-            {
-              title: "项目路径",
-              dataIndex: "path",
-              render: (text: string, record: Project) => (
-                <div
-                  style={{ display: "flex", alignItems: "center", gap: 8 }}
-                >
-                  <Typography.Text copyable ellipsis={{ tooltip: text }}>
-                    {text}
-                  </Typography.Text>
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 6 }}
-                  >
-                    {editors?.vscode && (
-                      <EditorButton
-                        icon={vscodeSvg}
-                        alt="VS Code"
-                        title="使用 VS Code 打开"
-                        onClick={async () => {
-                          const res = await openInEditor(
-                            "vscode",
-                            record.path
-                          );
-                          if (!res.success)
-                            showMsg("error", res.error || "打开 VS Code 失败");
-                        }}
-                      />
-                    )}
-                    {editors?.cursor && (
-                      <EditorButton
-                        icon={cursorSvg}
-                        alt="Cursor"
-                        title="使用 Cursor 打开"
-                        onClick={async () => {
-                          const res = await openInEditor(
-                            "cursor",
-                            record.path
-                          );
-                          if (!res.success)
-                            showMsg("error", res.error || "打开 Cursor 失败");
-                        }}
-                      />
-                    )}
-                    {editors?.webstorm && (
-                      <EditorButton
-                        icon={webstormSvg}
-                        alt="WebStorm"
-                        title="使用 WebStorm 打开"
-                        onClick={async () => {
-                          const res = await openInEditor(
-                            "webstorm",
-                            record.path
-                          );
-                          if (!res.success)
-                            showMsg(
-                              "error",
-                              res.error || "打开 WebStorm 失败"
-                            );
-                        }}
-                      />
-                    )}
-                  </div>
-                </div>
-              ),
-            },
-            {
-              title: "备注",
-              dataIndex: "note",
-              width: 120,
-              render: (_: string | undefined, record: Project) => (
-                <Typography.Paragraph
-                  editable={{
-                    onChange: (val) => handleNoteChange(record.id, val),
-                    tooltip: "点击编辑",
-                  }}
-                  style={{ marginBottom: 0 }}
-                  ellipsis={{ rows: 1, tooltip: true }}
-                >
-                  {record.note || ""}
-                </Typography.Paragraph>
-              ),
-            },
-            {
-              title: "npm 脚本",
-              dataIndex: "scripts",
-              width: 120,
-              render: (_: Project["scripts"], record: Project) => (
-                <Select<string>
-                  value={record.selectedScript}
-                  style={{ width: "100%" }}
-                  onChange={(v) => handleScriptChange(record.id, v)}
-                  options={record.scripts.map((s) => ({
-                    label: s.name,
-                    value: s.name,
-                  }))}
-                />
-              ),
-            },
-            {
-              title: () => (
-                <Space>
-                  <NodeIndexOutlined />
-                  Node 版本
-                  {nvmInfo?.isInstalled && nvmInfo.manager !== "none" && (
-                    <Tag
-                      color="blue"
-                      style={{ fontSize: 10, marginLeft: 4 }}
-                    >
-                      {nvmInfo.manager === "nvm-windows"
-                        ? "nvm-win"
-                        : nvmInfo.manager}
-                    </Tag>
-                  )}
-                </Space>
-              ),
-              dataIndex: "nodeVersion",
-              width: 200,
-              render: (_: Project["nodeVersion"], record: Project) => (
-                <NodeVersionSelect
-                  record={record}
-                  nvmInfo={nvmInfo}
-                  onChange={handleNodeVersionChange}
-                />
-              ),
-            },
-            {
-              title: "操作",
-              width: 160,
-              fixed: "right" as const,
-              render: (_: unknown, record: Project) => (
-                <Space>
-                  <Button
-                    type="primary"
-                    icon={<PlayCircleOutlined />}
-                    disabled={!record.selectedScript}
-                    onClick={() => handleRun(record)}
-                  >
-                    运行
-                  </Button>
-                  <Button
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={() => handleRemove(record.id, record.name)}
-                  >
-                    删除
-                  </Button>
-                </Space>
-              ),
-            },
-          ]}
+      {filteredProjects.length > 0 ? (
+        <div className="projects-grid">
+          {filteredProjects.map((project, i) => (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              editors={editors}
+              nvmInfo={nvmInfo}
+              index={i}
+              onScriptChange={handleScriptChange}
+              onNodeVersionChange={handleNodeVersionChange}
+              onRun={handleRun}
+              onRemove={handleRemove}
+              onNoteChange={handleNoteChange}
+              onOpenEditor={openInEditor}
+              showMsg={showMsg}
+            />
+          ))}
+          <div
+            className="add-project-card"
+            onClick={handleAdd}
+            style={{
+              animationDelay: `${filteredProjects.length * 50}ms`,
+            }}
+          >
+            <div className="add-icon">
+              <PlusOutlined />
+            </div>
+            <span className="add-label">添加项目</span>
+            <span className="add-shortcut">Ctrl + N</span>
+          </div>
+        </div>
+      ) : projects.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-icon">
+            <FolderOpenOutlined />
+          </div>
+          <div className="empty-title">还没有项目</div>
+          <div className="empty-desc">
+            添加你的第一个项目，开始高效管理开发工作流
+          </div>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            size="large"
+            onClick={handleAdd}
+          >
+            添加项目
+          </Button>
+          <span className="empty-shortcut">或按 Ctrl + N</span>
+        </div>
+      ) : (
+        <div className="empty-state">
+          <div className="empty-title">没有匹配的项目</div>
+          <div className="empty-desc">尝试其他搜索关键词</div>
+        </div>
+      )}
+
+      <div className="log-wrapper">
+        <LogPanel
+          projectId={activeLogProject?.id ?? null}
+          projectName={activeLogProject?.name ?? ""}
         />
       </div>
-
-      <LogPanel
-        projectId={activeLogProject?.id ?? null}
-        projectName={activeLogProject?.name ?? ""}
-      />
     </div>
   );
 };

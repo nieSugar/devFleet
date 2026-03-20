@@ -1,6 +1,21 @@
 import React from "react";
-import { Select, Space, Tag } from "antd";
+import { Select, Tag } from "antd";
 import { NvmInfo, Project } from "../types/project";
+
+const tagStyle: React.CSSProperties = {
+  fontSize: 10,
+  lineHeight: 1,
+  padding: "2px 5px",
+  margin: 0,
+  borderRadius: 3,
+  verticalAlign: "middle",
+};
+
+const labelStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+};
 
 interface NodeVersionSelectProps {
   record: Project;
@@ -25,24 +40,24 @@ const NodeVersionSelect: React.FC<NodeVersionSelectProps> = ({
     <Select<string | undefined>
       value={record.nodeVersion || undefined}
       placeholder="选择版本"
-      style={{ width: 140 }}
+      style={{ width: 150 }}
       allowClear
       onChange={(v) => onChange(record.id, v)}
       options={(nvmInfo.availableVersions || []).map((v) => ({
         label: (
-          <Space size={4}>
-            {v.version}
+          <div style={labelStyle}>
+            <span>{v.version}</span>
             {v.isCurrent && (
-              <Tag color="green" style={{ fontSize: 10, padding: "0 4px" }}>
+              <Tag color="green" bordered={false} style={tagStyle}>
                 系统
               </Tag>
             )}
             {record.nodeVersion === v.version && (
-              <Tag color="blue" style={{ fontSize: 10, padding: "0 4px" }}>
+              <Tag color="blue" bordered={false} style={tagStyle}>
                 项目
               </Tag>
             )}
-          </Space>
+          </div>
         ),
         value: v.version,
       }))}

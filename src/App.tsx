@@ -1,27 +1,40 @@
 import React from "react";
+import { ConfigProvider, App as AntdApp, theme as antdTheme } from "antd";
+import zhCN from "antd/locale/zh_CN";
+import "antd/dist/reset.css";
+import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
+import TitleBar from "./components/TitleBar";
 import ProjectManager from "./components/ProjectManager";
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./App.css";
-import { ConfigProvider, App as AntdApp } from "antd";
-import zhCN from "antd/locale/zh_CN";
-import "antd/dist/reset.css";
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
+  const { isDark } = useTheme();
+
   return (
     <ConfigProvider
       locale={zhCN}
       theme={{
+        algorithm: isDark
+          ? antdTheme.darkAlgorithm
+          : antdTheme.defaultAlgorithm,
         token: {
           colorPrimary: "#0d9488",
-          colorBgContainer: "#ffffff",
-          colorBorderSecondary: "#e2e8f0",
           borderRadius: 8,
+          fontFamily:
+            "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', sans-serif",
+          colorBgContainer: isDark ? "#161a24" : "#ffffff",
+          colorBgElevated: isDark ? "#1c2130" : "#ffffff",
+          colorBgLayout: isDark ? "#0e1118" : "#f5f7fa",
+          colorBorder: isDark ? "#262c3a" : "#dfe2e8",
+          colorBorderSecondary: isDark ? "#1a1f2c" : "#eceff4",
         },
       }}
     >
       <AntdApp>
         <ErrorBoundary>
           <div className="app">
+            <TitleBar />
             <main className="app-main">
               <ProjectManager />
             </main>
@@ -31,5 +44,11 @@ const App: React.FC = () => {
     </ConfigProvider>
   );
 };
+
+const App: React.FC = () => (
+  <ThemeProvider>
+    <AppContent />
+  </ThemeProvider>
+);
 
 export default App;
