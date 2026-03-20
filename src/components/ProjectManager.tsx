@@ -201,6 +201,7 @@ const ProjectManager: React.FC = () => {
           dataSource={filteredProjects}
           loading={loading}
           pagination={false}
+          scroll={{ x: "max-content" }}
           locale={{
             emptyText: (
               <Empty description="暂无项目，点击上方「添加项目」开始" />
@@ -210,7 +211,8 @@ const ProjectManager: React.FC = () => {
             {
               title: "项目名称",
               dataIndex: "name",
-              width: 150,
+              width: 130,
+              ellipsis: true,
             },
             {
               title: "项目路径",
@@ -280,7 +282,7 @@ const ProjectManager: React.FC = () => {
             {
               title: "备注",
               dataIndex: "note",
-              width: 160,
+              width: 120,
               render: (_: string | undefined, record: Project) => (
                 <Typography.Paragraph
                   editable={{
@@ -297,11 +299,11 @@ const ProjectManager: React.FC = () => {
             {
               title: "npm 脚本",
               dataIndex: "scripts",
-              width: 130,
+              width: 120,
               render: (_: Project["scripts"], record: Project) => (
                 <Select<string>
                   value={record.selectedScript}
-                  style={{ width: 130 }}
+                  style={{ width: "100%" }}
                   onChange={(v) => handleScriptChange(record.id, v)}
                   options={record.scripts.map((s) => ({
                     label: s.name,
@@ -328,7 +330,7 @@ const ProjectManager: React.FC = () => {
                 </Space>
               ),
               dataIndex: "nodeVersion",
-              width: 220,
+              width: 200,
               render: (_: Project["nodeVersion"], record: Project) => (
                 <NodeVersionSelect
                   record={record}
@@ -339,7 +341,8 @@ const ProjectManager: React.FC = () => {
             },
             {
               title: "操作",
-              width: 150,
+              width: 160,
+              fixed: "right" as const,
               render: (_: unknown, record: Project) => (
                 <Space>
                   <Button

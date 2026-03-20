@@ -9,11 +9,10 @@
 
 .app-main {
   flex: 1;
-  padding: 2rem;
+  padding: 0 24px 24px;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
-  align-items: center;
+  gap: 0;
 }
 
 @media (max-width: 768px) {
