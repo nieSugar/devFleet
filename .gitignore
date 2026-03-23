@@ -10,6 +10,8 @@ lerna-debug.log*
 dist
 out/
 
+~
+
 .vscode
 
 .idea

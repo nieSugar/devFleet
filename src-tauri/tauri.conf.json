@@ -26,8 +26,20 @@
       "csp": "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: asset: https://asset.localhost; script-src 'self'"
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERGQjc5MTkwODcwNzI0REMKUldUY0pBZUhrSkczMzUyQWJkZHBaOGdwQzdKRFhHSFd0L1BkZEVXWkRkM1JhUzdIdFdDRkx5Qm8K",
+      "endpoints": [
+        "https://github.com/nieSugar/devFleet/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",

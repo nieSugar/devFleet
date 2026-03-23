@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTheme } from "../contexts/ThemeContext";
+import UpdateChecker from "./UpdateChecker";
 import "./TitleBar.css";
 
 interface TitleBarProps {
@@ -42,6 +43,8 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
         >
           <NodeHexIcon />
         </button>
+
+        <UpdateChecker />
 
         <button
           className="tb-btn theme-btn"

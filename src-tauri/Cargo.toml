@@ -49,6 +49,10 @@ rand = "0.8"
 regex-lite = "0.1"
 # ureq: 轻量级同步 HTTP 客户端（用于从 nodejs.org 获取远程版本列表）
 ureq = { version = "2", features = ["json"] }
+# Tauri 自动更新插件
+tauri-plugin-updater = "2"
+# Tauri 进程管理插件（提供 relaunch 能力）
+tauri-plugin-process = "2"
 
 [profile.release]
 # release 编译优化配置（cargo build --release 时生效）

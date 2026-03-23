@@ -21,6 +21,8 @@ pub fn run() {
     tauri::Builder::default()
         // 注册 Tauri 官方的「文件对话框」插件，提供打开文件夹选择器的能力
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         // manage() 注册全局状态，之后在任何 #[tauri::command] 函数中
         // 都可以通过 State<AppState> 参数拿到这个状态（依赖注入）
         .manage(AppState {

@@ -80,9 +80,10 @@
 .update-btn {
   width: 38px;
   height: 100%;
-  color: var(--accent);
+  position: relative;
 }
 .update-btn:hover {
+  color: var(--accent);
   background: rgba(var(--accent-rgb, 59, 130, 246), 0.08);
 }
 .update-btn:active {
