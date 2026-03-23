@@ -49,6 +49,10 @@ pub fn run() {
             commands::get_nvm_info,
             commands::detect_project_node_version,
             commands::set_project_node_version,
+            commands::fetch_remote_node_versions,
+            commands::install_node_version,
+            commands::switch_node_version,
+            commands::uninstall_node_version,
         ])
         // generate_context!() 宏在编译时读取 tauri.conf.json，生成应用上下文
         // run() 启动事件循环（类似前端的 app.mount()）

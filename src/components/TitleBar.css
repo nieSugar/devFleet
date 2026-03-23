@@ -65,6 +65,30 @@
   outline: none;
 }
 
+.node-btn {
+  width: 38px;
+  height: 100%;
+}
+.node-btn:hover {
+  color: #5fa04e;
+  background: rgba(95, 160, 78, 0.08);
+}
+.node-btn:active {
+  background: rgba(95, 160, 78, 0.14);
+}
+
+.update-btn {
+  width: 38px;
+  height: 100%;
+  color: var(--accent);
+}
+.update-btn:hover {
+  background: rgba(var(--accent-rgb, 59, 130, 246), 0.08);
+}
+.update-btn:active {
+  background: rgba(var(--accent-rgb, 59, 130, 246), 0.14);
+}
+
 .theme-btn {
   width: 38px;
   height: 100%;

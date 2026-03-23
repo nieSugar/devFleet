@@ -1,0 +1,569 @@
+/* ═══════════════════════════════════════
+   Node Version Drawer
+   ═══════════════════════════════════════ */
+
+/* ── Drawer shell ── */
+.node-drawer .ant-drawer-content-wrapper {
+  box-shadow: -8px 0 40px rgba(0, 0, 0, 0.4) !important;
+}
+.node-drawer .ant-drawer-content {
+  background: var(--bg-deep) !important;
+  border-left: 1px solid var(--border-subtle);
+}
+
+/* ── Header ── */
+.nd-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-deep);
+  position: relative;
+}
+.nd-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 24px;
+  right: 24px;
+  height: 1px;
+  background: linear-gradient(90deg, #5fa04e44, transparent 50%, #5fa04e44);
+}
+
+.nd-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nd-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nd-title-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #5fa04e, #417e38);
+  border-radius: 8px;
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(95, 160, 78, 0.25);
+}
+
+.nd-title-text {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+}
+
+.nd-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nd-icon-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-size: 13px;
+}
+.nd-icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.nd-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.nd-close-btn:hover {
+  background: var(--danger-muted);
+  color: var(--danger);
+}
+
+/* Meta row */
+.nd-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.nd-manager-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.nd-manager-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: all var(--transition-fast);
+}
+.nd-manager-dot.active {
+  background: #5fa04e;
+  box-shadow: 0 0 8px rgba(95, 160, 78, 0.5);
+}
+
+.nd-current-ver {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.nd-current-label {
+  color: var(--text-secondary);
+}
+.nd-current-num {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.nd-total-count {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin-left: auto;
+}
+
+/* ── Toolbar ── */
+.nd-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 14px 24px;
+  background: var(--bg-deep);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nd-search {
+  border-radius: var(--radius-sm) !important;
+}
+
+.nd-filters {
+  display: flex;
+  gap: 6px;
+}
+
+.nd-filter-btn {
+  padding: 4px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+.nd-filter-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.nd-filter-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(20, 184, 166, 0.25);
+}
+
+/* ── Content area ── */
+.nd-content {
+  padding: 16px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Loading */
+.nd-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 80px 24px;
+  color: var(--accent);
+}
+.nd-loading-text {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* Empty */
+.nd-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 24px;
+  text-align: center;
+}
+.nd-empty-icon {
+  font-size: 36px;
+  color: var(--text-secondary);
+  opacity: 0.5;
+}
+.nd-empty-text {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.nd-retry-btn {
+  margin-top: 4px;
+  padding: 6px 20px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.nd-retry-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ── Version Group ── */
+.nd-group {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  animation: fadeInUp 0.25s ease both;
+  transition: border-color var(--transition-fast);
+}
+.nd-group:hover {
+  border-color: var(--border-default);
+}
+
+.nd-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition-fast);
+}
+.nd-group-header:hover {
+  background: var(--bg-hover);
+}
+
+.nd-group-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nd-group-arrow {
+  font-size: 10px;
+  color: var(--text-secondary);
+  transition: transform 0.2s ease;
+}
+.nd-group.expanded .nd-group-arrow {
+  transform: rotate(180deg);
+}
+
+.nd-group-major {
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.nd-lts-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: rgba(95, 160, 78, 0.15);
+  color: #6fbf5e;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* Current version indicator on group */
+.nd-current-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: var(--accent-glow);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.nd-group.has-current {
+  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border-subtle));
+}
+
+.nd-group-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nd-group-latest {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  opacity: 0.7;
+}
+
+.nd-group-count {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-secondary);
+  padding: 1px 8px;
+  background: var(--bg-elevated);
+  border-radius: 10px;
+}
+
+/* ── Version List ── */
+.nd-version-list {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.nd-version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 16px;
+  gap: 8px;
+  transition: background var(--transition-fast);
+  animation: fadeIn 0.2s ease both;
+}
+.nd-version-row:hover {
+  background: var(--bg-hover);
+}
+.nd-version-row + .nd-version-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.nd-version-row.current {
+  background: var(--accent-glow);
+}
+
+/* Version info */
+.nd-version-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.nd-version-num {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 72px;
+}
+
+.nd-version-date {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-secondary);
+}
+
+.nd-version-lts {
+  padding: 0 6px;
+  border-radius: 3px;
+  background: rgba(95, 160, 78, 0.15);
+  color: #6fbf5e;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.nd-security-icon {
+  font-size: 11px;
+  color: var(--warning);
+}
+
+.nd-version-npm {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  padding: 0 5px;
+  border-radius: 3px;
+  line-height: 1.6;
+}
+
+/* ── Actions ── */
+.nd-version-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+/* Current version badge */
+.nd-current-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  background: var(--accent-glow);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+}
+
+/* Switch button for installed versions */
+.nd-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--success);
+  background: transparent;
+  color: var(--success);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+.nd-switch-btn:hover:not(:disabled) {
+  background: var(--success);
+  color: #fff;
+}
+.nd-switch-btn.switching {
+  border-color: var(--success);
+  color: var(--success);
+  cursor: wait;
+}
+.nd-switch-btn:disabled:not(.switching) {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Uninstall button */
+.nd-uninstall-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+.nd-uninstall-btn:hover:not(:disabled) {
+  border-color: #e74c3c;
+  color: #e74c3c;
+  background: rgba(231, 76, 60, 0.1);
+}
+.nd-uninstall-btn.uninstalling {
+  border-color: #e74c3c;
+  color: #e74c3c;
+  cursor: wait;
+}
+.nd-uninstall-btn:disabled:not(.uninstalling) {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Install button */
+.nd-install-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 14px;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+.nd-install-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+.nd-install-btn.installing {
+  border-color: var(--accent);
+  color: var(--accent);
+  cursor: wait;
+}
+.nd-install-btn:disabled:not(.installing) {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* nvmd hint (can't install via CLI) */
+.nd-nvmd-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 12px;
+  border-radius: 4px;
+  border: 1px dashed var(--border-default);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  cursor: help;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+.nd-nvmd-hint:hover {
+  border-color: var(--warning);
+  color: var(--warning);
+}

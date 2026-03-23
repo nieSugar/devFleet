@@ -49,3 +49,13 @@ export interface NvmInfo {
   currentVersion?: string;
   availableVersions: NodeVersion[];
 }
+
+export interface RemoteNodeVersion {
+  version: string;
+  date: string;
+  files: string[];
+  npm?: string;
+  v8?: string;
+  lts: string | false;
+  security: boolean;
+}

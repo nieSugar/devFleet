@@ -3,7 +3,11 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTheme } from "../contexts/ThemeContext";
 import "./TitleBar.css";
 
-const TitleBar: React.FC = () => {
+interface TitleBarProps {
+  onOpenNodeManager?: () => void;
+}
+
+const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
   const { theme, toggleTheme } = useTheme();
   const [maximized, setMaximized] = useState(false);
 
@@ -31,6 +35,14 @@ const TitleBar: React.FC = () => {
       </div>
 
       <div className="titlebar-actions">
+        <button
+          className="tb-btn node-btn"
+          onClick={onOpenNodeManager}
+          title="Node.js 版本管理"
+        >
+          <NodeHexIcon />
+        </button>
+
         <button
           className="tb-btn theme-btn"
           onClick={toggleTheme}
@@ -129,6 +141,24 @@ const MoonIcon = () => (
     strokeLinejoin="round"
   >
     <path d="M13.6 9.8A6 6 0 016.2 2.4 6 6 0 1013.6 9.8z" />
+  </svg>
+);
+
+const NodeHexIcon = () => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.3"
+    strokeLinejoin="round"
+    strokeLinecap="round"
+  >
+    <path d="M8 1L14 4.5V11.5L8 15L2 11.5V4.5L8 1Z" />
+    <path d="M8 5V11" />
+    <path d="M8 11L5 9.5" />
+    <path d="M8 11L11 9.5" />
   </svg>
 );
 

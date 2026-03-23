@@ -151,6 +151,27 @@ pub struct NvmInfo {
     pub available_versions: Vec<NodeVersion>,
 }
 
+// ── 远程 Node 版本（nodejs.org dist API） ──
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(untagged)]
+pub enum LtsValue {
+    Name(String),
+    Bool(bool),
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct RemoteNodeVersion {
+    pub version: String,
+    pub date: String,
+    #[serde(default)]
+    pub files: Vec<String>,
+    pub npm: Option<String>,
+    pub v8: Option<String>,
+    pub lts: LtsValue,
+    pub security: bool,
+}
+
 // ── 包管理器类型 ──
 
 // enum（枚举）是 Rust 最强大的特性之一，比 TS 的 enum 强得多

@@ -1,15 +1,17 @@
-import React from "react";
+import React, { useState } from "react";
 import { ConfigProvider, App as AntdApp, theme as antdTheme } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import "antd/dist/reset.css";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import TitleBar from "./components/TitleBar";
 import ProjectManager from "./components/ProjectManager";
+import NodeVersionDrawer from "./components/NodeVersionDrawer";
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./App.css";
 
 const AppContent: React.FC = () => {
   const { isDark } = useTheme();
+  const [nodeDrawerOpen, setNodeDrawerOpen] = useState(false);
 
   return (
     <ConfigProvider
@@ -34,10 +36,14 @@ const AppContent: React.FC = () => {
       <AntdApp>
         <ErrorBoundary>
           <div className="app">
-            <TitleBar />
+            <TitleBar onOpenNodeManager={() => setNodeDrawerOpen(true)} />
             <main className="app-main">
               <ProjectManager />
             </main>
+            <NodeVersionDrawer
+              open={nodeDrawerOpen}
+              onClose={() => setNodeDrawerOpen(false)}
+            />
           </div>
         </ErrorBoundary>
       </AntdApp>

@@ -109,4 +109,26 @@ export const tauriAPI = {
     params: SetNodeVersionParams
   ): Promise<IpcResponse<NodeVersionResult>> =>
     invoke("set_project_node_version", params),
+
+  fetchRemoteNodeVersions: (): Promise<
+    IpcResponse<import("../types/project").RemoteNodeVersion[]>
+  > => invoke("fetch_remote_node_versions"),
+
+  installNodeVersion: (params: {
+    version: string;
+    manager?: string;
+  }): Promise<IpcResponse<{ message: string; output: string }>> =>
+    invoke("install_node_version", params),
+
+  switchNodeVersion: (params: {
+    version: string;
+    manager?: string;
+  }): Promise<IpcResponse<{ message: string; output: string }>> =>
+    invoke("switch_node_version", params),
+
+  uninstallNodeVersion: (params: {
+    version: string;
+    manager?: string;
+  }): Promise<IpcResponse<{ message: string; output: string }>> =>
+    invoke("uninstall_node_version", params),
 };

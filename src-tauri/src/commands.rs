@@ -325,6 +325,99 @@ pub fn detect_project_node_version(project_path: String) -> IpcResponse {
     IpcResponse::ok(serde_json::json!({ "version": version }))
 }
 
+/// 从 nodejs.org 获取所有远程可用的 Node.js 版本列表
+#[tauri::command]
+pub fn fetch_remote_node_versions() -> IpcResponse {
+    match detector::fetch_remote_node_versions() {
+        Ok(versions) => IpcResponse::ok(versions),
+        Err(e) => IpcResponse::err(e),
+    }
+}
+
+/// 通过版本管理器安装指定版本的 Node.js
+#[tauri::command]
+pub fn install_node_version(version: String, manager: Option<String>) -> IpcResponse {
+    let mgr = if let Some(m) = manager {
+        match m.as_str() {
+            "nvmd" => crate::models::NodeVersionManager::Nvmd,
+            "nvs" => crate::models::NodeVersionManager::Nvs,
+            "nvm" => crate::models::NodeVersionManager::Nvm,
+            "nvm-windows" => crate::models::NodeVersionManager::NvmWindows,
+            _ => detector::detect_node_version_manager(),
+        }
+    } else {
+        detector::detect_node_version_manager()
+    };
+
+    if mgr == crate::models::NodeVersionManager::None {
+        return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm/nvs）");
+    }
+
+    match detector::install_node_version(&version, &mgr) {
+        Ok(output) => IpcResponse::ok(serde_json::json!({
+            "message": format!("Node.js {} 安装成功", version),
+            "output": output,
+        })),
+        Err(e) => IpcResponse::err(e),
+    }
+}
+
+/// 切换系统当前使用的 Node.js 版本
+#[tauri::command]
+pub fn switch_node_version(version: String, manager: Option<String>) -> IpcResponse {
+    let mgr = if let Some(m) = manager {
+        match m.as_str() {
+            "nvmd" => crate::models::NodeVersionManager::Nvmd,
+            "nvs" => crate::models::NodeVersionManager::Nvs,
+            "nvm" => crate::models::NodeVersionManager::Nvm,
+            "nvm-windows" => crate::models::NodeVersionManager::NvmWindows,
+            _ => detector::detect_node_version_manager(),
+        }
+    } else {
+        detector::detect_node_version_manager()
+    };
+
+    if mgr == crate::models::NodeVersionManager::None {
+        return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm/nvs）");
+    }
+
+    match detector::switch_node_version(&version, &mgr) {
+        Ok(output) => IpcResponse::ok(serde_json::json!({
+            "message": format!("已切换到 Node.js {}", version),
+            "output": output,
+        })),
+        Err(e) => IpcResponse::err(e),
+    }
+}
+
+/// 通过版本管理器卸载指定已安装版本的 Node.js
+#[tauri::command]
+pub fn uninstall_node_version(version: String, manager: Option<String>) -> IpcResponse {
+    let mgr = if let Some(m) = manager {
+        match m.as_str() {
+            "nvmd" => crate::models::NodeVersionManager::Nvmd,
+            "nvs" => crate::models::NodeVersionManager::Nvs,
+            "nvm" => crate::models::NodeVersionManager::Nvm,
+            "nvm-windows" => crate::models::NodeVersionManager::NvmWindows,
+            _ => detector::detect_node_version_manager(),
+        }
+    } else {
+        detector::detect_node_version_manager()
+    };
+
+    if mgr == crate::models::NodeVersionManager::None {
+        return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm/nvs）");
+    }
+
+    match detector::uninstall_node_version(&version, &mgr) {
+        Ok(output) => IpcResponse::ok(serde_json::json!({
+            "message": format!("Node.js {} 已卸载", version),
+            "output": output,
+        })),
+        Err(e) => IpcResponse::err(e),
+    }
+}
+
 /// 设置项目的 Node 版本（写入对应的版本文件，如 .nvmrc）
 #[tauri::command]
 pub fn set_project_node_version(

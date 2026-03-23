@@ -47,6 +47,8 @@ chrono = { version = "0.4", features = ["serde"] }
 rand = "0.8"
 # regex-lite: 轻量级正则引擎（比标准 regex 包更小，适合简单匹配场景）
 regex-lite = "0.1"
+# ureq: 轻量级同步 HTTP 客户端（用于从 nodejs.org 获取远程版本列表）
+ureq = { version = "2", features = ["json"] }
 
 [profile.release]
 # release 编译优化配置（cargo build --release 时生效）
