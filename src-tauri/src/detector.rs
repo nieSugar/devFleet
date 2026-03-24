@@ -656,24 +656,46 @@ fn get_nvmd_versions_dir() -> Option<PathBuf> {
 
 /// nvm-windows 用 `v{ver}/` 目录，nvmd 用 `{ver}/` 目录。
 /// 当版本通过 nvm-windows 安装后，创建目录 junction 让 nvmd 也能找到。
+/// 在 macOS/Linux 上，如果通过 Unix nvm 安装，则从 nvm 安装路径创建 symlink。
 fn bridge_nvm_to_nvmd(ver: &str) -> bool {
     let base = match get_nvmd_versions_dir() {
         Some(d) => d,
         None => return false,
     };
-    let nvm_dir = base.join(format!("v{}", ver));
     let nvmd_dir = base.join(ver);
 
-    if nvmd_dir.exists() || !nvm_dir.exists() {
+    if nvmd_dir.exists() {
         return false;
     }
 
+    // 先在 nvmd 目录下查找 v-前缀 的同名目录（nvm-windows 风格）
+    let nvm_dir_in_base = base.join(format!("v{}", ver));
+    if nvm_dir_in_base.exists() {
+        return create_dir_link(&nvmd_dir, &nvm_dir_in_base);
+    }
+
+    // Unix nvm 的安装路径：~/.nvm/versions/node/v{ver}/
+    if let Some(nvm_unix) = get_nvm_unix_dir() {
+        let nvm_node_dir = nvm_unix
+            .join("versions")
+            .join("node")
+            .join(format!("v{}", ver));
+        if nvm_node_dir.exists() {
+            return create_dir_link(&nvmd_dir, &nvm_node_dir);
+        }
+    }
+
+    false
+}
+
+/// 创建目录链接：Windows 用 junction，Unix 用 symlink
+fn create_dir_link(link: &Path, target: &Path) -> bool {
     if cfg!(target_os = "windows") {
         Command::new("cmd")
             .args([
                 "/C", "mklink", "/J",
-                &nvmd_dir.to_string_lossy(),
-                &nvm_dir.to_string_lossy(),
+                &link.to_string_lossy(),
+                &target.to_string_lossy(),
             ])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
@@ -682,7 +704,7 @@ fn bridge_nvm_to_nvmd(ver: &str) -> bool {
             .unwrap_or(false)
     } else {
         #[cfg(unix)]
-        { std::os::unix::fs::symlink(&nvm_dir, &nvmd_dir).is_ok() }
+        { std::os::unix::fs::symlink(target, link).is_ok() }
         #[cfg(not(unix))]
         { false }
     }
@@ -706,9 +728,15 @@ pub fn install_node_version(version: &str, manager: &NodeVersionManager) -> Resu
                     "nvmd 不支持命令行安装，且未检测到 nvm-windows 作为备选。请在 nvm-desktop 中安装 Node.js {}",
                     ver
                 ));
+            } else if is_unix_nvm_installed() {
+                let script = format!(
+                    r#"export NVM_DIR="${{NVM_DIR:-$HOME/.nvm}}"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm install {}"#,
+                    ver
+                );
+                Command::new("bash").args(["-lc", &script]).output().map_err(|e| e.to_string())
             } else {
                 return Err(format!(
-                    "nvmd 不支持命令行安装 Node.js {}，请在 nvm-desktop 桌面应用中下载安装",
+                    "nvmd 不支持命令行安装 Node.js {}，且未检测到 nvm 作为备选。请在 nvm-desktop 桌面应用中下载安装",
                     ver
                 ));
             }
@@ -888,9 +916,22 @@ pub fn uninstall_node_version(version: &str, manager: &NodeVersionManager) -> Re
                     "nvmd 不支持命令行卸载，且未检测到 nvm-windows 作为备选。请在 nvm-desktop 中卸载 Node.js {}",
                     ver
                 ));
+            } else if is_unix_nvm_installed() {
+                // 先清理 nvmd 目录下的 symlink
+                if let Some(base) = get_nvmd_versions_dir() {
+                    let nvmd_dir = base.join(ver);
+                    if nvmd_dir.is_symlink() {
+                        let _ = std::fs::remove_file(&nvmd_dir);
+                    }
+                }
+                let script = format!(
+                    r#"export NVM_DIR="${{NVM_DIR:-$HOME/.nvm}}"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm uninstall {}"#,
+                    ver
+                );
+                Command::new("bash").args(["-lc", &script]).output().map_err(|e| e.to_string())
             } else {
                 return Err(format!(
-                    "nvmd 不支持命令行卸载 Node.js {}，请在 nvm-desktop 桌面应用中操作",
+                    "nvmd 不支持命令行卸载 Node.js {}，且未检测到 nvm 作为备选。请在 nvm-desktop 桌面应用中操作",
                     ver
                 ));
             }
@@ -949,7 +990,8 @@ impl CommandShellSpawn for Command {
     /// 原因：某些通过 PATH 注册的命令（如 code、cursor），直接 spawn 找不到
     /// 必须通过 cmd.exe 的 PATH 解析才能找到
     fn shell_spawn(&mut self) -> std::io::Result<std::process::Child> {
-        if cfg!(target_os = "windows") {
+        #[cfg(target_os = "windows")]
+        {
             use std::os::windows::process::CommandExt;
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             let prog = format!("{:?}", self.get_program());
@@ -960,7 +1002,9 @@ impl CommandShellSpawn for Command {
                 .args(args)
                 .creation_flags(CREATE_NO_WINDOW)
                 .spawn()
-        } else {
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
             self.spawn()
         }
     }
