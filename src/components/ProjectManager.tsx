@@ -18,12 +18,13 @@ const ProjectManager: React.FC = () => {
     setProjects,
     loading,
     loadProjects,
+    refreshProjects,
     addProject,
     removeProject,
     updateScriptSelection,
     runScript,
   } = useProjects();
-  const { editors, openInEditor } = useEditors();
+  const { editors, openInEditor, refreshEditors } = useEditors();
   const { nvmInfo, changeNodeVersion } = useNvmInfo();
   const [messageApi, contextHolder] = message.useMessage();
   const [searchText, setSearchText] = useState("");
@@ -40,10 +41,12 @@ const ProjectManager: React.FC = () => {
 
   useKeyboardShortcuts({
     onAddProject: () => handleAdd(),
-    onRefresh: () =>
-      loadProjects().then((r) => {
+    onRefresh: () => {
+      refreshEditors();
+      refreshProjects().then((r) => {
         if (r && !r.success) messageApi.error(r.error || "刷新失败");
-      }),
+      });
+    },
   });
 
   const showMsg = (type: "success" | "error", text: string) => {
@@ -163,11 +166,12 @@ const ProjectManager: React.FC = () => {
         totalCount={projects.length}
         searchText={searchText}
         onAdd={handleAdd}
-        onRefresh={() =>
-          loadProjects().then((r) => {
+        onRefresh={() => {
+          refreshEditors();
+          refreshProjects().then((r) => {
             if (r && !r.success) showMsg("error", r.error || "刷新失败");
-          })
-        }
+          });
+        }}
         onSearch={setSearchText}
       />
 

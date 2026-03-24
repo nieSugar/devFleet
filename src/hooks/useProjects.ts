@@ -19,6 +19,19 @@ export function useProjects() {
     }
   }, []);
 
+  const refreshProjects = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await tauriAPI.refreshProjectConfig();
+      if (result.success && result.data) {
+        setProjects(result.data.projects);
+      }
+      return result;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const addProject = useCallback(async () => {
     setLoading(true);
     try {
@@ -98,6 +111,7 @@ export function useProjects() {
     setProjects,
     loading,
     loadProjects,
+    refreshProjects,
     addProject,
     removeProject,
     updateScriptSelection,

@@ -79,6 +79,15 @@ impl IpcResponse {
     }
 }
 
+// ── 编辑器缓存 ──
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct EditorCache {
+    pub vscode: bool,
+    pub cursor: bool,
+    pub webstorm: bool,
+}
+
 // ── 项目相关类型 ──
 
 // rename_all = "camelCase"：序列化/反序列化时，字段名自动转为驼峰命名

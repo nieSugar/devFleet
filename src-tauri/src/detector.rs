@@ -89,28 +89,47 @@ fn is_mac_app_installed(app_name: &str) -> bool {
 pub fn detect_editors() -> (bool, bool, bool) {
     #[cfg(target_os = "macos")]
     {
-        let vscode = is_mac_app_installed("Visual Studio Code") || is_command_available("code");
-        let cursor = is_mac_app_installed("Cursor") || is_command_available("cursor");
-        let webstorm = is_mac_app_installed("WebStorm");
+        let h1 = std::thread::spawn(|| {
+            is_mac_app_installed("Visual Studio Code") || is_command_available("code")
+        });
+        let h2 = std::thread::spawn(|| {
+            is_mac_app_installed("Cursor") || is_command_available("cursor")
+        });
+        let h3 = std::thread::spawn(|| is_mac_app_installed("WebStorm"));
+
+        let vscode = h1.join().unwrap_or(false);
+        let cursor = h2.join().unwrap_or(false);
+        let webstorm = h3.join().unwrap_or(false);
         return (vscode, cursor, webstorm);
     }
 
     #[cfg(target_os = "windows")]
     {
-        let vscode = is_command_available("code");
-        let cursor = is_command_available("cursor");
-        let webstorm = is_command_available("webstorm")
-            || is_command_available("webstorm64");
+        let h1 = std::thread::spawn(|| is_command_available("code"));
+        let h2 = std::thread::spawn(|| is_command_available("cursor"));
+        let h3 = std::thread::spawn(|| {
+            is_command_available("webstorm") || is_command_available("webstorm64")
+        });
+
+        let vscode = h1.join().unwrap_or(false);
+        let cursor = h2.join().unwrap_or(false);
+        let webstorm = h3.join().unwrap_or(false);
         return (vscode, cursor, webstorm);
     }
 
     #[cfg(target_os = "linux")]
     {
-        let vscode = is_command_available("code");
-        let cursor = is_command_available("cursor");
-        let webstorm = is_command_available("webstorm")
-            || is_command_available("jetbrains-webstorm")
-            || is_command_available("webstorm.sh");
+        let h1 = std::thread::spawn(|| is_command_available("code"));
+        let h2 = std::thread::spawn(|| is_command_available("cursor"));
+        let h3 = std::thread::spawn(|| {
+            is_command_available("webstorm")
+                || is_command_available("jetbrains-webstorm")
+                || is_command_available("webstorm.sh")
+        });
+
+        let vscode = h1.join().unwrap_or(false);
+        let cursor = h2.join().unwrap_or(false);
+        let webstorm = h3.join().unwrap_or(false);
         return (vscode, cursor, webstorm);
     }
 
@@ -386,12 +405,20 @@ pub fn get_node_versions(manager: &NodeVersionManager) -> Vec<NodeVersion> {
 pub fn get_nvm_info() -> NvmInfo {
     let manager = detect_node_version_manager();
     let is_installed = manager != NodeVersionManager::None;
+
+    if !is_installed {
+        return NvmInfo {
+            is_installed,
+            manager,
+            current_version: None,
+            available_versions: vec![],
+        };
+    }
+
+    let mgr_clone = manager.clone();
+    let versions_handle = std::thread::spawn(move || get_node_versions(&mgr_clone));
     let current_version = get_current_version_by_manager(&manager);
-    let available_versions = if is_installed {
-        get_node_versions(&manager)
-    } else {
-        vec![]
-    };
+    let available_versions = versions_handle.join().unwrap_or_default();
 
     NvmInfo {
         is_installed,
@@ -784,13 +811,15 @@ impl CommandShellSpawn for Command {
     /// 必须通过 cmd.exe 的 PATH 解析才能找到
     fn shell_spawn(&mut self) -> std::io::Result<std::process::Child> {
         if cfg!(target_os = "windows") {
-            // get_program() 和 get_args() 是 Command 的内省方法，获取已设置的程序名和参数
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
             let prog = format!("{:?}", self.get_program());
             let args: Vec<String> = self.get_args().map(|a| a.to_string_lossy().to_string()).collect();
             Command::new("cmd")
                 .arg("/C")
                 .arg(prog.trim_matches('"'))
                 .args(args)
+                .creation_flags(CREATE_NO_WINDOW)
                 .spawn()
         } else {
             self.spawn()

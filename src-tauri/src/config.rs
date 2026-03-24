@@ -4,7 +4,7 @@
 //   macOS:   ~/Library/Application Support/devfleet/devfleet-config.json
 //   Linux:   ~/.local/share/devfleet/devfleet-config.json
 
-use crate::models::ProjectConfig;
+use crate::models::{EditorCache, ProjectConfig};
 use crate::project;
 use std::fs;
 use std::path::PathBuf;
@@ -44,8 +44,7 @@ pub fn get_config_path() -> PathBuf {
     app_dir.join(CONFIG_FILE)
 }
 
-/// 加载配置文件，同时验证每个项目路径是否仍然有效
-/// 无效的项目（目录已删除/package.json 不存在）会被自动剔除
+/// 快速加载配置文件，直接反序列化 JSON，不做任何文件系统校验
 pub fn load() -> ProjectConfig {
     let config_path = get_config_path();
 
@@ -61,28 +60,29 @@ pub fn load() -> ProjectConfig {
         }
     };
 
-    // serde_json::from_str 把 JSON 字符串反序列化为 Rust 结构体
-    // 泛型 ::<ProjectConfig> 告诉编译器要转成什么类型
-    let mut config: ProjectConfig = match serde_json::from_str(&data) {
+    match serde_json::from_str(&data) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("[devfleet] 解析配置文件失败: {}", e);
-            return default_config();
+            default_config()
         }
-    };
+    }
+}
 
-    // retain_mut：保留满足条件的元素，同时允许修改元素（mut 版本）
-    // 这里做了两件事：1) 过滤掉无效项目 2) 刷新有效项目的脚本列表和 Node 版本
+/// 加载配置并刷新：校验项目路径、重读 scripts、补充检测缺失字段
+/// 仅在用户主动刷新时调用
+pub fn load_and_refresh() -> ProjectConfig {
+    let mut config = load();
+
     config.projects.retain_mut(|p| {
         if project::is_valid_path(&p.path) {
-            // 每次加载时重新读取 scripts，确保跟 package.json 同步
             p.scripts = project::get_package_scripts(&p.path);
             if p.node_version.is_none() {
                 p.node_version = project::get_node_version(&p.path);
             }
-            true  // 保留
+            true
         } else {
-            false // 剔除
+            false
         }
     });
 
@@ -109,5 +109,26 @@ fn default_config() -> ProjectConfig {
     ProjectConfig {
         projects: vec![], // vec![] 宏创建空 Vec（类似 JS 的 []）
         last_updated: chrono::Utc::now().to_rfc3339(),
+    }
+}
+
+pub fn load_editor_cache() -> Option<EditorCache> {
+    let data = fs::read_to_string(get_config_path()).ok()?;
+    let val: serde_json::Value = serde_json::from_str(&data).ok()?;
+    serde_json::from_value(val.get("editors")?.clone()).ok()
+}
+
+pub fn save_editor_cache(cache: &EditorCache) {
+    let config_path = get_config_path();
+    let data = fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
+    let mut val: serde_json::Value =
+        serde_json::from_str(&data).unwrap_or(serde_json::json!({}));
+    if let Some(obj) = val.as_object_mut() {
+        if let Ok(v) = serde_json::to_value(cache) {
+            obj.insert("editors".to_string(), v);
+        }
+    }
+    if let Ok(json) = serde_json::to_string_pretty(&val) {
+        let _ = fs::write(&config_path, json);
     }
 }

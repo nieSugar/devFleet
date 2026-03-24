@@ -54,14 +54,39 @@ pub fn detect_package_manager(project_path: String) -> IpcResponse {
 
 #[tauri::command]
 pub fn load_project_config() -> IpcResponse {
-    let mut cfg = config::load();
-    // 加载配置后，对每个项目补充检测包管理器
-    for p in &mut cfg.projects {
-        if p.package_manager.is_none() {
-            p.package_manager =
-                Some(detector::detect_package_manager(&p.path).to_string());
+    IpcResponse::ok(config::load())
+}
+
+#[tauri::command]
+pub fn refresh_project_config() -> IpcResponse {
+    let mut cfg = config::load_and_refresh();
+
+    let indices: Vec<usize> = cfg
+        .projects
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| p.package_manager.is_none())
+        .map(|(i, _)| i)
+        .collect();
+
+    if !indices.is_empty() {
+        let paths: Vec<String> = indices.iter().map(|&i| cfg.projects[i].path.clone()).collect();
+        let results: Vec<String> = std::thread::scope(|s| {
+            let handles: Vec<_> = paths
+                .iter()
+                .map(|path| s.spawn(|| detector::detect_package_manager(path).to_string()))
+                .collect();
+            handles
+                .into_iter()
+                .map(|h| h.join().unwrap_or_else(|_| "npm".to_string()))
+                .collect()
+        });
+        for (idx, pm) in indices.into_iter().zip(results) {
+            cfg.projects[idx].package_manager = Some(pm);
         }
     }
+
+    config::save(&cfg);
     IpcResponse::ok(cfg)
 }
 
@@ -292,12 +317,19 @@ pub fn get_script_output(state: State<'_, AppState>, project_id: String) -> IpcR
 
 // ── 编辑器命令 ──
 
-/// 检测系统中安装了哪些代码编辑器
+/// 检测系统中安装了哪些代码编辑器（带缓存，force=true 时强制重新检测）
 #[tauri::command]
-pub fn detect_editors() -> IpcResponse {
-    // 返回元组 (bool, bool, bool)，Rust 的元组解构赋值
+pub fn detect_editors(force: Option<bool>) -> IpcResponse {
+    if force != Some(true) {
+        if let Some(cached) = config::load_editor_cache() {
+            return IpcResponse::ok(cached);
+        }
+    }
+
     let (vscode, cursor, webstorm) = detector::detect_editors();
-    IpcResponse::ok(serde_json::json!({ "vscode": vscode, "cursor": cursor, "webstorm": webstorm }))
+    let cache = crate::models::EditorCache { vscode, cursor, webstorm };
+    config::save_editor_cache(&cache);
+    IpcResponse::ok(cache)
 }
 
 /// 用指定编辑器打开项目

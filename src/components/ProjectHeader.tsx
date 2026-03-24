@@ -54,7 +54,6 @@ const ProjectHeader: React.FC<ProjectHeaderProps> = ({
         ghost
         icon={<PlusOutlined />}
         onClick={onAdd}
-        loading={loading}
       >
         添加
       </Button>

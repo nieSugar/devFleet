@@ -75,8 +75,8 @@ export const tauriAPI = {
   ): Promise<IpcResponse<{ output: string }>> =>
     invoke("get_script_output", { projectId }),
 
-  detectEditors: (): Promise<IpcResponse<EditorStatus>> =>
-    invoke("detect_editors"),
+  detectEditors: (force?: boolean): Promise<IpcResponse<EditorStatus>> =>
+    invoke("detect_editors", { force }),
 
   openInEditor: (params: {
     editor: string;
@@ -85,6 +85,9 @@ export const tauriAPI = {
 
   loadProjectConfig: (): Promise<IpcResponse<ProjectConfig>> =>
     invoke("load_project_config"),
+
+  refreshProjectConfig: (): Promise<IpcResponse<ProjectConfig>> =>
+    invoke("refresh_project_config"),
 
   saveProjectConfig: (config: ProjectConfig): Promise<IpcResponse<MessageResult>> =>
     invoke("save_project_config", { config }),

@@ -4,6 +4,7 @@ import { tauriAPI } from "../lib/tauri";
 
 export function useNvmInfo() {
   const [nvmInfo, setNvmInfo] = useState<NvmInfo | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -14,6 +15,8 @@ export function useNvmInfo() {
         }
       } catch (e) {
         console.error("获取 NVM 信息失败:", e);
+      } finally {
+        setLoading(false);
       }
     })();
   }, []);
@@ -28,5 +31,5 @@ export function useNvmInfo() {
     []
   );
 
-  return { nvmInfo, changeNodeVersion };
+  return { nvmInfo, loading, changeNodeVersion };
 }

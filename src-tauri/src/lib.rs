@@ -39,6 +39,7 @@ pub fn run() {
             commands::get_package_scripts,
             commands::detect_package_manager,
             commands::load_project_config,
+            commands::refresh_project_config,
             commands::save_project_config,
             commands::add_project_to_config,
             commands::remove_project_from_config,
