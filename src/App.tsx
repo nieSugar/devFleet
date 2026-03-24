@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { ConfigProvider, App as AntdApp, theme as antdTheme } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import "antd/dist/reset.css";
@@ -12,6 +12,10 @@ import "./App.css";
 const AppContent: React.FC = () => {
   const { isDark } = useTheme();
   const [nodeDrawerOpen, setNodeDrawerOpen] = useState(false);
+  const [nvmRefreshKey, setNvmRefreshKey] = useState(0);
+  const handleVersionChange = useCallback(() => {
+    setNvmRefreshKey((k) => k + 1);
+  }, []);
 
   return (
     <ConfigProvider
@@ -38,11 +42,12 @@ const AppContent: React.FC = () => {
           <div className="app">
             <TitleBar onOpenNodeManager={() => setNodeDrawerOpen(true)} />
             <main className="app-main">
-              <ProjectManager />
+              <ProjectManager nvmRefreshKey={nvmRefreshKey} />
             </main>
             <NodeVersionDrawer
               open={nodeDrawerOpen}
               onClose={() => setNodeDrawerOpen(false)}
+              onVersionChange={handleVersionChange}
             />
           </div>
         </ErrorBoundary>

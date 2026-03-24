@@ -5,7 +5,7 @@
 // crate:: 前缀表示从当前 crate（项目）的其他模块导入
 use crate::config;
 use crate::detector;
-use crate::models::{AppState, IpcResponse, PackageManager, ProjectConfig};
+use crate::models::{AppState, IpcResponse, NodeVersionManager, PackageManager, ProjectConfig};
 use crate::project;
 use std::process::Command;
 // State 是 Tauri 的依赖注入类型
@@ -175,6 +175,18 @@ fn spawn_external_terminal(project_path: &str, run_command: &str) -> bool {
 
 // ── 脚本执行命令 ──
 
+/// 构建 PATH 注入命令，将指定版本的 Node 二进制目录插入 PATH 最前面
+/// 比 `nvm use` 更好：不修改全局状态，多终端可同时使用不同版本
+fn build_node_path_prefix(version: &str, manager: &NodeVersionManager) -> Option<String> {
+    let dir = detector::get_node_bin_dir(version, manager)?;
+    let dir_str = dir.to_string_lossy();
+    if cfg!(target_os = "windows") {
+        Some(format!(r#"set "PATH={};%PATH%""#, dir_str))
+    } else {
+        Some(format!("export PATH={}:$PATH", dir_str))
+    }
+}
+
 #[tauri::command]
 pub fn run_script(
     project_path: String,
@@ -183,21 +195,28 @@ pub fn run_script(
     package_manager: Option<String>,
     node_version: Option<String>,
 ) -> IpcResponse {
-    // let _ = 是 Rust 的惯用写法，表示"我知道有这个参数但暂时不用"
-    // 不写的话编译器会警告 unused variable
     let _ = project_id;
     if !validate_script_name(&script_name) {
         return IpcResponse::err("脚本名称包含非法字符，仅允许字母、数字、连字符、下划线、冒号和点");
     }
 
-    // Option 的链式处理：
-    // .and_then() 在 Some 时执行闭包，None 时直接传递 None
-    // .unwrap_or_else() 在 None 时执行闭包提供默认值
     let pm = package_manager
         .and_then(|s| s.parse::<PackageManager>().ok())
         .unwrap_or_else(|| detector::detect_package_manager(&project_path));
 
-    let run_command = pm.run_command(&script_name);
+    let base_command = pm.run_command(&script_name);
+
+    // 如果项目指定了 Node 版本，在实际命令前注入版本切换命令
+    let run_command = match node_version.as_deref().filter(|v| !v.trim().is_empty()) {
+        Some(ver) => {
+            let manager = detector::detect_node_version_manager();
+            match build_node_path_prefix(ver, &manager) {
+                Some(prefix) => format!("{} && {}", prefix, base_command),
+                None => base_command,
+            }
+        }
+        None => base_command,
+    };
 
     if !spawn_external_terminal(&project_path, &run_command) {
         return IpcResponse::err("启动外部终端失败，无法找到可用的终端程序");

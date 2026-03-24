@@ -22,6 +22,7 @@ import "./NodeVersionDrawer.css";
 interface NodeVersionDrawerProps {
   open: boolean;
   onClose: () => void;
+  onVersionChange?: () => void;
 }
 
 type FilterMode = "all" | "lts" | "installed";
@@ -52,6 +53,7 @@ type BusyAction = { version: string; type: "install" | "switch" | "uninstall" };
 const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   open,
   onClose,
+  onVersionChange,
 }) => {
   const [remoteVersions, setRemoteVersions] = useState<RemoteNodeVersion[]>(
     [],
@@ -171,6 +173,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       if (result.success && result.data) {
         messageApi.success(result.data.message);
         await refreshNvmInfo();
+        onVersionChange?.();
       } else {
         messageApi.error(result.error || "安装失败");
       }
@@ -195,6 +198,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       if (result.success && result.data) {
         messageApi.success(result.data.message);
         await refreshNvmInfo();
+        onVersionChange?.();
       } else {
         messageApi.error(result.error || "切换失败");
       }
@@ -219,6 +223,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       if (result.success && result.data) {
         messageApi.success(result.data.message);
         await refreshNvmInfo();
+        onVersionChange?.();
       } else {
         messageApi.error(result.error || "卸载失败");
       }

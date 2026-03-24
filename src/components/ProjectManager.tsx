@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Project, ProjectConfig } from "../types/project";
 import { tauriAPI } from "../lib/tauri";
 import { useProjects } from "../hooks/useProjects";
@@ -12,7 +12,11 @@ import { PlusOutlined, FolderOpenOutlined } from "@ant-design/icons";
 import { message, Modal, Button } from "antd";
 import "./ProjectManager.css";
 
-const ProjectManager: React.FC = () => {
+interface ProjectManagerProps {
+  nvmRefreshKey?: number;
+}
+
+const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
   const {
     projects,
     setProjects,
@@ -25,7 +29,7 @@ const ProjectManager: React.FC = () => {
     runScript,
   } = useProjects();
   const { editors, openInEditor, refreshEditors } = useEditors();
-  const { nvmInfo, changeNodeVersion } = useNvmInfo();
+  const { nvmInfo, changeNodeVersion, refreshNvmInfo } = useNvmInfo();
   const [messageApi, contextHolder] = message.useMessage();
   const [searchText, setSearchText] = useState("");
   const [activeLogProject, setActiveLogProject] = useState<{
@@ -38,6 +42,15 @@ const ProjectManager: React.FC = () => {
       if (r && !r.success) messageApi.error(r.error || "加载项目配置失败");
     });
   }, [loadProjects, messageApi]);
+
+  const nvmRefreshKeyRef = useRef(nvmRefreshKey);
+  useEffect(() => {
+    if (nvmRefreshKeyRef.current !== undefined && nvmRefreshKey !== nvmRefreshKeyRef.current) {
+      refreshNvmInfo();
+      refreshProjects();
+    }
+    nvmRefreshKeyRef.current = nvmRefreshKey;
+  }, [nvmRefreshKey, refreshNvmInfo, refreshProjects]);
 
   useKeyboardShortcuts({
     onAddProject: () => handleAdd(),

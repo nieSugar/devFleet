@@ -2,8 +2,9 @@
 // 核心思路：通过检查 lock 文件是否存在、CLI 命令是否可用来判断用户安装了什么
 
 use crate::models::{NodeVersion, NodeVersionManager, NvmInfo, PackageManager, RemoteNodeVersion};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 // ── 包管理器检测 ──
@@ -505,14 +506,152 @@ fn nvmd_output_has_error(text: &str) -> bool {
         || lower.contains("error")
 }
 
+// ── 版本管理器路径缓存 ──
+// 各管理器的安装目录在应用运行期间不会变化，用 OnceLock 缓存避免重复检测
+
+static NVM_WINDOWS_ROOT: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+/// 获取 nvm-windows 的版本安装根目录（缓存结果）
+/// 优先读取 NVM_HOME 环境变量，回退到 `nvm root` 命令
+fn get_nvm_windows_root() -> Option<PathBuf> {
+    NVM_WINDOWS_ROOT
+        .get_or_init(|| {
+            if let Ok(home) = std::env::var("NVM_HOME") {
+                let p = PathBuf::from(&home);
+                if p.is_dir() {
+                    return Some(p);
+                }
+            }
+            if cfg!(target_os = "windows") {
+                if let Ok(output) = Command::new("cmd")
+                    .args(["/C", "nvm", "root"])
+                    .output()
+                {
+                    let text = String::from_utf8_lossy(&output.stdout);
+                    for line in text.lines() {
+                        let trimmed = line
+                            .trim()
+                            .trim_start_matches("Current Root: ")
+                            .trim_end_matches('\\');
+                        let p = PathBuf::from(trimmed);
+                        if p.is_dir() {
+                            return Some(p);
+                        }
+                    }
+                }
+            }
+            None
+        })
+        .clone()
+}
+
+static NVS_ROOT: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+/// 获取 nvs 的根目录（缓存结果）
+fn get_nvs_root() -> Option<PathBuf> {
+    NVS_ROOT
+        .get_or_init(|| {
+            if let Ok(home) = std::env::var("NVS_HOME") {
+                let p = PathBuf::from(&home);
+                if p.is_dir() {
+                    return Some(p);
+                }
+            }
+            let fallback = if cfg!(target_os = "windows") {
+                std::env::var("LOCALAPPDATA")
+                    .ok()
+                    .map(|la| PathBuf::from(la).join("nvs"))
+            } else {
+                std::env::var("HOME")
+                    .ok()
+                    .map(|h| PathBuf::from(h).join(".nvs"))
+            };
+            fallback.filter(|p| p.is_dir())
+        })
+        .clone()
+}
+
+static NVM_UNIX_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+/// 获取 Unix nvm 的目录（缓存结果）
+fn get_nvm_unix_dir() -> Option<PathBuf> {
+    NVM_UNIX_DIR
+        .get_or_init(|| {
+            if let Ok(dir) = std::env::var("NVM_DIR") {
+                let p = PathBuf::from(&dir);
+                if p.is_dir() {
+                    return Some(p);
+                }
+            }
+            std::env::var("HOME")
+                .ok()
+                .map(|h| PathBuf::from(h).join(".nvm"))
+                .filter(|p| p.is_dir())
+        })
+        .clone()
+}
+
+/// 获取指定版本 Node.js 的二进制文件所在目录
+/// 用于 PATH 注入，实现进程级别的版本隔离（不修改全局状态）
+pub fn get_node_bin_dir(version: &str, manager: &NodeVersionManager) -> Option<PathBuf> {
+    let ver = version.trim().trim_start_matches('v');
+    if ver.is_empty() {
+        return None;
+    }
+
+    let dir = match manager {
+        NodeVersionManager::NvmWindows => {
+            let root = get_nvm_windows_root()?;
+            let with_v = root.join(format!("v{}", ver));
+            if with_v.is_dir() {
+                with_v
+            } else {
+                root.join(ver)
+            }
+        }
+        NodeVersionManager::Nvs => {
+            let root = get_nvs_root()?;
+            let arch = if cfg!(target_arch = "x86_64") {
+                "x64"
+            } else if cfg!(target_arch = "aarch64") {
+                "arm64"
+            } else {
+                "x86"
+            };
+            let base = root.join("node").join(ver).join(arch);
+            if cfg!(unix) {
+                base.join("bin")
+            } else {
+                base
+            }
+        }
+        NodeVersionManager::Nvm => {
+            let nvm_dir = get_nvm_unix_dir()?;
+            nvm_dir
+                .join("versions")
+                .join("node")
+                .join(format!("v{}", ver))
+                .join("bin")
+        }
+        // nvmd 通过 shim 自动处理，无需 PATH 注入
+        NodeVersionManager::Nvmd | NodeVersionManager::None => return None,
+    };
+
+    if dir.is_dir() {
+        Some(dir)
+    } else {
+        None
+    }
+}
+
 /// 读取 nvmd 配置中的版本存储目录（`~/.nvmd/setting.json` 的 `directory` 字段）
-fn get_nvmd_versions_dir() -> Option<std::path::PathBuf> {
+fn get_nvmd_versions_dir() -> Option<PathBuf> {
     let home = std::env::var(if cfg!(target_os = "windows") { "USERPROFILE" } else { "HOME" }).ok()?;
     let content = std::fs::read_to_string(
-        std::path::Path::new(&home).join(".nvmd").join("setting.json"),
+        Path::new(&home).join(".nvmd").join("setting.json"),
     ).ok()?;
     let settings: serde_json::Value = serde_json::from_str(&content).ok()?;
-    Some(std::path::PathBuf::from(settings.get("directory")?.as_str()?))
+    Some(PathBuf::from(settings.get("directory")?.as_str()?))
 }
 
 /// nvm-windows 用 `v{ver}/` 目录，nvmd 用 `{ver}/` 目录。

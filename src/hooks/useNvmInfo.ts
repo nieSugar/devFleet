@@ -6,20 +6,22 @@ export function useNvmInfo() {
   const [nvmInfo, setNvmInfo] = useState<NvmInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const result = await tauriAPI.getNvmInfo();
-        if (result.success && result.data) {
-          setNvmInfo(result.data);
-        }
-      } catch (e) {
-        console.error("获取 NVM 信息失败:", e);
-      } finally {
-        setLoading(false);
+  const fetchNvmInfo = useCallback(async () => {
+    try {
+      const result = await tauriAPI.getNvmInfo();
+      if (result.success && result.data) {
+        setNvmInfo(result.data);
       }
-    })();
+    } catch (e) {
+      console.error("获取 NVM 信息失败:", e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchNvmInfo();
+  }, [fetchNvmInfo]);
 
   const changeNodeVersion = useCallback(
     async (projectId: string, nodeVersion: string | null | undefined) => {
@@ -31,5 +33,5 @@ export function useNvmInfo() {
     []
   );
 
-  return { nvmInfo, loading, changeNodeVersion };
+  return { nvmInfo, loading, changeNodeVersion, refreshNvmInfo: fetchNvmInfo };
 }
