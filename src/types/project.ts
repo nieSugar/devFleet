@@ -10,7 +10,7 @@ export interface Project {
   scripts: NpmScript[];
   selectedScript?: string;
   isRunning?: boolean;
-  lastRunTime?: Date;
+  lastRunTime?: string;
   packageManager?: string;
   nodeVersion?: string;
   note?: string;

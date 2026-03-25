@@ -78,6 +78,11 @@
     0 0 0 1px var(--border-strong);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
 
+  --node-green: #5fa04e;
+  --node-green-light: #6fbf5e;
+  --node-green-dark: #417e38;
+  --node-green-rgb: 95, 160, 78;
+
   --log-bg: #0a0d14;
   --log-text: #c9d1d9;
 }
@@ -120,6 +125,11 @@
   --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.08),
     0 0 0 1px var(--border-default);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.1);
+
+  --node-green: #5fa04e;
+  --node-green-light: #6fbf5e;
+  --node-green-dark: #417e38;
+  --node-green-rgb: 95, 160, 78;
 
   --log-bg: #1a1d28;
   --log-text: #c8ccd8;
@@ -196,33 +206,33 @@ body {
 }
 
 /* ── Antd Global Overrides ── */
-.ant-btn {
-  font-family: var(--font-sans) !important;
+body .ant-btn {
+  font-family: var(--font-sans);
   font-weight: 500;
 }
-.ant-select {
-  font-family: var(--font-sans) !important;
+body .ant-select {
+  font-family: var(--font-sans);
 }
-.ant-select-dropdown {
-  border-radius: var(--radius-md) !important;
+body .ant-select-dropdown {
+  border-radius: var(--radius-md);
 }
-.ant-modal .ant-modal-content {
-  border-radius: var(--radius-lg) !important;
+body .ant-modal .ant-modal-content {
+  border-radius: var(--radius-lg);
 }
 .ant-modal-mask {
   backdrop-filter: blur(4px);
 }
-.ant-typography {
-  font-family: var(--font-sans) !important;
+body .ant-typography {
+  font-family: var(--font-sans);
 }
 .ant-message {
   font-family: var(--font-sans);
 }
-.ant-input {
-  font-family: var(--font-sans) !important;
+body .ant-input {
+  font-family: var(--font-sans);
 }
-.ant-empty-description {
-  color: var(--text-muted) !important;
+body .ant-empty-description {
+  color: var(--text-muted);
 }
 .ant-btn-sm {
   padding: unset;

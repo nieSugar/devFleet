@@ -5,16 +5,9 @@
 // crate:: 前缀表示从当前 crate（项目）的其他模块导入
 use crate::config;
 use crate::detector;
-use crate::models::{AppState, IpcResponse, NodeVersionManager, PackageManager, ProjectConfig};
+use crate::models::{IpcResponse, NodeVersionManager, PackageManager, ProjectConfig};
 use crate::project;
 use std::process::Command;
-// State 是 Tauri 的依赖注入类型
-// 在 command 函数参数里写 State<AppState>，Tauri 会自动把 lib.rs 中 manage() 注册的状态注入进来
-use tauri::State;
-
-// const 定义编译时常量，&str 是字符串切片（不拥有数据的只读引用）
-const EXTERNAL_UNTRACKABLE: &str =
-    "外部终端模式下无法追踪脚本进程，请在终端窗口手动停止。";
 
 /// 校验脚本名称是否合法，防止命令注入攻击
 fn validate_script_name(name: &str) -> bool {
@@ -78,7 +71,10 @@ pub async fn refresh_project_config() -> IpcResponse {
                 .collect();
             handles
                 .into_iter()
-                .map(|h| h.join().unwrap_or_else(|_| "npm".to_string()))
+                .map(|h| h.join().unwrap_or_else(|e| {
+                    eprintln!("[devfleet] package manager detection thread panicked: {:?}", e);
+                    "npm".to_string()
+                }))
                 .collect()
         });
         for (idx, pm) in indices.into_iter().zip(results) {
@@ -226,35 +222,7 @@ pub fn run_script(
         "command": run_command,
         "packageManager": pm.to_string(),
         "nodeVersion": node_version,
-        "mode": "external",
-        "trackable": false,
-        "reason": EXTERNAL_UNTRACKABLE,
     }))
-}
-
-/// 停止正在运行的脚本进程
-// State<'_, AppState> 中的 '_ 是生命周期标注，告诉编译器这个引用的有效期
-// 这里用 '_ 让编译器自动推断，你不需要手动管理
-#[tauri::command]
-pub fn stop_script(_state: State<'_, AppState>, _project_id: String) -> IpcResponse {
-    IpcResponse::err(EXTERNAL_UNTRACKABLE)
-}
-
-/// 检查脚本是否仍在运行
-#[tauri::command]
-pub fn check_script_status(_state: State<'_, AppState>, _project_id: String) -> IpcResponse {
-    IpcResponse::ok(serde_json::json!({
-        "isRunning": false,
-        "mode": "external",
-        "trackable": false,
-        "reason": EXTERNAL_UNTRACKABLE,
-    }))
-}
-
-/// 获取脚本的输出内容
-#[tauri::command]
-pub fn get_script_output(_state: State<'_, AppState>, _project_id: String) -> IpcResponse {
-    IpcResponse::ok(serde_json::json!({ "output": "" }))
 }
 
 // ── 编辑器命令 ──

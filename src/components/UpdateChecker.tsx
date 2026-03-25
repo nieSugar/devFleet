@@ -27,12 +27,6 @@ const UpdateChecker: React.FC = () => {
   const [currentVersion, setCurrentVersion] = useState("");
   const updateRef = useRef<Update | null>(null);
 
-  useEffect(() => {
-    getVersion().then(setCurrentVersion).catch(() => {});
-    const timer = setTimeout(() => checkForUpdate(false), 3000);
-    return () => clearTimeout(timer);
-  }, []);
-
   const checkForUpdate = useCallback(async (manual: boolean) => {
     if (manual) setStatus("checking");
     setError("");
@@ -56,6 +50,12 @@ const UpdateChecker: React.FC = () => {
       }
     }
   }, []);
+
+  useEffect(() => {
+    getVersion().then(setCurrentVersion).catch(() => {});
+    const timer = setTimeout(() => checkForUpdate(false), 3000);
+    return () => clearTimeout(timer);
+  }, [checkForUpdate]);
 
   const handleDownload = async () => {
     const update = updateRef.current;

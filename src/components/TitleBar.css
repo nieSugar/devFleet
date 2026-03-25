@@ -70,11 +70,11 @@
   height: 100%;
 }
 .node-btn:hover {
-  color: #5fa04e;
-  background: rgba(95, 160, 78, 0.08);
+  color: var(--node-green);
+  background: rgba(var(--node-green-rgb), 0.08);
 }
 .node-btn:active {
-  background: rgba(95, 160, 78, 0.14);
+  background: rgba(var(--node-green-rgb), 0.14);
 }
 
 .update-btn {
@@ -117,7 +117,7 @@
   background: var(--bg-hover);
   color: var(--text-primary);
 }
-.close-btn:hover {
-  background: #e81123 !important;
-  color: #fff !important;
+.win-btn.close-btn:hover {
+  background: #e81123;
+  color: #fff;
 }

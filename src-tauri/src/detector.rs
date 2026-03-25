@@ -4,7 +4,7 @@
 use crate::models::{NodeVersion, NodeVersionManager, NvmInfo, PackageManager, RemoteNodeVersion};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::OnceLock;
+use std::sync::{LazyLock, OnceLock};
 use std::time::{Duration, Instant};
 
 // ── 包管理器检测 ──
@@ -362,8 +362,9 @@ pub fn get_node_versions(manager: &NodeVersionManager) -> Vec<NodeVersion> {
         String::from_utf8_lossy(&output.stdout).to_string()
     };
 
-    // 正则匹配版本号：支持 "v18.17.0"、"node/v18.17.0"、"18.17.0" 等格式
-    let version_re = regex_lite::Regex::new(r"(?:node/)?v?(\d+\.\d+\.\d+)").unwrap();
+    static VERSION_RE: LazyLock<regex_lite::Regex> =
+        LazyLock::new(|| regex_lite::Regex::new(r"(?:node/)?v?(\d+\.\d+\.\d+)").unwrap());
+    let version_re = &*VERSION_RE;
     // HashMap 用于去重，同一版本号只保留第一次出现的
     let mut seen = std::collections::HashMap::new();
 

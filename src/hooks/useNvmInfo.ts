@@ -5,14 +5,20 @@ import { tauriAPI } from "../lib/tauri";
 export function useNvmInfo() {
   const [nvmInfo, setNvmInfo] = useState<NvmInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchNvmInfo = useCallback(async () => {
     try {
+      setError(null);
       const result = await tauriAPI.getNvmInfo();
       if (result.success && result.data) {
         setNvmInfo(result.data);
+      } else {
+        setError(result.error || "获取 NVM 信息失败");
       }
     } catch (e) {
+      const msg = e instanceof Error ? e.message : "获取 NVM 信息异常";
+      setError(msg);
       console.error("获取 NVM 信息失败:", e);
     } finally {
       setLoading(false);
@@ -33,5 +39,5 @@ export function useNvmInfo() {
     []
   );
 
-  return { nvmInfo, loading, changeNodeVersion, refreshNvmInfo: fetchNvmInfo };
+  return { nvmInfo, loading, error, changeNodeVersion, refreshNvmInfo: fetchNvmInfo };
 }

@@ -102,16 +102,16 @@
 .card-path {
   margin-top: 8px;
 }
-.card-path .card-path-text,
-.card-path .ant-typography {
-  font-family: var(--font-mono) !important;
-  font-size: var(--text-xs) !important;
-  color: var(--text-secondary) !important;
-  line-height: 1.4 !important;
+.project-card .card-path .card-path-text,
+.project-card .card-path .ant-typography {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: 1.4;
 }
-.card-path .ant-typography-copy {
-  color: var(--text-secondary) !important;
-  font-size: 11px !important;
+.project-card .card-path .ant-typography-copy {
+  color: var(--text-secondary);
+  font-size: 11px;
 }
 
 /* Note */
@@ -119,16 +119,16 @@
   margin-top: 2px;
   min-height: 22px;
 }
-.card-note .card-note-text,
-.card-note .ant-typography {
-  font-size: var(--text-xs) !important;
-  color: var(--text-secondary) !important;
-  margin-bottom: 0 !important;
+.project-card .card-note .card-note-text,
+.project-card .card-note .ant-typography {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin-bottom: 0;
   font-style: italic;
 }
-.card-note .ant-typography-edit {
-  color: var(--text-muted) !important;
-  font-size: 11px !important;
+.project-card .card-note .ant-typography-edit {
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 /* Divider */

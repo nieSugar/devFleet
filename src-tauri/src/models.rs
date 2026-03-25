@@ -2,26 +2,6 @@
 // Serialize = Rust 结构体 → JSON（发给前端）
 // Deserialize = JSON → Rust 结构体（从前端接收）
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-// Child 代表一个操作系统子进程的句柄，用来管理（查状态、kill）已启动的进程
-use std::process::Child;
-// Arc = Atomic Reference Counted，线程安全的引用计数智能指针
-// 允许多个线程共享同一份数据的所有权（Rust 默认不允许多所有者，Arc 是个例外）
-// Mutex = 互斥锁，保证同一时刻只有一个线程能修改数据
-use std::sync::{Arc, Mutex};
-
-// ── 应用全局状态 ──
-// 这个结构体通过 Tauri 的 manage() 注册，全生命周期只有一个实例
-// 任何 #[tauri::command] 函数都可以通过 State<AppState> 参数访问它
-
-pub struct AppState {
-    // HashMap<String, Child>：project_id → 子进程
-    // 用 Mutex 包裹是因为多个 Tauri command 可能同时访问（IPC 调用是并发的）
-    pub running_processes: Mutex<HashMap<String, Child>>,
-    // 双层 Mutex 设计：外层锁 HashMap，内层锁单个项目的输出缓冲区
-    // Arc 使得读输出的线程和写输出的线程可以共享同一个 String
-    pub script_outputs: Mutex<HashMap<String, Arc<Mutex<String>>>>,
-}
 
 // ── IPC 统一响应体 ──
 // 前后端通信的标准化数据格式，类似前端的 { success, data, error } 模式
@@ -50,12 +30,17 @@ impl IpcResponse {
     // 泛型函数：T 可以是任何实现了 Serialize 的类型
     // 这意味着你传 String、Vec、HashMap、自定义 struct 都行，只要它能序列化
     pub fn ok<T: Serialize>(data: T) -> Self {
-        Self {
-            success: true,
-            // serde_json::to_value() 把任意类型转成 serde_json::Value（通用 JSON 值）
-            // .ok() 把 Result 转成 Option（出错就变成 None，不 panic）
-            data: serde_json::to_value(data).ok(),
-            error: None,
+        match serde_json::to_value(data) {
+            Ok(value) => Self {
+                success: true,
+                data: Some(value),
+                error: None,
+            },
+            Err(e) => Self {
+                success: false,
+                data: None,
+                error: Some(format!("Serialization error: {}", e)),
+            },
         }
     }
 

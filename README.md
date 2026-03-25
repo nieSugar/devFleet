@@ -5,7 +5,7 @@
 **轻量、快速的跨平台开发项目管理工具**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.0.0-green.svg)](https://github.com/nieSugar/devFleet/releases)
+[![Version](https://img.shields.io/badge/version-2.1.0-green.svg)](https://github.com/nieSugar/devFleet/releases)
 [![Tauri](https://img.shields.io/badge/Tauri-2-24C8D8?logo=tauri&logoColor=white)](https://v2.tauri.app)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
 [![Rust](https://img.shields.io/badge/Rust-2021-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org)

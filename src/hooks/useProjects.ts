@@ -5,15 +5,26 @@ import { tauriAPI } from "../lib/tauri";
 export function useProjects() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const result = await tauriAPI.loadProjectConfig();
       if (result.success && result.data) {
         setProjects(result.data.projects);
+      } else {
+        const msg = result.error || "加载项目配置失败";
+        setError(msg);
+        console.error("loadProjects failed:", msg);
       }
       return result;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "加载项目配置异常";
+      setError(msg);
+      console.error("loadProjects error:", e);
+      return { success: false, error: msg };
     } finally {
       setLoading(false);
     }
@@ -40,7 +51,8 @@ export function useProjects() {
 
       const result = await tauriAPI.addProjectToConfig(path);
       if (result.success && result.data) {
-        setProjects((prev) => [...prev, result.data!]);
+        const project = result.data;
+        setProjects((prev) => [...prev, project]);
       }
       return result;
     } finally {
@@ -110,6 +122,7 @@ export function useProjects() {
     projects,
     setProjects,
     loading,
+    error,
     loadProjects,
     refreshProjects,
     addProject,

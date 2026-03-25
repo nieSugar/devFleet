@@ -7,7 +7,6 @@ import { useNvmInfo } from "../hooks/useNvmInfo";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import ProjectHeader from "./ProjectHeader";
 import ProjectCard from "./ProjectCard";
-import LogPanel from "./LogPanel";
 import { PlusOutlined, FolderOpenOutlined } from "@ant-design/icons";
 import { message, Modal, Button } from "antd";
 import "./ProjectManager.css";
@@ -32,10 +31,6 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
   const { nvmInfo, changeNodeVersion, refreshNvmInfo } = useNvmInfo();
   const [messageApi, contextHolder] = message.useMessage();
   const [searchText, setSearchText] = useState("");
-  const [activeLogProject, setActiveLogProject] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
 
   useEffect(() => {
     loadProjects().then((r) => {
@@ -64,10 +59,10 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
     onRefresh: handleRefresh,
   });
 
-  const showMsg = (type: "success" | "error", text: string) => {
+  const showMsg = useCallback((type: "success" | "error", text: string) => {
     if (type === "success") messageApi.success(text);
     else messageApi.error(text);
-  };
+  }, [messageApi]);
 
   const handleAdd = async () => {
     const result = await addProject();
@@ -77,7 +72,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
     else showMsg("error", result.error || "添加项目失败");
   };
 
-  const handleRemove = (projectId: string, projectName: string) => {
+  const handleRemove = useCallback((projectId: string, projectName: string) => {
     Modal.confirm({
       title: "确认删除",
       content: `确定要删除项目「${projectName}」吗？此操作不会删除项目文件。`,
@@ -94,14 +89,14 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
         }
       },
     });
-  };
+  }, [removeProject, showMsg]);
 
-  const handleScriptChange = async (projectId: string, scriptName: string) => {
+  const handleScriptChange = useCallback(async (projectId: string, scriptName: string) => {
     const result = await updateScriptSelection(projectId, scriptName);
     if (!result.success) showMsg("error", result.error || "保存配置失败");
-  };
+  }, [updateScriptSelection, showMsg]);
 
-  const handleNodeVersionChange = async (
+  const handleNodeVersionChange = useCallback(async (
     projectId: string,
     nodeVersion: string | null | undefined,
   ) => {
@@ -122,22 +117,19 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
     } catch {
       showMsg("error", "设置 Node 版本时出错");
     }
-  };
+  }, [changeNodeVersion, setProjects, showMsg]);
 
-  const handleRun = async (project: Project) => {
+  const handleRun = useCallback(async (project: Project) => {
     const result = await runScript(project);
     if (result.success) {
       const vi = project.nodeVersion ? ` (Node ${project.nodeVersion})` : "";
       showMsg("success", `脚本 "${project.selectedScript}"${vi} 启动成功`);
-      if (result.data?.mode === "managed") {
-        setActiveLogProject({ id: project.id, name: project.name });
-      }
     } else {
       showMsg("error", result.error || "启动脚本失败");
     }
-  };
+  }, [runScript, showMsg]);
 
-  const handleNoteChange = async (projectId: string, note: string) => {
+  const handleNoteChange = useCallback(async (projectId: string, note: string) => {
     const trimmed = note.trim() || undefined;
     setProjects((prev) =>
       prev.map((p) => (p.id === projectId ? { ...p, note: trimmed } : p)),
@@ -158,7 +150,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
     } catch {
       showMsg("error", "保存备注失败");
     }
-  };
+  }, [setProjects, showMsg]);
 
   const filteredProjects = useMemo(() => {
     if (!searchText.trim()) return projects;
@@ -243,12 +235,6 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
         </div>
       )}
 
-      <div className="log-wrapper">
-        <LogPanel
-          projectId={activeLogProject?.id ?? null}
-          projectName={activeLogProject?.name ?? ""}
-        />
-      </div>
     </div>
   );
 };

@@ -38,7 +38,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem(STORAGE_KEY, theme);
+    try {
+      localStorage.setItem(STORAGE_KEY, theme);
+    } catch {
+      // localStorage may be unavailable in private browsing mode
+    }
   }, [theme]);
 
   const setTheme = useCallback((t: Theme) => setThemeState(t), []);

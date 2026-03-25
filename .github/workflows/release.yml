@@ -44,7 +44,11 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 'lts/*'
-          cache: 'npm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -63,7 +67,7 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build and release
         uses: tauri-apps/tauri-action@v0

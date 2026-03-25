@@ -20,16 +20,6 @@ interface ScriptRunResult {
   command: string;
   packageManager: string;
   nodeVersion?: string | null;
-  mode: "managed" | "external";
-  trackable: boolean;
-  reason?: string;
-}
-
-interface ScriptStatus {
-  isRunning: boolean;
-  mode: "managed" | "external";
-  trackable: boolean;
-  reason?: string;
 }
 
 interface MessageResult {
@@ -57,17 +47,6 @@ export const tauriAPI = {
 
   runScript: (params: RunScriptParams): Promise<IpcResponse<ScriptRunResult>> =>
     invoke("run_script", params),
-
-  stopScript: (projectId: string): Promise<IpcResponse<MessageResult>> =>
-    invoke("stop_script", { projectId }),
-
-  checkScriptStatus: (projectId: string): Promise<IpcResponse<ScriptStatus>> =>
-    invoke("check_script_status", { projectId }),
-
-  getScriptOutput: (
-    projectId: string
-  ): Promise<IpcResponse<{ output: string }>> =>
-    invoke("get_script_output", { projectId }),
 
   detectEditors: (force?: boolean): Promise<IpcResponse<EditorStatus>> =>
     invoke("detect_editors", { force }),

@@ -3,11 +3,11 @@
    ═══════════════════════════════════════ */
 
 /* ── Drawer shell ── */
-.node-drawer .ant-drawer-content-wrapper {
-  box-shadow: -8px 0 40px rgba(0, 0, 0, 0.4) !important;
+.node-drawer.ant-drawer .ant-drawer-content-wrapper {
+  box-shadow: -8px 0 40px rgba(0, 0, 0, 0.4);
 }
-.node-drawer .ant-drawer-content {
-  background: var(--bg-deep) !important;
+.node-drawer.ant-drawer .ant-drawer-content {
+  background: var(--bg-deep);
   border-left: 1px solid var(--border-subtle);
 }
 
@@ -25,7 +25,7 @@
   left: 24px;
   right: 24px;
   height: 1px;
-  background: linear-gradient(90deg, #5fa04e44, transparent 50%, #5fa04e44);
+  background: linear-gradient(90deg, rgba(var(--node-green-rgb), 0.27), transparent 50%, rgba(var(--node-green-rgb), 0.27));
 }
 
 .nd-header-top {
@@ -46,10 +46,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #5fa04e, #417e38);
+  background: linear-gradient(135deg, var(--node-green), var(--node-green-dark));
   border-radius: 8px;
   color: #fff;
-  box-shadow: 0 2px 12px rgba(95, 160, 78, 0.25);
+  box-shadow: 0 2px 12px rgba(var(--node-green-rgb), 0.25);
 }
 
 .nd-title-text {
@@ -124,8 +124,8 @@
   transition: all var(--transition-fast);
 }
 .nd-manager-dot.active {
-  background: #5fa04e;
-  box-shadow: 0 0 8px rgba(95, 160, 78, 0.5);
+  background: var(--node-green);
+  box-shadow: 0 0 8px rgba(var(--node-green-rgb), 0.5);
 }
 
 .nd-current-ver {
@@ -162,8 +162,8 @@
   gap: 10px;
 }
 
-.nd-search {
-  border-radius: var(--radius-sm) !important;
+.node-drawer .nd-search {
+  border-radius: var(--radius-sm);
 }
 
 .nd-filters {
@@ -192,7 +192,7 @@
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(20, 184, 166, 0.25);
+  box-shadow: 0 2px 8px rgba(var(--accent-rgb), 0.25);
 }
 
 /* ── Content area ── */
@@ -310,8 +310,8 @@
   display: inline-block;
   padding: 1px 8px;
   border-radius: 4px;
-  background: rgba(95, 160, 78, 0.15);
-  color: #6fbf5e;
+  background: rgba(var(--node-green-rgb), 0.15);
+  color: var(--node-green-light);
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
   font-weight: 600;
@@ -407,8 +407,8 @@
 .nd-version-lts {
   padding: 0 6px;
   border-radius: 3px;
-  background: rgba(95, 160, 78, 0.15);
-  color: #6fbf5e;
+  background: rgba(var(--node-green-rgb), 0.15);
+  color: var(--node-green-light);
   font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 600;
