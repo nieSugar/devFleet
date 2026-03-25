@@ -11,11 +11,10 @@
 [![Rust](https://img.shields.io/badge/Rust-2021-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)]()
 
-基于 **Tauri 2 + React 19 + TypeScript + Rust** 构建，帮助开发者快速管理和启动多个 Node.js 项目。
+基于 **Tauri 2 + React 19 + TypeScript 5 + Rust** 构建，帮助开发者快速管理和启动多个 Node.js 项目。
 
 [下载安装](#-下载安装) · [功能特性](#-功能特性) · [快速开始](#-快速开始) · [参与贡献](#-参与贡献)
 
-<!-- 👇 替换为你的实际截图 -->
 <!-- ![devFleet Screenshot](docs/screenshot.png) -->
 
 </div>
@@ -40,6 +39,7 @@
 - 支持 nvmd、nvs、nvm、nvm-windows
 - 为每个项目指定独立的 Node 版本
 - 自动生成 `.nvmdrc` / `.node-version` / `.nvmrc` 配置文件
+- 远程获取 Node.js 版本列表，一键安装 / 切换 / 卸载
 
 </td>
 </tr>
@@ -50,6 +50,7 @@
 - 外部终端运行 & 应用内托管模式
 - 跨平台支持：Windows (PowerShell)、macOS (Terminal)、Linux
 - 根据包管理器自动生成运行命令
+- 脚本名校验，防止命令注入
 
 </td>
 <td width="50%">
@@ -61,9 +62,26 @@
 
 </td>
 </tr>
-</table>
+<tr>
+<td width="50%">
 
-> 还有更多：浅色/深色主题切换、终端模式切换、快捷键操作……
+### 🎨 界面与体验
+- 自定义无边框标题栏，原生窗口控制
+- 浅色 / 深色主题自由切换
+- 键盘快捷键操作
+- 错误边界保护，防止组件崩溃
+
+</td>
+<td width="50%">
+
+### 🔄 自动更新
+- 应用内检查新版本
+- 下载与安装一键完成
+- 基于 Tauri Updater 插件，签名验证确保安全
+
+</td>
+</tr>
+</table>
 
 ## 📥 下载安装
 
@@ -81,21 +99,21 @@
 ### 前置要求
 
 - [Node.js](https://nodejs.org/) >= 18
+- [pnpm](https://pnpm.io/) >= 9
 - [Rust](https://www.rust-lang.org/tools/install) (stable)
-- 包管理器：npm / yarn / pnpm / bun 任选其一
 
 ### 克隆并安装
 
 ```bash
 git clone https://github.com/nieSugar/devFleet.git
 cd devFleet
-npm install
+pnpm install
 ```
 
 ### 启动开发模式
 
 ```bash
-npm run tauri dev
+pnpm tauri dev
 ```
 
 同时启动 Vite 前端开发服务器和 Tauri Rust 后端，支持热重载。
@@ -103,7 +121,7 @@ npm run tauri dev
 ### 构建生产版本
 
 ```bash
-npm run tauri build
+pnpm tauri build
 ```
 
 构建产物位于 `src-tauri/target/release/bundle/`。
@@ -112,23 +130,26 @@ npm run tauri build
 
 | 命令 | 说明 |
 |------|------|
-| `npm run dev` | 启动 Vite 前端开发服务器 |
-| `npm run build` | TypeScript 编译 + Vite 构建 |
-| `npm run tauri dev` | Tauri 开发模式（前后端联调） |
-| `npm run tauri build` | Tauri 生产构建 |
-| `npm run lint` | ESLint 代码检查 |
-| `npm run lint:fix` | ESLint 自动修复 |
-| `npm run format` | Prettier 代码格式化 |
+| `pnpm dev` | 启动 Vite 前端开发服务器 |
+| `pnpm build` | TypeScript 编译 + Vite 构建 |
+| `pnpm tauri dev` | Tauri 开发模式（前后端联调） |
+| `pnpm tauri build` | Tauri 生产构建 |
+| `pnpm lint` | ESLint 代码检查 |
+| `pnpm lint:fix` | ESLint 自动修复 |
+| `pnpm format` | Prettier 代码格式化 |
 
 ## 🏗️ 技术栈
 
 | 层 | 技术 |
 |----|------|
 | 框架 | [Tauri 2](https://v2.tauri.app) — 轻量级跨平台桌面框架 |
-| 前端 | [React 19](https://react.dev) + [TypeScript 5](https://www.typescriptlang.org/) + [Vite 7](https://vite.dev) |
-| UI | [Ant Design 5](https://ant.design/) + [@ant-design/icons](https://ant.design/components/icon) |
-| 后端 | [Rust](https://www.rust-lang.org/) + serde + regex-lite |
-| CI/CD | GitHub Actions — 多平台自动构建与发布 |
+| 前端 | [React 19](https://react.dev) + [TypeScript 5.9](https://www.typescriptlang.org/) + [Vite 7](https://vite.dev) |
+| UI | [Ant Design 5](https://ant.design/) + [@ant-design/icons 6](https://ant.design/components/icon) |
+| 字体 | [Plus Jakarta Sans](https://fonts.google.com/specimen/Plus+Jakarta+Sans) + [JetBrains Mono](https://www.jetbrains.com/lp/mono/) |
+| 后端 | [Rust](https://www.rust-lang.org/) (serde · ureq · chrono · regex-lite) |
+| 插件 | Tauri Dialog · Updater · Process |
+| 代码质量 | [ESLint 9](https://eslint.org/) (flat config) + [Prettier](https://prettier.io/) + Clippy + rustfmt |
+| CI/CD | GitHub Actions — 前后端 CI 检查 + 多平台自动构建与发布 |
 
 ## 🗂️ 项目结构
 
@@ -136,23 +157,43 @@ npm run tauri build
 <summary>点击展开</summary>
 
 ```
-src/                          # 前端源码 (React + TypeScript)
-├── renderer.tsx              # 入口文件
-├── App.tsx                   # 根组件
-├── components/               # UI 组件
-├── hooks/                    # 自定义 Hooks
-├── lib/                      # Tauri IPC 封装
-├── types/                    # 类型定义
-└── img/                      # 编辑器图标
+src/                              # 前端源码 (React + TypeScript)
+├── renderer.tsx                  # 应用入口
+├── App.tsx                       # 根组件（主题 / 布局）
+├── index.css                     # 全局样式与 CSS 变量
+├── components/
+│   ├── TitleBar.tsx              # 自定义标题栏（窗口控制 / 主题切换）
+│   ├── ProjectManager.tsx        # 项目列表与搜索
+│   ├── ProjectCard.tsx           # 项目卡片
+│   ├── ProjectHeader.tsx         # 项目头部信息
+│   ├── EditorButton.tsx          # 编辑器快捷按钮
+│   ├── NodeVersionDrawer.tsx     # Node 版本管理抽屉
+│   ├── NodeVersionSelect.tsx     # Node 版本选择器
+│   ├── UpdateChecker.tsx         # 应用更新检查
+│   └── ErrorBoundary.tsx         # 错误边界
+├── contexts/
+│   └── ThemeContext.tsx           # 主题上下文
+├── hooks/
+│   ├── useProjects.ts            # 项目数据管理
+│   ├── useEditors.ts             # 编辑器检测
+│   ├── useNvmInfo.ts             # NVM 信息
+│   └── useKeyboardShortcuts.ts   # 快捷键绑定
+├── lib/
+│   └── tauri.ts                  # Tauri IPC 命令封装
+├── types/
+│   └── project.ts                # 类型定义
+└── img/                          # 编辑器 SVG 图标
 
-src-tauri/                    # 后端源码 (Rust + Tauri)
+src-tauri/                        # 后端源码 (Rust + Tauri)
 ├── src/
-│   ├── lib.rs                # Tauri 启动与命令注册
-│   ├── commands.rs           # Tauri 命令
-│   ├── config.rs             # 配置读写
-│   ├── detector.rs           # 包管理器/编辑器/NVM 检测
-│   ├── models.rs             # 数据模型
-│   └── project.rs            # 项目逻辑
+│   ├── lib.rs                    # Tauri 启动与命令注册
+│   ├── commands.rs               # IPC 命令实现
+│   ├── config.rs                 # 配置文件读写
+│   ├── detector.rs               # 包管理器 / 编辑器 / NVM 检测
+│   ├── models.rs                 # 数据模型
+│   └── project.rs                # 项目逻辑
+├── capabilities/                 # Tauri 权限声明
+├── icons/                        # 应用图标（多平台多尺寸）
 ├── Cargo.toml
 └── tauri.conf.json
 ```
