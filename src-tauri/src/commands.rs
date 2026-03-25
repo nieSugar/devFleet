@@ -63,7 +63,10 @@ pub async fn refresh_project_config() -> IpcResponse {
         .collect();
 
     if !indices.is_empty() {
-        let paths: Vec<String> = indices.iter().map(|&i| cfg.projects[i].path.clone()).collect();
+        let paths: Vec<String> = indices
+            .iter()
+            .map(|&i| cfg.projects[i].path.clone())
+            .collect();
         let results: Vec<String> = std::thread::scope(|s| {
             let handles: Vec<_> = paths
                 .iter()
@@ -71,10 +74,15 @@ pub async fn refresh_project_config() -> IpcResponse {
                 .collect();
             handles
                 .into_iter()
-                .map(|h| h.join().unwrap_or_else(|e| {
-                    eprintln!("[devfleet] package manager detection thread panicked: {:?}", e);
-                    "npm".to_string()
-                }))
+                .map(|h| {
+                    h.join().unwrap_or_else(|e| {
+                        eprintln!(
+                            "[devfleet] package manager detection thread panicked: {:?}",
+                            e
+                        );
+                        "npm".to_string()
+                    })
+                })
                 .collect()
         });
         for (idx, pm) in indices.into_iter().zip(results) {
@@ -192,7 +200,9 @@ pub fn run_script(
     node_version: Option<String>,
 ) -> IpcResponse {
     if !validate_script_name(&script_name) {
-        return IpcResponse::err("脚本名称包含非法字符，仅允许字母、数字、连字符、下划线、冒号和点");
+        return IpcResponse::err(
+            "脚本名称包含非法字符，仅允许字母、数字、连字符、下划线、冒号和点",
+        );
     }
 
     let pm = package_manager
@@ -237,7 +247,11 @@ pub async fn detect_editors(force: Option<bool>) -> IpcResponse {
     }
 
     let (vscode, cursor, webstorm) = detector::detect_editors();
-    let cache = crate::models::EditorCache { vscode, cursor, webstorm };
+    let cache = crate::models::EditorCache {
+        vscode,
+        cursor,
+        webstorm,
+    };
     config::save_editor_cache(&cache);
     IpcResponse::ok(cache)
 }
@@ -346,10 +360,7 @@ pub async fn uninstall_node_version(version: String, manager: Option<String>) ->
 
 /// 设置项目的 Node 版本（写入对应的版本文件，如 .nvmrc）
 #[tauri::command]
-pub fn set_project_node_version(
-    project_id: String,
-    node_version: Option<String>,
-) -> IpcResponse {
+pub fn set_project_node_version(project_id: String, node_version: Option<String>) -> IpcResponse {
     let mut cfg = config::load();
     // .position() 返回第一个满足条件的元素的索引，类似 JS 的 findIndex()
     let proj_idx = match cfg.projects.iter().position(|p| p.id == project_id) {

@@ -93,9 +93,8 @@ pub fn detect_editors() -> (bool, bool, bool) {
         let h1 = std::thread::spawn(|| {
             is_mac_app_installed("Visual Studio Code") || is_command_available("code")
         });
-        let h2 = std::thread::spawn(|| {
-            is_mac_app_installed("Cursor") || is_command_available("cursor")
-        });
+        let h2 =
+            std::thread::spawn(|| is_mac_app_installed("Cursor") || is_command_available("cursor"));
         let h3 = std::thread::spawn(|| is_mac_app_installed("WebStorm"));
 
         let vscode = h1.join().unwrap_or(false);
@@ -151,9 +150,7 @@ pub fn open_editor(editor: &str, project_path: &str) -> bool {
             } else {
                 // shell_spawn() 是下面定义的 trait 扩展方法
                 // Windows 下需要通过 cmd /C 间接执行，否则某些 PATH 里的命令找不到
-                Command::new("code")
-                    .arg(project_path)
-                    .shell_spawn()
+                Command::new("code").arg(project_path).shell_spawn()
             }
         }
         "cursor" => {
@@ -162,9 +159,7 @@ pub fn open_editor(editor: &str, project_path: &str) -> bool {
                     .args(["-a", "Cursor", project_path])
                     .spawn()
             } else {
-                Command::new("cursor")
-                    .arg(project_path)
-                    .shell_spawn()
+                Command::new("cursor").arg(project_path).shell_spawn()
             }
         }
         "webstorm" => {
@@ -221,11 +216,19 @@ fn is_unix_nvm_installed() -> bool {
 /// 优先级：nvmd > nvs > nvm/nvm-windows
 pub fn detect_node_version_manager() -> NodeVersionManager {
     // nvmd（跨平台 GUI 版本管理器）
-    if let Ok(r) = Command::new(if cfg!(target_os = "windows") { "cmd" } else { "nvmd" })
-        .args(if cfg!(target_os = "windows") { vec!["/C", "nvmd", "--help"] } else { vec!["--help"] })
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
+    if let Ok(r) = Command::new(if cfg!(target_os = "windows") {
+        "cmd"
+    } else {
+        "nvmd"
+    })
+    .args(if cfg!(target_os = "windows") {
+        vec!["/C", "nvmd", "--help"]
+    } else {
+        vec!["--help"]
+    })
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::null())
+    .status()
     {
         if r.success() {
             return NodeVersionManager::Nvmd;
@@ -467,7 +470,10 @@ fn collect_output(o: &std::process::Output) -> String {
 const CMD_TIMEOUT_SECS: u64 = 30;
 
 /// 带超时保护的命令执行，防止 nvm-windows 等工具卡死时阻塞整个应用
-fn output_with_timeout(mut cmd: Command, timeout_secs: u64) -> Result<std::process::Output, String> {
+fn output_with_timeout(
+    mut cmd: Command,
+    timeout_secs: u64,
+) -> Result<std::process::Output, String> {
     let mut child = cmd
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -524,10 +530,7 @@ fn get_nvm_windows_root() -> Option<PathBuf> {
                 }
             }
             if cfg!(target_os = "windows") {
-                if let Ok(output) = Command::new("cmd")
-                    .args(["/C", "nvm", "root"])
-                    .output()
-                {
+                if let Ok(output) = Command::new("cmd").args(["/C", "nvm", "root"]).output() {
                     let text = String::from_utf8_lossy(&output.stdout);
                     for line in text.lines() {
                         let trimmed = line
@@ -647,10 +650,14 @@ pub fn get_node_bin_dir(version: &str, manager: &NodeVersionManager) -> Option<P
 
 /// 读取 nvmd 配置中的版本存储目录（`~/.nvmd/setting.json` 的 `directory` 字段）
 fn get_nvmd_versions_dir() -> Option<PathBuf> {
-    let home = std::env::var(if cfg!(target_os = "windows") { "USERPROFILE" } else { "HOME" }).ok()?;
-    let content = std::fs::read_to_string(
-        Path::new(&home).join(".nvmd").join("setting.json"),
-    ).ok()?;
+    let home = std::env::var(if cfg!(target_os = "windows") {
+        "USERPROFILE"
+    } else {
+        "HOME"
+    })
+    .ok()?;
+    let content =
+        std::fs::read_to_string(Path::new(&home).join(".nvmd").join("setting.json")).ok()?;
     let settings: serde_json::Value = serde_json::from_str(&content).ok()?;
     Some(PathBuf::from(settings.get("directory")?.as_str()?))
 }
@@ -694,7 +701,9 @@ fn create_dir_link(link: &Path, target: &Path) -> bool {
     if cfg!(target_os = "windows") {
         Command::new("cmd")
             .args([
-                "/C", "mklink", "/J",
+                "/C",
+                "mklink",
+                "/J",
                 &link.to_string_lossy(),
                 &target.to_string_lossy(),
             ])
@@ -705,9 +714,13 @@ fn create_dir_link(link: &Path, target: &Path) -> bool {
             .unwrap_or(false)
     } else {
         #[cfg(unix)]
-        { std::os::unix::fs::symlink(target, link).is_ok() }
+        {
+            std::os::unix::fs::symlink(target, link).is_ok()
+        }
         #[cfg(not(unix))]
-        { false }
+        {
+            false
+        }
     }
 }
 
@@ -734,7 +747,10 @@ pub fn install_node_version(version: &str, manager: &NodeVersionManager) -> Resu
                     r#"export NVM_DIR="${{NVM_DIR:-$HOME/.nvm}}"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm install {}"#,
                     ver
                 );
-                Command::new("bash").args(["-lc", &script]).output().map_err(|e| e.to_string())
+                Command::new("bash")
+                    .args(["-lc", &script])
+                    .output()
+                    .map_err(|e| e.to_string())
             } else {
                 return Err(format!(
                     "nvmd 不支持命令行安装 Node.js {}，且未检测到 nvm 作为备选。请在 nvm-desktop 桌面应用中下载安装",
@@ -750,7 +766,10 @@ pub fn install_node_version(version: &str, manager: &NodeVersionManager) -> Resu
                     .output()
                     .map_err(|e| e.to_string())
             } else {
-                Command::new("nvs").args(["add", &node_ver]).output().map_err(|e| e.to_string())
+                Command::new("nvs")
+                    .args(["add", &node_ver])
+                    .output()
+                    .map_err(|e| e.to_string())
             }
         }
         NodeVersionManager::NvmWindows => {
@@ -763,7 +782,10 @@ pub fn install_node_version(version: &str, manager: &NodeVersionManager) -> Resu
                 r#"export NVM_DIR="${{NVM_DIR:-$HOME/.nvm}}"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm install {}"#,
                 ver
             );
-            Command::new("bash").args(["-lc", &script]).output().map_err(|e| e.to_string())
+            Command::new("bash")
+                .args(["-lc", &script])
+                .output()
+                .map_err(|e| e.to_string())
         }
         NodeVersionManager::None => return Err("未检测到 Node 版本管理器".to_string()),
     };
@@ -822,7 +844,9 @@ pub fn switch_node_version(version: &str, manager: &NodeVersionManager) -> Resul
                     if nvmd_output_has_error(&text) {
                         if bridge_nvm_to_nvmd(ver) {
                             let retry = if cfg!(target_os = "windows") {
-                                Command::new("cmd").args(["/C", "nvmd", "use", ver]).output()
+                                Command::new("cmd")
+                                    .args(["/C", "nvmd", "use", ver])
+                                    .output()
                             } else {
                                 Command::new("nvmd").args(["use", ver]).output()
                             };
@@ -853,7 +877,10 @@ pub fn switch_node_version(version: &str, manager: &NodeVersionManager) -> Resul
                     .output()
                     .map_err(|e| e.to_string())
             } else {
-                Command::new("nvs").args(["use", &node_ver]).output().map_err(|e| e.to_string())
+                Command::new("nvs")
+                    .args(["use", &node_ver])
+                    .output()
+                    .map_err(|e| e.to_string())
             };
             match result {
                 Ok(o) => {
@@ -903,7 +930,10 @@ pub fn switch_node_version(version: &str, manager: &NodeVersionManager) -> Resul
 
 /// 通过版本管理器卸载指定已安装版本的 Node.js
 /// nvmd CLI 不支持 uninstall，在 Windows 下 fallback 到 nvm-windows
-pub fn uninstall_node_version(version: &str, manager: &NodeVersionManager) -> Result<String, String> {
+pub fn uninstall_node_version(
+    version: &str,
+    manager: &NodeVersionManager,
+) -> Result<String, String> {
     let ver = version.trim_start_matches('v');
 
     let result = match manager {
@@ -929,7 +959,10 @@ pub fn uninstall_node_version(version: &str, manager: &NodeVersionManager) -> Re
                     r#"export NVM_DIR="${{NVM_DIR:-$HOME/.nvm}}"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm uninstall {}"#,
                     ver
                 );
-                Command::new("bash").args(["-lc", &script]).output().map_err(|e| e.to_string())
+                Command::new("bash")
+                    .args(["-lc", &script])
+                    .output()
+                    .map_err(|e| e.to_string())
             } else {
                 return Err(format!(
                     "nvmd 不支持命令行卸载 Node.js {}，且未检测到 nvm 作为备选。请在 nvm-desktop 桌面应用中操作",
@@ -945,7 +978,10 @@ pub fn uninstall_node_version(version: &str, manager: &NodeVersionManager) -> Re
                     .output()
                     .map_err(|e| e.to_string())
             } else {
-                Command::new("nvs").args(["remove", &node_ver]).output().map_err(|e| e.to_string())
+                Command::new("nvs")
+                    .args(["remove", &node_ver])
+                    .output()
+                    .map_err(|e| e.to_string())
             }
         }
         NodeVersionManager::NvmWindows => {
@@ -958,7 +994,10 @@ pub fn uninstall_node_version(version: &str, manager: &NodeVersionManager) -> Re
                 r#"export NVM_DIR="${{NVM_DIR:-$HOME/.nvm}}"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm uninstall {}"#,
                 ver
             );
-            Command::new("bash").args(["-lc", &script]).output().map_err(|e| e.to_string())
+            Command::new("bash")
+                .args(["-lc", &script])
+                .output()
+                .map_err(|e| e.to_string())
         }
         NodeVersionManager::None => return Err("未检测到 Node 版本管理器".to_string()),
     };
@@ -996,7 +1035,10 @@ impl CommandShellSpawn for Command {
             use std::os::windows::process::CommandExt;
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             let prog = format!("{:?}", self.get_program());
-            let args: Vec<String> = self.get_args().map(|a| a.to_string_lossy().to_string()).collect();
+            let args: Vec<String> = self
+                .get_args()
+                .map(|a| a.to_string_lossy().to_string())
+                .collect();
             Command::new("cmd")
                 .arg("/C")
                 .arg(prog.trim_matches('"'))
