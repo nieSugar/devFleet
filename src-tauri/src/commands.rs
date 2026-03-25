@@ -140,13 +140,15 @@ fn spawn_external_terminal(project_path: &str, run_command: &str) -> bool {
 /// macOS: 用 AppleScript 控制 Terminal.app 打开新窗口
 #[cfg(target_os = "macos")]
 fn spawn_external_terminal(project_path: &str, run_command: &str) -> bool {
+    let safe_path = project_path.replace('\'', "'\\''");
+    let safe_cmd = run_command.replace('\\', "\\\\").replace('"', "\\\"");
     let osa = format!(
         r#"tell application "Terminal"
   activate
-  do script "cd \"{}\" && {}"
+  do script "cd '{path}' && {cmd}"
 end tell"#,
-        project_path.replace('"', "\\\""),
-        run_command,
+        path = safe_path,
+        cmd = safe_cmd,
     );
     Command::new("osascript").args(["-e", &osa]).spawn().is_ok()
 }
@@ -154,14 +156,12 @@ end tell"#,
 /// Linux: 依次尝试 gnome-terminal → konsole → xterm，用第一个可用的
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 fn spawn_external_terminal(project_path: &str, run_command: &str) -> bool {
-    let gnome_cmd = format!("cd \"{}\" && {}; exec bash", project_path, run_command);
-    let konsole_cmd = format!("bash -lc \"cd '{}' && {}; exec bash\"", project_path, run_command);
-    let xterm_cmd = format!("bash -lc \"cd '{}' && {}; exec bash\"", project_path, run_command);
-    // Vec<(&str, Vec<&str>)>：终端程序名和对应的命令行参数列表
+    let safe_path = project_path.replace('\'', "'\\''");
+    let full_cmd = format!("cd '{}' && {}; exec bash", safe_path, run_command);
     let terminals: Vec<(&str, Vec<&str>)> = vec![
-        ("gnome-terminal", vec!["--", "bash", "-lc", &gnome_cmd]),
-        ("konsole", vec!["-e", &konsole_cmd]),
-        ("xterm", vec!["-e", &xterm_cmd]),
+        ("gnome-terminal", vec!["--", "bash", "-lc", &full_cmd]),
+        ("konsole", vec!["-e", "bash", "-lc", &full_cmd]),
+        ("xterm", vec!["-e", "bash", "-lc", &full_cmd]),
     ];
     // .any() 遍历尝试，只要有一个成功就返回 true
     terminals.iter().any(|(cmd, args)| {
@@ -191,11 +191,10 @@ fn build_node_path_prefix(version: &str, manager: &NodeVersionManager) -> Option
 pub fn run_script(
     project_path: String,
     script_name: String,
-    project_id: String,
+    _project_id: String,
     package_manager: Option<String>,
     node_version: Option<String>,
 ) -> IpcResponse {
-    let _ = project_id;
     if !validate_script_name(&script_name) {
         return IpcResponse::err("脚本名称包含非法字符，仅允许字母、数字、连字符、下划线、冒号和点");
     }
@@ -237,101 +236,25 @@ pub fn run_script(
 // State<'_, AppState> 中的 '_ 是生命周期标注，告诉编译器这个引用的有效期
 // 这里用 '_ 让编译器自动推断，你不需要手动管理
 #[tauri::command]
-pub fn stop_script(state: State<'_, AppState>, project_id: String) -> IpcResponse {
-    // .lock() 获取互斥锁，返回 Result（可能失败，比如锁被"poisoned"了）
-    // poisoned 指之前持有锁的线程 panic 了，锁的数据可能不一致
-    let mut procs = match state.running_processes.lock() {
-        Ok(p) => p,
-        Err(_) => return IpcResponse::err("内部状态锁异常"),
-    };
-
-    // if let 是 match 的语法糖，只关心一个分支时比 match 更简洁
-    // .remove() 从 HashMap 中取出并移除这个 key
-    if let Some(mut child) = procs.remove(&project_id) {
-        if cfg!(target_os = "windows") {
-            // Windows 下用 taskkill 杀进程树：/t = 包含子进程，/f = 强制
-            // 因为 child.kill() 在 Windows 只杀父进程，不杀子进程
-            let pid = child.id();
-            let _ = Command::new("taskkill")
-                .args(["/pid", &pid.to_string(), "/t", "/f"])
-                .spawn();
-        } else {
-            let _ = child.kill();
-        }
-        IpcResponse::ok(serde_json::json!({
-            "message": "脚本已停止",
-            "mode": "managed",
-            "trackable": true,
-        }))
-    } else {
-        IpcResponse::err(EXTERNAL_UNTRACKABLE)
-    }
+pub fn stop_script(_state: State<'_, AppState>, _project_id: String) -> IpcResponse {
+    IpcResponse::err(EXTERNAL_UNTRACKABLE)
 }
 
 /// 检查脚本是否仍在运行
 #[tauri::command]
-pub fn check_script_status(state: State<'_, AppState>, project_id: String) -> IpcResponse {
-    let mut procs = match state.running_processes.lock() {
-        Ok(p) => p,
-        Err(_) => return IpcResponse::err("内部状态锁异常"),
-    };
-
-    if let Some(child) = procs.get_mut(&project_id) {
-        // try_wait() 非阻塞地检查进程状态：
-        //   Ok(Some(_)) → 进程已退出
-        //   Ok(None) → 进程还在跑
-        //   Err(_) → 检查失败（比如权限问题）
-        match child.try_wait() {
-            Ok(Some(_)) => {
-                procs.remove(&project_id);
-                IpcResponse::ok(serde_json::json!({
-                    "isRunning": false,
-                    "mode": "managed",
-                    "trackable": true,
-                    "reason": "process_exited",
-                }))
-            }
-            Ok(None) => IpcResponse::ok(serde_json::json!({
-                "isRunning": true,
-                "mode": "managed",
-                "trackable": true,
-            })),
-            Err(_) => {
-                procs.remove(&project_id);
-                IpcResponse::ok(serde_json::json!({
-                    "isRunning": false,
-                    "mode": "managed",
-                    "trackable": true,
-                    "reason": "process_exited",
-                }))
-            }
-        }
-    } else {
-        // HashMap 里没有这个 project_id，说明是外部终端启动的，无法追踪
-        IpcResponse::ok(serde_json::json!({
-            "isRunning": false,
-            "mode": "external",
-            "trackable": false,
-            "reason": EXTERNAL_UNTRACKABLE,
-        }))
-    }
+pub fn check_script_status(_state: State<'_, AppState>, _project_id: String) -> IpcResponse {
+    IpcResponse::ok(serde_json::json!({
+        "isRunning": false,
+        "mode": "external",
+        "trackable": false,
+        "reason": EXTERNAL_UNTRACKABLE,
+    }))
 }
 
 /// 获取脚本的输出内容
 #[tauri::command]
-pub fn get_script_output(state: State<'_, AppState>, project_id: String) -> IpcResponse {
-    let outputs = match state.script_outputs.lock() {
-        Ok(o) => o,
-        Err(_) => return IpcResponse::err("内部状态锁异常"),
-    };
-
-    if let Some(buf) = outputs.get(&project_id) {
-        // 双层 lock：先锁 HashMap 拿到 Arc<Mutex<String>>，再锁内层 Mutex 拿到 String
-        let text = buf.lock().map(|b| b.clone()).unwrap_or_default();
-        IpcResponse::ok(serde_json::json!({ "output": text }))
-    } else {
-        IpcResponse::ok(serde_json::json!({ "output": "" }))
-    }
+pub fn get_script_output(_state: State<'_, AppState>, _project_id: String) -> IpcResponse {
+    IpcResponse::ok(serde_json::json!({ "output": "" }))
 }
 
 // ── 编辑器命令 ──
@@ -385,22 +308,26 @@ pub fn fetch_remote_node_versions() -> IpcResponse {
     }
 }
 
-/// 通过版本管理器安装指定版本的 Node.js
-#[tauri::command]
-pub fn install_node_version(version: String, manager: Option<String>) -> IpcResponse {
-    let mgr = if let Some(m) = manager {
+fn resolve_manager(manager: Option<String>) -> NodeVersionManager {
+    if let Some(m) = manager {
         match m.as_str() {
-            "nvmd" => crate::models::NodeVersionManager::Nvmd,
-            "nvs" => crate::models::NodeVersionManager::Nvs,
-            "nvm" => crate::models::NodeVersionManager::Nvm,
-            "nvm-windows" => crate::models::NodeVersionManager::NvmWindows,
+            "nvmd" => NodeVersionManager::Nvmd,
+            "nvs" => NodeVersionManager::Nvs,
+            "nvm" => NodeVersionManager::Nvm,
+            "nvm-windows" => NodeVersionManager::NvmWindows,
             _ => detector::detect_node_version_manager(),
         }
     } else {
         detector::detect_node_version_manager()
-    };
+    }
+}
 
-    if mgr == crate::models::NodeVersionManager::None {
+/// 通过版本管理器安装指定版本的 Node.js
+#[tauri::command]
+pub fn install_node_version(version: String, manager: Option<String>) -> IpcResponse {
+    let mgr = resolve_manager(manager);
+
+    if mgr == NodeVersionManager::None {
         return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm/nvs）");
     }
 
@@ -416,19 +343,9 @@ pub fn install_node_version(version: String, manager: Option<String>) -> IpcResp
 /// 切换系统当前使用的 Node.js 版本
 #[tauri::command]
 pub fn switch_node_version(version: String, manager: Option<String>) -> IpcResponse {
-    let mgr = if let Some(m) = manager {
-        match m.as_str() {
-            "nvmd" => crate::models::NodeVersionManager::Nvmd,
-            "nvs" => crate::models::NodeVersionManager::Nvs,
-            "nvm" => crate::models::NodeVersionManager::Nvm,
-            "nvm-windows" => crate::models::NodeVersionManager::NvmWindows,
-            _ => detector::detect_node_version_manager(),
-        }
-    } else {
-        detector::detect_node_version_manager()
-    };
+    let mgr = resolve_manager(manager);
 
-    if mgr == crate::models::NodeVersionManager::None {
+    if mgr == NodeVersionManager::None {
         return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm/nvs）");
     }
 
@@ -444,19 +361,9 @@ pub fn switch_node_version(version: String, manager: Option<String>) -> IpcRespo
 /// 通过版本管理器卸载指定已安装版本的 Node.js
 #[tauri::command]
 pub fn uninstall_node_version(version: String, manager: Option<String>) -> IpcResponse {
-    let mgr = if let Some(m) = manager {
-        match m.as_str() {
-            "nvmd" => crate::models::NodeVersionManager::Nvmd,
-            "nvs" => crate::models::NodeVersionManager::Nvs,
-            "nvm" => crate::models::NodeVersionManager::Nvm,
-            "nvm-windows" => crate::models::NodeVersionManager::NvmWindows,
-            _ => detector::detect_node_version_manager(),
-        }
-    } else {
-        detector::detect_node_version_manager()
-    };
+    let mgr = resolve_manager(manager);
 
-    if mgr == crate::models::NodeVersionManager::None {
+    if mgr == NodeVersionManager::None {
         return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm/nvs）");
     }
 
@@ -483,7 +390,7 @@ pub fn set_project_node_version(
     };
 
     let manager = detector::detect_node_version_manager();
-    if manager == crate::models::NodeVersionManager::None {
+    if manager == NodeVersionManager::None {
         return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm）");
     }
 
@@ -508,8 +415,8 @@ pub fn set_project_node_version(
     }
 
     let file_name = match manager {
-        crate::models::NodeVersionManager::Nvmd => ".nvmdrc",
-        crate::models::NodeVersionManager::Nvs => ".node-version",
+        NodeVersionManager::Nvmd => ".nvmdrc",
+        NodeVersionManager::Nvs => ".node-version",
         _ => ".nvmrc",
     };
 

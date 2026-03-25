@@ -1,11 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { tauriAPI } from "../lib/tauri";
-
-interface EditorStatus {
-  vscode: boolean;
-  cursor: boolean;
-  webstorm: boolean;
-}
+import { EditorStatus } from "../types/project";
 
 export function useEditors() {
   const [editors, setEditors] = useState<EditorStatus | null>(null);

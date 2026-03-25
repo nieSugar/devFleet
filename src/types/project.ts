@@ -59,3 +59,9 @@ export interface RemoteNodeVersion {
   lts: string | false;
   security: boolean;
 }
+
+export interface EditorStatus {
+  vscode: boolean;
+  cursor: boolean;
+  webstorm: boolean;
+}

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { IpcResponse, Project, ProjectConfig } from "../types/project";
+import type { IpcResponse, Project, ProjectConfig, NvmInfo, RemoteNodeVersion, EditorStatus } from "../types/project";
 
 type RunScriptParams = {
   projectPath: string;
@@ -14,12 +14,6 @@ type SetNodeVersionParams = {
   projectId: string;
   nodeVersion: string | null | undefined;
 };
-
-interface EditorStatus {
-  vscode: boolean;
-  cursor: boolean;
-  webstorm: boolean;
-}
 
 interface ScriptRunResult {
   message: string;
@@ -100,7 +94,7 @@ export const tauriAPI = {
   ): Promise<IpcResponse<MessageResult>> =>
     invoke("remove_project_from_config", { projectId }),
 
-  getNvmInfo: (): Promise<IpcResponse<import("../types/project").NvmInfo>> =>
+  getNvmInfo: (): Promise<IpcResponse<NvmInfo>> =>
     invoke("get_nvm_info"),
 
   detectProjectNodeVersion: (
@@ -114,7 +108,7 @@ export const tauriAPI = {
     invoke("set_project_node_version", params),
 
   fetchRemoteNodeVersions: (): Promise<
-    IpcResponse<import("../types/project").RemoteNodeVersion[]>
+    IpcResponse<RemoteNodeVersion[]>
   > => invoke("fetch_remote_node_versions"),
 
   installNodeVersion: (params: {

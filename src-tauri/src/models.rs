@@ -124,6 +124,8 @@ pub struct Project {
 pub struct ProjectConfig {
     pub projects: Vec<Project>,
     pub last_updated: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub editors: Option<EditorCache>,
 }
 
 // ── Node 版本管理器类型 ──

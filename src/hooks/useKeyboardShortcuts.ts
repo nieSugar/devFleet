@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 interface ShortcutHandlers {
   onAddProject: () => void;
@@ -6,6 +6,11 @@ interface ShortcutHandlers {
 }
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
+  const ref = useRef(handlers);
+  useEffect(() => {
+    ref.current = handlers;
+  });
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
@@ -14,16 +19,16 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       switch (e.key.toLowerCase()) {
         case "n":
           e.preventDefault();
-          handlers.onAddProject();
+          ref.current.onAddProject();
           break;
         case "r":
           e.preventDefault();
-          handlers.onRefresh();
+          ref.current.onRefresh();
           break;
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handlers]);
+  }, []);
 }

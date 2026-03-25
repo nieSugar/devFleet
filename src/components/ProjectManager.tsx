@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Project, ProjectConfig } from "../types/project";
 import { tauriAPI } from "../lib/tauri";
 import { useProjects } from "../hooks/useProjects";
@@ -52,14 +52,16 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
     nvmRefreshKeyRef.current = nvmRefreshKey;
   }, [nvmRefreshKey, refreshNvmInfo, refreshProjects]);
 
+  const handleRefresh = useCallback(() => {
+    refreshEditors();
+    refreshProjects().then((r) => {
+      if (r && !r.success) messageApi.error(r.error || "刷新失败");
+    });
+  }, [refreshEditors, refreshProjects, messageApi]);
+
   useKeyboardShortcuts({
     onAddProject: () => handleAdd(),
-    onRefresh: () => {
-      refreshEditors();
-      refreshProjects().then((r) => {
-        if (r && !r.success) messageApi.error(r.error || "刷新失败");
-      });
-    },
+    onRefresh: handleRefresh,
   });
 
   const showMsg = (type: "success" | "error", text: string) => {
@@ -179,12 +181,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
         totalCount={projects.length}
         searchText={searchText}
         onAdd={handleAdd}
-        onRefresh={() => {
-          refreshEditors();
-          refreshProjects().then((r) => {
-            if (r && !r.success) showMsg("error", r.error || "刷新失败");
-          });
-        }}
+        onRefresh={handleRefresh}
         onSearch={setSearchText}
       />
 

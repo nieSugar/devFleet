@@ -8,6 +8,7 @@ use crate::models::{EditorCache, ProjectConfig};
 use crate::project;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 
 // const 编译时常量，类型 &str（字符串切片）
 const CONFIG_FILE: &str = "devfleet-config.json";
@@ -44,8 +45,29 @@ pub fn get_config_path() -> PathBuf {
     app_dir.join(CONFIG_FILE)
 }
 
-/// 快速加载配置文件，直接反序列化 JSON，不做任何文件系统校验
-pub fn load() -> ProjectConfig {
+/// 全局配置文件锁，序列化所有配置文件的读写操作，防止并发竞争
+fn config_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+/// 原子写入：先写临时文件再重命名，防止进程崩溃时配置文件损坏
+fn atomic_write(path: &PathBuf, content: &str) -> bool {
+    let tmp = path.with_extension("json.tmp");
+    if fs::write(&tmp, content).is_err() {
+        eprintln!("[devfleet] 写入临时配置文件失败");
+        return false;
+    }
+    if fs::rename(&tmp, path).is_err() {
+        eprintln!("[devfleet] 重命名配置文件失败");
+        let _ = fs::remove_file(&tmp);
+        return false;
+    }
+    true
+}
+
+/// 内部加载逻辑（调用方需已持有 config_lock）
+fn load_unlocked() -> ProjectConfig {
     let config_path = get_config_path();
 
     if !config_path.exists() {
@@ -69,10 +91,56 @@ pub fn load() -> ProjectConfig {
     }
 }
 
+/// 内部保存逻辑（调用方需已持有 config_lock）
+/// 如果调用方未提供 editors 字段，会从磁盘已有配置中保留
+fn save_unlocked(config: &ProjectConfig) -> bool {
+    let config_path = get_config_path();
+    let mut cfg = config.clone();
+    cfg.last_updated = chrono::Utc::now().to_rfc3339();
+
+    if cfg.editors.is_none() {
+        if let Ok(data) = fs::read_to_string(&config_path) {
+            if let Ok(existing) = serde_json::from_str::<ProjectConfig>(&data) {
+                cfg.editors = existing.editors;
+            }
+        }
+    }
+
+    match serde_json::to_string_pretty(&cfg) {
+        Ok(json) => atomic_write(&config_path, &json),
+        Err(e) => {
+            eprintln!("[devfleet] 序列化配置失败: {}", e);
+            false
+        }
+    }
+}
+
+/// 创建默认的空配置
+fn default_config() -> ProjectConfig {
+    ProjectConfig {
+        projects: vec![], // vec![] 宏创建空 Vec（类似 JS 的 []）
+        last_updated: chrono::Utc::now().to_rfc3339(),
+        editors: None,
+    }
+}
+
+/// 快速加载配置文件，直接反序列化 JSON，不做任何文件系统校验
+pub fn load() -> ProjectConfig {
+    let _guard = config_lock().lock().unwrap_or_else(|e| e.into_inner());
+    load_unlocked()
+}
+
+/// 保存配置到文件，自动更新 last_updated 时间戳
+pub fn save(config: &ProjectConfig) -> bool {
+    let _guard = config_lock().lock().unwrap_or_else(|e| e.into_inner());
+    save_unlocked(config)
+}
+
 /// 加载配置并刷新：校验项目路径、重读 scripts、补充检测缺失字段
 /// 仅在用户主动刷新时调用
 pub fn load_and_refresh() -> ProjectConfig {
-    let mut config = load();
+    let _guard = config_lock().lock().unwrap_or_else(|e| e.into_inner());
+    let mut config = load_unlocked();
 
     config.projects.retain_mut(|p| {
         if project::is_valid_path(&p.path) {
@@ -89,46 +157,16 @@ pub fn load_and_refresh() -> ProjectConfig {
     config
 }
 
-/// 保存配置到文件，自动更新 last_updated 时间戳
-pub fn save(config: &ProjectConfig) -> bool {
-    let config_path = get_config_path();
-    // .clone() 深拷贝，避免修改传入的引用（Rust 的 &config 是只读借用）
-    let mut cfg = config.clone();
-    // chrono 库处理时间，Utc::now() 获取 UTC 时间，to_rfc3339() 转为标准时间字符串
-    cfg.last_updated = chrono::Utc::now().to_rfc3339();
-
-    match serde_json::to_string_pretty(&cfg) {
-        // fs::write 一步到位写文件（创建或覆盖），.is_ok() 转成 bool
-        Ok(json) => fs::write(&config_path, json).is_ok(),
-        Err(_) => false,
-    }
-}
-
-/// 创建默认的空配置
-fn default_config() -> ProjectConfig {
-    ProjectConfig {
-        projects: vec![], // vec![] 宏创建空 Vec（类似 JS 的 []）
-        last_updated: chrono::Utc::now().to_rfc3339(),
-    }
-}
-
+/// 从配置文件加载编辑器缓存
 pub fn load_editor_cache() -> Option<EditorCache> {
-    let data = fs::read_to_string(get_config_path()).ok()?;
-    let val: serde_json::Value = serde_json::from_str(&data).ok()?;
-    serde_json::from_value(val.get("editors")?.clone()).ok()
+    let _guard = config_lock().lock().unwrap_or_else(|e| e.into_inner());
+    load_unlocked().editors
 }
 
+/// 保存编辑器缓存到配置文件（load-modify-save 模式）
 pub fn save_editor_cache(cache: &EditorCache) {
-    let config_path = get_config_path();
-    let data = fs::read_to_string(&config_path).unwrap_or_else(|_| "{}".to_string());
-    let mut val: serde_json::Value =
-        serde_json::from_str(&data).unwrap_or(serde_json::json!({}));
-    if let Some(obj) = val.as_object_mut() {
-        if let Ok(v) = serde_json::to_value(cache) {
-            obj.insert("editors".to_string(), v);
-        }
-    }
-    if let Ok(json) = serde_json::to_string_pretty(&val) {
-        let _ = fs::write(&config_path, json);
-    }
+    let _guard = config_lock().lock().unwrap_or_else(|e| e.into_inner());
+    let mut cfg = load_unlocked();
+    cfg.editors = Some(cache.clone());
+    save_unlocked(&cfg);
 }

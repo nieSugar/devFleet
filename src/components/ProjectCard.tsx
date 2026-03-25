@@ -1,19 +1,13 @@
 import React from "react";
 import { Select, Typography, Tooltip } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
-import { Project, NvmInfo } from "../types/project";
+import { Project, NvmInfo, EditorStatus } from "../types/project";
 import EditorButton from "./EditorButton";
 import NodeVersionSelect from "./NodeVersionSelect";
 import vscodeSvg from "../img/vscode.svg";
 import cursorSvg from "../img/cursor.svg";
 import webstormSvg from "../img/webstorm.svg";
 import "./ProjectCard.css";
-
-interface EditorStatus {
-  vscode: boolean;
-  cursor: boolean;
-  webstorm: boolean;
-}
 
 interface ProjectCardProps {
   project: Project;
