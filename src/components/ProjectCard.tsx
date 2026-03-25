@@ -33,7 +33,7 @@ const PM_COLORS: Record<string, string> = {
   bun: "#c47eac",
 };
 
-const ProjectCard: React.FC<ProjectCardProps> = ({
+const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
   project,
   editors,
   nvmInfo,
@@ -177,6 +177,6 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
       </div>
     </div>
   );
-};
+});
 
 export default ProjectCard;
