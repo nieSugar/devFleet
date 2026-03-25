@@ -58,7 +58,7 @@ pub fn load_project_config() -> IpcResponse {
 }
 
 #[tauri::command]
-pub fn refresh_project_config() -> IpcResponse {
+pub async fn refresh_project_config() -> IpcResponse {
     let mut cfg = config::load_and_refresh();
 
     let indices: Vec<usize> = cfg
@@ -261,7 +261,7 @@ pub fn get_script_output(_state: State<'_, AppState>, _project_id: String) -> Ip
 
 /// 检测系统中安装了哪些代码编辑器（带缓存，force=true 时强制重新检测）
 #[tauri::command]
-pub fn detect_editors(force: Option<bool>) -> IpcResponse {
+pub async fn detect_editors(force: Option<bool>) -> IpcResponse {
     if force != Some(true) {
         if let Some(cached) = config::load_editor_cache() {
             return IpcResponse::ok(cached);
@@ -288,7 +288,7 @@ pub fn open_in_editor(editor: String, project_path: String) -> IpcResponse {
 
 /// 获取系统的 Node 版本管理器信息（nvm/nvmd/nvs 及已安装的版本列表）
 #[tauri::command]
-pub fn get_nvm_info() -> IpcResponse {
+pub async fn get_nvm_info() -> IpcResponse {
     IpcResponse::ok(detector::get_nvm_info())
 }
 
@@ -301,7 +301,7 @@ pub fn detect_project_node_version(project_path: String) -> IpcResponse {
 
 /// 从 nodejs.org 获取所有远程可用的 Node.js 版本列表
 #[tauri::command]
-pub fn fetch_remote_node_versions() -> IpcResponse {
+pub async fn fetch_remote_node_versions() -> IpcResponse {
     match detector::fetch_remote_node_versions() {
         Ok(versions) => IpcResponse::ok(versions),
         Err(e) => IpcResponse::err(e),
@@ -324,7 +324,7 @@ fn resolve_manager(manager: Option<String>) -> NodeVersionManager {
 
 /// 通过版本管理器安装指定版本的 Node.js
 #[tauri::command]
-pub fn install_node_version(version: String, manager: Option<String>) -> IpcResponse {
+pub async fn install_node_version(version: String, manager: Option<String>) -> IpcResponse {
     let mgr = resolve_manager(manager);
 
     if mgr == NodeVersionManager::None {
@@ -342,7 +342,7 @@ pub fn install_node_version(version: String, manager: Option<String>) -> IpcResp
 
 /// 切换系统当前使用的 Node.js 版本
 #[tauri::command]
-pub fn switch_node_version(version: String, manager: Option<String>) -> IpcResponse {
+pub async fn switch_node_version(version: String, manager: Option<String>) -> IpcResponse {
     let mgr = resolve_manager(manager);
 
     if mgr == NodeVersionManager::None {
@@ -360,7 +360,7 @@ pub fn switch_node_version(version: String, manager: Option<String>) -> IpcRespo
 
 /// 通过版本管理器卸载指定已安装版本的 Node.js
 #[tauri::command]
-pub fn uninstall_node_version(version: String, manager: Option<String>) -> IpcResponse {
+pub async fn uninstall_node_version(version: String, manager: Option<String>) -> IpcResponse {
     let mgr = resolve_manager(manager);
 
     if mgr == NodeVersionManager::None {

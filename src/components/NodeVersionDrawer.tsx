@@ -159,80 +159,58 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
     });
   };
 
-  const handleInstall = async (version: string) => {
-    if (!nvmInfo?.isInstalled) {
-      messageApi.error("未检测到版本管理器，无法安装");
-      return;
-    }
-    setBusy({ version, type: "install" });
-    try {
-      const result = await tauriAPI.installNodeVersion({
-        version,
-        manager: nvmInfo.manager,
-      });
-      if (result.success && result.data) {
-        messageApi.success(result.data.message);
-        await refreshNvmInfo();
-        onVersionChange?.();
-      } else {
-        messageApi.error(result.error || "安装失败");
+  const handleVersionAction = useCallback(
+    async (
+      version: string,
+      type: BusyAction["type"],
+      apiFn: (params: {
+        version: string;
+        manager?: string;
+      }) => Promise<
+        import("../types/project").IpcResponse<{ message: string; output: string }>
+      >,
+      errorMsg: string,
+    ) => {
+      if (!nvmInfo?.isInstalled) {
+        messageApi.error("未检测到版本管理器");
+        return;
       }
-    } catch {
-      messageApi.error("安装过程出错");
-    } finally {
-      setBusy(null);
-    }
-  };
+      setBusy({ version, type });
+      try {
+        const result = await apiFn({ version, manager: nvmInfo.manager });
+        if (result.success && result.data) {
+          messageApi.success(result.data.message);
+          await refreshNvmInfo();
+          onVersionChange?.();
+        } else {
+          messageApi.error(result.error || errorMsg);
+        }
+      } catch {
+        messageApi.error(errorMsg);
+      } finally {
+        setBusy(null);
+      }
+    },
+    [nvmInfo, messageApi, refreshNvmInfo, onVersionChange],
+  );
 
-  const handleSwitch = async (version: string) => {
-    if (!nvmInfo?.isInstalled) {
-      messageApi.error("未检测到版本管理器，无法切换");
-      return;
-    }
-    setBusy({ version, type: "switch" });
-    try {
-      const result = await tauriAPI.switchNodeVersion({
-        version,
-        manager: nvmInfo.manager,
-      });
-      if (result.success && result.data) {
-        messageApi.success(result.data.message);
-        await refreshNvmInfo();
-        onVersionChange?.();
-      } else {
-        messageApi.error(result.error || "切换失败");
-      }
-    } catch {
-      messageApi.error("切换版本出错");
-    } finally {
-      setBusy(null);
-    }
-  };
+  const handleInstall = useCallback(
+    (version: string) =>
+      handleVersionAction(version, "install", tauriAPI.installNodeVersion, "安装失败"),
+    [handleVersionAction],
+  );
 
-  const handleUninstall = async (version: string) => {
-    if (!nvmInfo?.isInstalled) {
-      messageApi.error("未检测到版本管理器，无法卸载");
-      return;
-    }
-    setBusy({ version, type: "uninstall" });
-    try {
-      const result = await tauriAPI.uninstallNodeVersion({
-        version,
-        manager: nvmInfo.manager,
-      });
-      if (result.success && result.data) {
-        messageApi.success(result.data.message);
-        await refreshNvmInfo();
-        onVersionChange?.();
-      } else {
-        messageApi.error(result.error || "卸载失败");
-      }
-    } catch {
-      messageApi.error("卸载版本出错");
-    } finally {
-      setBusy(null);
-    }
-  };
+  const handleSwitch = useCallback(
+    (version: string) =>
+      handleVersionAction(version, "switch", tauriAPI.switchNodeVersion, "切换失败"),
+    [handleVersionAction],
+  );
+
+  const handleUninstall = useCallback(
+    (version: string) =>
+      handleVersionAction(version, "uninstall", tauriAPI.uninstallNodeVersion, "卸载失败"),
+    [handleVersionAction],
+  );
 
   const handleRefresh = () => {
     setHasFetched(false);
@@ -407,7 +385,6 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
                         vi={vi}
                         busy={busy}
                         isBusy={isBusy}
-                        manager={nvmInfo?.manager ?? "none"}
                         onInstall={handleInstall}
                         onSwitch={handleSwitch}
                         onUninstall={handleUninstall}
@@ -429,7 +406,6 @@ interface VersionRowProps {
   vi: number;
   busy: BusyAction | null;
   isBusy: boolean;
-  manager: NodeVersionManager;
   onInstall: (version: string) => void;
   onSwitch: (version: string) => void;
   onUninstall: (version: string) => void;
