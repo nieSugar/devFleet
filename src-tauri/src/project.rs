@@ -44,12 +44,11 @@ pub fn get_package_scripts(project_path: &str) -> Vec<NpmScript> {
 /// 规范化路径：解析符号链接、相对路径等，返回绝对路径
 /// Windows 上 canonicalize 会返回 \\?\ 前缀的 UNC 路径，需要去掉
 pub fn canonicalize_path(project_path: &str) -> Option<String> {
-    fs::canonicalize(project_path).ok().and_then(|p| {
+    fs::canonicalize(project_path).ok().map(|p| {
         let s = p.to_string_lossy().to_string();
         // Windows 的 canonicalize 结果如 "\\?\E:\github\devFleet"
         // strip_prefix 去掉 "\\?\" 前缀，让路径更正常
-        let normalized = s.strip_prefix(r"\\?\").unwrap_or(&s).to_string();
-        Some(normalized)
+        s.strip_prefix(r"\\?\").unwrap_or(&s).to_string()
     })
 }
 

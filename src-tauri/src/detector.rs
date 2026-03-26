@@ -170,19 +170,19 @@ pub fn open_editor(editor: &str, project_path: &str) -> bool {
             } else if cfg!(target_os = "windows") {
                 // WebStorm 在 Windows 上的可执行文件名不确定，逐个尝试
                 for cmd in &["webstorm", "webstorm64", "webstorm.exe", "webstorm64.exe"] {
-                    if is_command_available(cmd) {
-                        if Command::new(cmd).arg(project_path).shell_spawn().is_ok() {
-                            return true;
-                        }
+                    if is_command_available(cmd)
+                        && Command::new(cmd).arg(project_path).shell_spawn().is_ok()
+                    {
+                        return true;
                     }
                 }
                 return false;
             } else {
                 for cmd in &["webstorm", "jetbrains-webstorm", "webstorm.sh"] {
-                    if is_command_available(cmd) {
-                        if Command::new(cmd).arg(project_path).spawn().is_ok() {
-                            return true;
-                        }
+                    if is_command_available(cmd)
+                        && Command::new(cmd).arg(project_path).spawn().is_ok()
+                    {
+                        return true;
                     }
                 }
                 return false;
@@ -312,7 +312,7 @@ fn get_current_version_by_manager(manager: &NodeVersionManager) -> Option<String
             String::from_utf8_lossy(&o.stderr)
         );
         let trimmed = combined.trim().trim_start_matches('v').to_string();
-        if !trimmed.is_empty() && trimmed.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+        if !trimmed.is_empty() && trimmed.chars().next().is_some_and(|c| c.is_ascii_digit()) {
             Some(trimmed)
         } else {
             None
@@ -862,11 +862,9 @@ pub fn switch_node_version(version: &str, manager: &NodeVersionManager) -> Resul
                             ver
                         ));
                     }
-                    return Ok(text.trim().to_string());
+                    Ok(text.trim().to_string())
                 }
-                Err(e) => {
-                    return Err(format!("执行切换命令失败: {}", e));
-                }
+                Err(e) => Err(format!("执行切换命令失败: {}", e)),
             }
         }
         NodeVersionManager::Nvs => {
@@ -888,9 +886,9 @@ pub fn switch_node_version(version: &str, manager: &NodeVersionManager) -> Resul
                     if o.status.success() && !nvmd_output_has_error(&combined) {
                         return verify_switch(ver, combined.trim().to_string());
                     }
-                    return Err(format!("切换失败: {}", combined.trim()));
+                    Err(format!("切换失败: {}", combined.trim()))
                 }
-                Err(e) => return Err(format!("执行切换命令失败: {}", e)),
+                Err(e) => Err(format!("执行切换命令失败: {}", e)),
             }
         }
         NodeVersionManager::NvmWindows => {
@@ -903,9 +901,9 @@ pub fn switch_node_version(version: &str, manager: &NodeVersionManager) -> Resul
                     if lower.contains("now using") || o.status.success() {
                         return verify_switch(ver, combined.trim().to_string());
                     }
-                    return Err(format!("切换失败: {}", combined.trim()));
+                    Err(format!("切换失败: {}", combined.trim()))
                 }
-                Err(e) => return Err(e),
+                Err(e) => Err(e),
             }
         }
         NodeVersionManager::Nvm => {
@@ -919,9 +917,9 @@ pub fn switch_node_version(version: &str, manager: &NodeVersionManager) -> Resul
                     if o.status.success() {
                         return verify_switch(ver, combined.trim().to_string());
                     }
-                    return Err(format!("切换失败: {}", combined.trim()));
+                    Err(format!("切换失败: {}", combined.trim()))
                 }
-                Err(e) => return Err(format!("执行切换命令失败: {}", e)),
+                Err(e) => Err(format!("执行切换命令失败: {}", e)),
             }
         }
         NodeVersionManager::None => Err("未检测到 Node 版本管理器".to_string()),
