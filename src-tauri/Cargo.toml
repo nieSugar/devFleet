@@ -3,7 +3,7 @@
 
 [package]
 name = "devfleet"
-version = "2.1.0"
+version = "2.1.1"
 description = "用于快速启动项目与编辑器"
 authors = ["nieSugar"]
 # edition 指定 Rust 版本规范（不是编译器版本，是语言特性集）

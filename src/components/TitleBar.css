@@ -21,20 +21,12 @@
 }
 
 .titlebar-logo {
-  width: 14px;
-  height: 14px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
-  border-radius: 3.5px;
-  position: relative;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
   flex-shrink: 0;
-}
-.titlebar-logo::after {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  background: var(--bg-deep);
-  border-radius: 2px;
-  transition: background-color var(--transition-slow);
+  object-fit: contain;
+  pointer-events: none;
 }
 
 .titlebar-name {

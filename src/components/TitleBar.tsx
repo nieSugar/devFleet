@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTheme } from "../contexts/ThemeContext";
 import UpdateChecker from "./UpdateChecker";
+import appIcon from "../assets/app-icon.png";
 import "./TitleBar.css";
 
 interface TitleBarProps {
@@ -29,7 +30,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
   return (
     <header className="titlebar" data-tauri-drag-region>
       <div className="titlebar-brand" data-tauri-drag-region>
-        <div className="titlebar-logo" />
+        <img className="titlebar-logo" src={appIcon} alt="devFleet" />
         <span className="titlebar-name" data-tauri-drag-region>
           devFleet
         </span>

@@ -7,6 +7,18 @@ use std::process::Command;
 use std::sync::{LazyLock, OnceLock};
 use std::time::{Duration, Instant};
 
+/// Windows 上创建隐藏窗口的 cmd.exe Command，避免弹出黑色控制台窗口
+fn new_cmd() -> Command {
+    let mut cmd = Command::new("cmd");
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 // ── 包管理器检测 ──
 
 /// 通过 lock 文件来判断项目使用的包管理器
@@ -56,7 +68,7 @@ fn is_command_available(cmd: &str) -> bool {
     // 注意：cfg!() 不会排除代码（两个分支都会编译），只是条件分支
     // 而 #[cfg()] 属性会真正排除代码（不编译另一个分支）
     let result = if cfg!(target_os = "windows") {
-        Command::new("cmd")
+        new_cmd()
             .args(["/C", &format!("{} --version", cmd)])
             // Stdio::null() 丢弃输出，不需要看 --version 输出什么，只关心退出码
             .stdout(std::process::Stdio::null())
@@ -216,20 +228,19 @@ fn is_unix_nvm_installed() -> bool {
 /// 优先级：nvmd > nvs > nvm/nvm-windows
 pub fn detect_node_version_manager() -> NodeVersionManager {
     // nvmd（跨平台 GUI 版本管理器）
-    if let Ok(r) = Command::new(if cfg!(target_os = "windows") {
-        "cmd"
+    if let Ok(r) = if cfg!(target_os = "windows") {
+        new_cmd()
+            .args(["/C", "nvmd", "--help"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
     } else {
-        "nvmd"
-    })
-    .args(if cfg!(target_os = "windows") {
-        vec!["/C", "nvmd", "--help"]
-    } else {
-        vec!["--help"]
-    })
-    .stdout(std::process::Stdio::null())
-    .stderr(std::process::Stdio::null())
-    .status()
-    {
+        Command::new("nvmd")
+            .arg("--help")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+    } {
         if r.success() {
             return NodeVersionManager::Nvmd;
         }
@@ -237,7 +248,7 @@ pub fn detect_node_version_manager() -> NodeVersionManager {
 
     // nvs（跨平台）
     let nvs_result = if cfg!(target_os = "windows") {
-        Command::new("cmd")
+        new_cmd()
             .args(["/C", "nvs", "--version"])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
@@ -255,7 +266,7 @@ pub fn detect_node_version_manager() -> NodeVersionManager {
 
     // nvm / nvm-windows
     if cfg!(target_os = "windows") {
-        let r = Command::new("cmd")
+        let r = new_cmd()
             .args(["/C", "nvm", "version"])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
@@ -273,7 +284,7 @@ pub fn detect_node_version_manager() -> NodeVersionManager {
 /// 获取当前系统正在使用的 Node.js 版本号
 pub fn get_current_node_version() -> Option<String> {
     let output = if cfg!(target_os = "windows") {
-        Command::new("cmd")
+        new_cmd()
             .args(["/C", "node", "--version"])
             .output()
     } else {
@@ -297,7 +308,7 @@ fn get_current_version_by_manager(manager: &NodeVersionManager) -> Option<String
     let output = match manager {
         NodeVersionManager::Nvmd => {
             if cfg!(target_os = "windows") {
-                Command::new("cmd").args(["/C", "nvmd", "current"]).output()
+                new_cmd().args(["/C", "nvmd", "current"]).output()
             } else {
                 Command::new("nvmd").arg("current").output()
             }
@@ -330,20 +341,20 @@ pub fn get_node_versions(manager: &NodeVersionManager) -> Vec<NodeVersion> {
     let output = match manager {
         NodeVersionManager::Nvmd => {
             if cfg!(target_os = "windows") {
-                Command::new("cmd").args(["/C", "nvmd", "ls"]).output()
+                new_cmd().args(["/C", "nvmd", "ls"]).output()
             } else {
                 Command::new("nvmd").arg("ls").output()
             }
         }
         NodeVersionManager::Nvs => {
             if cfg!(target_os = "windows") {
-                Command::new("cmd").args(["/C", "nvs", "ls"]).output()
+                new_cmd().args(["/C", "nvs", "ls"]).output()
             } else {
                 Command::new("nvs").arg("ls").output()
             }
         }
         NodeVersionManager::NvmWindows => {
-            Command::new("cmd").args(["/C", "nvm", "list"]).output()
+            new_cmd().args(["/C", "nvm", "list"]).output()
         }
         NodeVersionManager::Nvm => {
             Command::new("bash")
@@ -452,7 +463,7 @@ fn is_nvm_windows_available() -> bool {
     if !cfg!(target_os = "windows") {
         return false;
     }
-    let r = Command::new("cmd")
+    let r = new_cmd()
         .args(["/C", "nvm", "version"])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -530,7 +541,7 @@ fn get_nvm_windows_root() -> Option<PathBuf> {
                 }
             }
             if cfg!(target_os = "windows") {
-                if let Ok(output) = Command::new("cmd").args(["/C", "nvm", "root"]).output() {
+                if let Ok(output) = new_cmd().args(["/C", "nvm", "root"]).output() {
                     let text = String::from_utf8_lossy(&output.stdout);
                     for line in text.lines() {
                         let trimmed = line
@@ -699,7 +710,7 @@ fn bridge_nvm_to_nvmd(ver: &str) -> bool {
 /// 创建目录链接：Windows 用 junction，Unix 用 symlink
 fn create_dir_link(link: &Path, target: &Path) -> bool {
     if cfg!(target_os = "windows") {
-        Command::new("cmd")
+        new_cmd()
             .args([
                 "/C",
                 "mklink",
@@ -734,7 +745,7 @@ pub fn install_node_version(version: &str, manager: &NodeVersionManager) -> Resu
     let result = match manager {
         NodeVersionManager::Nvmd => {
             if cfg!(target_os = "windows") && is_nvm_windows_available() {
-                let mut cmd = Command::new("cmd");
+                let mut cmd = new_cmd();
                 cmd.args(["/C", "nvm", "install", ver]);
                 output_with_timeout(cmd, 120)
             } else if cfg!(target_os = "windows") {
@@ -761,7 +772,7 @@ pub fn install_node_version(version: &str, manager: &NodeVersionManager) -> Resu
         NodeVersionManager::Nvs => {
             let node_ver = format!("node/{}", ver);
             if cfg!(target_os = "windows") {
-                Command::new("cmd")
+                new_cmd()
                     .args(["/C", "nvs", "add", &node_ver])
                     .output()
                     .map_err(|e| e.to_string())
@@ -773,7 +784,7 @@ pub fn install_node_version(version: &str, manager: &NodeVersionManager) -> Resu
             }
         }
         NodeVersionManager::NvmWindows => {
-            let mut cmd = Command::new("cmd");
+            let mut cmd = new_cmd();
             cmd.args(["/C", "nvm", "install", ver]);
             output_with_timeout(cmd, 120)
         }
@@ -829,7 +840,7 @@ pub fn switch_node_version(version: &str, manager: &NodeVersionManager) -> Resul
     match manager {
         NodeVersionManager::Nvmd => {
             let nvmd_out = if cfg!(target_os = "windows") {
-                Command::new("cmd")
+                new_cmd()
                     .args(["/C", "nvmd", "use", ver])
                     .output()
             } else {
@@ -844,7 +855,7 @@ pub fn switch_node_version(version: &str, manager: &NodeVersionManager) -> Resul
                     if nvmd_output_has_error(&text) {
                         if bridge_nvm_to_nvmd(ver) {
                             let retry = if cfg!(target_os = "windows") {
-                                Command::new("cmd")
+                                new_cmd()
                                     .args(["/C", "nvmd", "use", ver])
                                     .output()
                             } else {
@@ -870,7 +881,7 @@ pub fn switch_node_version(version: &str, manager: &NodeVersionManager) -> Resul
         NodeVersionManager::Nvs => {
             let node_ver = format!("node/{}", ver);
             let result = if cfg!(target_os = "windows") {
-                Command::new("cmd")
+                new_cmd()
                     .args(["/C", "nvs", "use", &node_ver])
                     .output()
                     .map_err(|e| e.to_string())
@@ -892,7 +903,7 @@ pub fn switch_node_version(version: &str, manager: &NodeVersionManager) -> Resul
             }
         }
         NodeVersionManager::NvmWindows => {
-            let mut cmd = Command::new("cmd");
+            let mut cmd = new_cmd();
             cmd.args(["/C", "nvm", "use", ver]);
             match output_with_timeout(cmd, CMD_TIMEOUT_SECS) {
                 Ok(o) => {
@@ -937,7 +948,7 @@ pub fn uninstall_node_version(
     let result = match manager {
         NodeVersionManager::Nvmd => {
             if cfg!(target_os = "windows") && is_nvm_windows_available() {
-                let mut cmd = Command::new("cmd");
+                let mut cmd = new_cmd();
                 cmd.args(["/C", "nvm", "uninstall", ver]);
                 output_with_timeout(cmd, CMD_TIMEOUT_SECS)
             } else if cfg!(target_os = "windows") {
@@ -971,7 +982,7 @@ pub fn uninstall_node_version(
         NodeVersionManager::Nvs => {
             let node_ver = format!("node/{}", ver);
             if cfg!(target_os = "windows") {
-                Command::new("cmd")
+                new_cmd()
                     .args(["/C", "nvs", "remove", &node_ver])
                     .output()
                     .map_err(|e| e.to_string())
@@ -983,7 +994,7 @@ pub fn uninstall_node_version(
             }
         }
         NodeVersionManager::NvmWindows => {
-            let mut cmd = Command::new("cmd");
+            let mut cmd = new_cmd();
             cmd.args(["/C", "nvm", "uninstall", ver]);
             output_with_timeout(cmd, CMD_TIMEOUT_SECS)
         }
@@ -1030,18 +1041,15 @@ impl CommandShellSpawn for Command {
     fn shell_spawn(&mut self) -> std::io::Result<std::process::Child> {
         #[cfg(target_os = "windows")]
         {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
             let prog = format!("{:?}", self.get_program());
             let args: Vec<String> = self
                 .get_args()
                 .map(|a| a.to_string_lossy().to_string())
                 .collect();
-            Command::new("cmd")
+            new_cmd()
                 .arg("/C")
                 .arg(prog.trim_matches('"'))
                 .args(args)
-                .creation_flags(CREATE_NO_WINDOW)
                 .spawn()
         }
         #[cfg(not(target_os = "windows"))]
