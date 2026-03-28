@@ -108,10 +108,10 @@ pub fn add_project_to_config(project_path: String) -> IpcResponse {
     if !project::is_valid_path(&project_path) {
         return IpcResponse::err("所选文件夹不是有效的项目目录（缺少 package.json）");
     }
-    // match 解构 Option：Some(p) 取出值，None 走错误分支
     match project::add_to_config(&project_path) {
-        Some(p) => IpcResponse::ok(p),
-        None => IpcResponse::err("添加项目失败"),
+        Ok(p) => IpcResponse::ok(p),
+        Err(true) => IpcResponse::err("该项目路径已存在，请勿重复添加"),
+        Err(false) => IpcResponse::err("添加项目失败"),
     }
 }
 

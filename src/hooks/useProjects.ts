@@ -52,7 +52,11 @@ export function useProjects() {
       const result = await tauriAPI.addProjectToConfig(path);
       if (result.success && result.data) {
         const project = result.data;
-        setProjects((prev) => [...prev, project]);
+        setProjects((prev) =>
+          prev.some((p) => p.id === project.id)
+            ? prev
+            : [...prev, project],
+        );
       }
       return result;
     } finally {
@@ -70,35 +74,39 @@ export function useProjects() {
 
   const updateScriptSelection = useCallback(
     async (projectId: string, scriptName: string) => {
-      const prev = [...projects];
-      const updated = projects.map((p) =>
-        p.id === projectId ? { ...p, selectedScript: scriptName } : p
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === projectId ? { ...p, selectedScript: scriptName } : p,
+        ),
       );
-      setProjects(updated);
 
       try {
-        const currentResult = await tauriAPI.loadProjectConfig();
-        const currentConfig =
-          currentResult.success && currentResult.data
-            ? currentResult.data
-            : ({ projects: updated, lastUpdated: new Date().toISOString() } as ProjectConfig);
-
+        const cfgResult = await tauriAPI.loadProjectConfig();
+        if (!cfgResult.success || !cfgResult.data) {
+          return { success: false, error: "加载配置失败" };
+        }
+        const updatedProjects = cfgResult.data.projects.map((p) =>
+          p.id === projectId ? { ...p, selectedScript: scriptName } : p,
+        );
         const config: ProjectConfig = {
-          ...currentConfig,
-          projects: updated,
+          ...cfgResult.data,
+          projects: updatedProjects,
           lastUpdated: new Date().toISOString(),
         };
         const saveResult = await tauriAPI.saveProjectConfig(config);
         if (!saveResult.success) {
-          setProjects(prev);
+          setProjects((prev) =>
+            prev.map((p) =>
+              p.id === projectId ? { ...p, selectedScript: undefined } : p,
+            ),
+          );
         }
         return saveResult;
       } catch {
-        setProjects(prev);
         return { success: false, error: "保存配置失败" };
       }
     },
-    [projects]
+    [],
   );
 
   const runScript = useCallback(async (project: Project) => {

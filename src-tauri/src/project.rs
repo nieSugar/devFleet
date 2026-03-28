@@ -116,35 +116,31 @@ pub fn create_project(project_path: &str) -> Option<Project> {
     })
 }
 
-/// 添加项目到配置文件，如果路径已存在则返回已有项目（去重）
-pub fn add_to_config(project_path: &str) -> Option<Project> {
-    let project = create_project(project_path)?;
+/// 添加项目到配置文件，路径已存在则返回 None（由调用方区分"重复"和"失败"）
+/// 返回 Result：Ok(Project) 成功添加，Err(true) 路径已存在，Err(false) 其他失败
+pub fn add_to_config(project_path: &str) -> Result<Project, bool> {
+    let project = match create_project(project_path) {
+        Some(p) => p,
+        None => return Err(false),
+    };
     let mut config = config::load();
 
-    // .any() 检查是否已存在相同路径的项目
     if config.projects.iter().any(|p| p.path == project.path) {
-        // 已存在：返回已有的项目而不是重复添加
-        return config
-            .projects
-            .iter()
-            .find(|p| p.path == project.path)
-            .cloned(); // .cloned() 深拷贝，因为 .find() 返回的是引用
+        return Err(true); // 路径已存在
     }
 
     config.projects.push(project.clone());
     config::save(&config);
-    Some(project)
+    Ok(project)
 }
 
 /// 从配置中删除指定 ID 的项目
 pub fn remove_from_config(project_id: &str) -> bool {
     let mut config = config::load();
     let before = config.projects.len();
-    // retain() 保留满足条件的元素（类似 JS 的 filter，但是原地修改）
     config.projects.retain(|p| p.id != project_id);
     if config.projects.len() < before {
-        config::save(&config);
-        true
+        config::save(&config)
     } else {
         false
     }
