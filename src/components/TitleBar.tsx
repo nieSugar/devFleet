@@ -28,7 +28,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
   }, []);
 
   return (
-    <header className="titlebar" data-tauri-drag-region>
+    <header className="titlebar">
       <div className="titlebar-brand" data-tauri-drag-region>
         <img className="titlebar-logo" src={appIcon} alt="devFleet" />
         <span className="titlebar-name" data-tauri-drag-region>
