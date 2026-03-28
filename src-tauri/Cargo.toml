@@ -47,8 +47,9 @@ chrono = { version = "0.4", features = ["serde"] }
 rand = "0.8"
 # regex-lite: 轻量级正则引擎（比标准 regex 包更小，适合简单匹配场景）
 regex-lite = "0.1"
-# ureq: 轻量级同步 HTTP 客户端（用于从 nodejs.org 获取远程版本列表）
-ureq = { version = "2", features = ["json"] }
+# ureq: 轻量级同步 HTTP 客户端（用于获取远程版本列表）
+# native-certs: 让 rustls 使用系统证书链，兼容企业代理 / 自签名证书
+ureq = { version = "2", features = ["json", "native-certs"] }
 # Tauri 自动更新插件
 tauri-plugin-updater = "2"
 # Tauri 进程管理插件（提供 relaunch 能力）

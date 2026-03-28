@@ -107,4 +107,10 @@ export const tauriAPI = {
     manager?: string;
   }): Promise<IpcResponse<{ message: string; output: string }>> =>
     invoke("uninstall_node_version", params),
+
+  getNodeMirror: (): Promise<IpcResponse<{ mirror: string }>> =>
+    invoke("get_node_mirror"),
+
+  setNodeMirror: (mirror: string): Promise<IpcResponse<{ message: string }>> =>
+    invoke("set_node_mirror", { mirror }),
 };

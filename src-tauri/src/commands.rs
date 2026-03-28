@@ -281,13 +281,33 @@ pub fn detect_project_node_version(project_path: String) -> IpcResponse {
     IpcResponse::ok(serde_json::json!({ "version": version }))
 }
 
-/// 从 nodejs.org 获取所有远程可用的 Node.js 版本列表
+/// 获取所有远程可用的 Node.js 版本列表（自动读取镜像配置）
 #[tauri::command]
 pub async fn fetch_remote_node_versions() -> IpcResponse {
-    match detector::fetch_remote_node_versions() {
+    let mirror = config::load_node_mirror();
+    match detector::fetch_remote_node_versions(mirror.as_deref()) {
         Ok(versions) => IpcResponse::ok(versions),
         Err(e) => IpcResponse::err(e),
     }
+}
+
+/// 获取当前配置的 Node 镜像地址（空字符串表示官方源）
+#[tauri::command]
+pub fn get_node_mirror() -> IpcResponse {
+    let mirror = config::load_node_mirror().unwrap_or_default();
+    IpcResponse::ok(serde_json::json!({ "mirror": mirror }))
+}
+
+/// 设置 Node 镜像地址（传空字符串则恢复官方源）
+#[tauri::command]
+pub fn set_node_mirror(mirror: String) -> IpcResponse {
+    let value = if mirror.trim().is_empty() {
+        None
+    } else {
+        Some(mirror.trim())
+    };
+    config::save_node_mirror(value);
+    IpcResponse::ok_msg("镜像地址已更新")
 }
 
 fn resolve_manager(manager: Option<String>) -> NodeVersionManager {

@@ -64,6 +64,15 @@ impl IpcResponse {
     }
 }
 
+// ── 应用设置 ──
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AppSettings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_mirror: Option<String>,
+}
+
 // ── 编辑器缓存 ──
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -111,6 +120,8 @@ pub struct ProjectConfig {
     pub last_updated: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub editors: Option<EditorCache>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settings: Option<AppSettings>,
 }
 
 // ── Node 版本管理器类型 ──

@@ -446,13 +446,24 @@ pub fn get_nvm_info() -> NvmInfo {
 
 // ── 远程版本获取 ──
 
-const NODE_DIST_URL: &str = "https://nodejs.org/dist/index.json";
+const DEFAULT_NODE_DIST_BASE: &str = "https://nodejs.org/dist";
 
-/// 从 nodejs.org 获取所有可用的 Node.js 版本
-pub fn fetch_remote_node_versions() -> Result<Vec<RemoteNodeVersion>, String> {
-    let resp = ureq::get(NODE_DIST_URL)
+/// 获取远程 Node.js 版本列表，支持自定义镜像地址
+/// `mirror` 传入镜像 base URL（如 `https://npmmirror.com/mirrors/node`），
+/// 为 None 时使用官方源。
+pub fn fetch_remote_node_versions(mirror: Option<&str>) -> Result<Vec<RemoteNodeVersion>, String> {
+    let base = mirror.unwrap_or(DEFAULT_NODE_DIST_BASE);
+    let url = format!("{}/index.json", base.trim_end_matches('/'));
+
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(10))
+        .timeout_read(Duration::from_secs(30))
+        .build();
+
+    let resp = agent
+        .get(&url)
         .call()
-        .map_err(|e| format!("请求 Node.js 版本列表失败: {}", e))?;
+        .map_err(|e| format!("请求 Node.js 版本列表失败（{}）: {}", url, e))?;
 
     resp.into_json::<Vec<RemoteNodeVersion>>()
         .map_err(|e| format!("解析版本数据失败: {}", e))

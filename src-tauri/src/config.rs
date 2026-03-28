@@ -4,7 +4,7 @@
 //   macOS:   ~/Library/Application Support/devfleet/devfleet-config.json
 //   Linux:   ~/.local/share/devfleet/devfleet-config.json
 
-use crate::models::{EditorCache, ProjectConfig};
+use crate::models::{AppSettings, EditorCache, ProjectConfig};
 use crate::project;
 use std::fs;
 use std::path::PathBuf;
@@ -98,10 +98,15 @@ fn save_unlocked(config: &ProjectConfig) -> bool {
     let mut cfg = config.clone();
     cfg.last_updated = chrono::Utc::now().to_rfc3339();
 
-    if cfg.editors.is_none() {
+    if cfg.editors.is_none() || cfg.settings.is_none() {
         if let Ok(data) = fs::read_to_string(&config_path) {
             if let Ok(existing) = serde_json::from_str::<ProjectConfig>(&data) {
-                cfg.editors = existing.editors;
+                if cfg.editors.is_none() {
+                    cfg.editors = existing.editors;
+                }
+                if cfg.settings.is_none() {
+                    cfg.settings = existing.settings;
+                }
             }
         }
     }
@@ -118,9 +123,10 @@ fn save_unlocked(config: &ProjectConfig) -> bool {
 /// 创建默认的空配置
 fn default_config() -> ProjectConfig {
     ProjectConfig {
-        projects: vec![], // vec![] 宏创建空 Vec（类似 JS 的 []）
+        projects: vec![],
         last_updated: chrono::Utc::now().to_rfc3339(),
         editors: None,
+        settings: None,
     }
 }
 
@@ -168,5 +174,25 @@ pub fn save_editor_cache(cache: &EditorCache) {
     let _guard = config_lock().lock().unwrap_or_else(|e| e.into_inner());
     let mut cfg = load_unlocked();
     cfg.editors = Some(cache.clone());
+    save_unlocked(&cfg);
+}
+
+/// 读取 Node 镜像地址，None 表示使用官方默认源
+pub fn load_node_mirror() -> Option<String> {
+    let _guard = config_lock().lock().unwrap_or_else(|e| e.into_inner());
+    load_unlocked()
+        .settings
+        .and_then(|s| s.node_mirror)
+        .filter(|m| !m.trim().is_empty())
+}
+
+/// 保存 Node 镜像地址（传入 None 则清除，回退到官方默认源）
+pub fn save_node_mirror(mirror: Option<&str>) {
+    let _guard = config_lock().lock().unwrap_or_else(|e| e.into_inner());
+    let mut cfg = load_unlocked();
+    let settings = cfg.settings.get_or_insert(AppSettings { node_mirror: None });
+    settings.node_mirror = mirror
+        .map(|m| m.trim().to_string())
+        .filter(|m| !m.is_empty());
     save_unlocked(&cfg);
 }

@@ -34,6 +34,8 @@ pub fn run() {
             commands::install_node_version,
             commands::switch_node_version,
             commands::uninstall_node_version,
+            commands::get_node_mirror,
+            commands::set_node_mirror,
         ])
         // generate_context!() 宏在编译时读取 tauri.conf.json，生成应用上下文
         // run() 启动事件循环（类似前端的 app.mount()）

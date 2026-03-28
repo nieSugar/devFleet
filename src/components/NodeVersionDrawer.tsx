@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Drawer, Input, Spin, Tooltip, message } from "antd";
 import {
   SearchOutlined,
@@ -10,6 +10,9 @@ import {
   SafetyCertificateFilled,
   SwapOutlined,
   DeleteOutlined,
+  GlobalOutlined,
+  CheckOutlined,
+  EditOutlined,
 } from "@ant-design/icons";
 import { tauriAPI } from "../lib/tauri";
 import type {
@@ -48,6 +51,125 @@ const MANAGER_LABELS: Record<NodeVersionManager, string> = {
   none: "未检测到",
 };
 
+const MIRROR_PRESETS: { label: string; url: string }[] = [
+  { label: "官方源", url: "" },
+  { label: "npmmirror", url: "https://npmmirror.com/mirrors/node" },
+];
+
+interface MirrorSelectorProps {
+  mirror: string;
+  onMirrorChange: (url: string) => void;
+}
+
+const MirrorSelector: React.FC<MirrorSelectorProps> = ({
+  mirror,
+  onMirrorChange,
+}) => {
+  const [open, setOpen] = useState(false);
+  const [customMode, setCustomMode] = useState(false);
+  const [customUrl, setCustomUrl] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  const isPreset = MIRROR_PRESETS.some((p) => p.url === mirror);
+  const activeLabel =
+    MIRROR_PRESETS.find((p) => p.url === mirror)?.label ?? "自定义";
+
+  const toggleOpen = useCallback(() => {
+    setOpen((prev) => {
+      if (prev) {
+        setCustomMode(false);
+        setCustomUrl(mirror);
+      }
+      return !prev;
+    });
+  }, [mirror]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    if (open) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const selectPreset = (url: string) => {
+    onMirrorChange(url);
+    setOpen(false);
+  };
+
+  const submitCustom = () => {
+    const trimmed = customUrl.trim().replace(/\/+$/, "");
+    onMirrorChange(trimmed);
+    setOpen(false);
+  };
+
+  return (
+    <div className="nd-mirror" ref={ref}>
+      <button
+        className="nd-mirror-trigger"
+        onClick={toggleOpen}
+        title="Node 镜像源"
+      >
+        <GlobalOutlined />
+        <span>{activeLabel}</span>
+        <DownOutlined className={`nd-mirror-arrow ${open ? "open" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="nd-mirror-dropdown">
+          {MIRROR_PRESETS.map((p) => (
+            <button
+              key={p.url}
+              className={`nd-mirror-option ${mirror === p.url ? "active" : ""}`}
+              onClick={() => selectPreset(p.url)}
+            >
+              <span className="nd-mirror-option-label">{p.label}</span>
+              {p.url && (
+                <span className="nd-mirror-option-url">{p.url}</span>
+              )}
+              {mirror === p.url && <CheckOutlined className="nd-mirror-check" />}
+            </button>
+          ))}
+
+          <div className="nd-mirror-divider" />
+
+          {customMode ? (
+            <div className="nd-mirror-custom">
+              <input
+                className="nd-mirror-input"
+                placeholder="https://example.com/mirrors/node"
+                value={customUrl}
+                onChange={(e) => setCustomUrl(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && submitCustom()}
+                autoFocus
+              />
+              <button className="nd-mirror-save" onClick={submitCustom}>
+                确定
+              </button>
+            </div>
+          ) : (
+            <button
+              className={`nd-mirror-option ${!isPreset && mirror ? "active" : ""}`}
+              onClick={() => {
+                setCustomMode(true);
+                setCustomUrl(mirror);
+              }}
+            >
+              <EditOutlined />
+              <span className="nd-mirror-option-label">自定义镜像</span>
+              {!isPreset && mirror && (
+                <CheckOutlined className="nd-mirror-check" />
+              )}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 type BusyAction = { version: string; type: "install" | "switch" | "uninstall" };
 
 const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
@@ -66,6 +188,31 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
   const [messageApi, contextHolder] = message.useMessage();
   const [hasFetched, setHasFetched] = useState(false);
+  const [mirror, setMirror] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      tauriAPI.getNodeMirror().then((res) => {
+        if (res.success && res.data) setMirror(res.data.mirror);
+      });
+    }
+  }, [open]);
+
+  const handleMirrorChange = useCallback(
+    async (url: string) => {
+      const prev = mirror;
+      setMirror(url);
+      const res = await tauriAPI.setNodeMirror(url);
+      if (res.success) {
+        messageApi.success("镜像源已切换");
+        setHasFetched(false);
+      } else {
+        setMirror(prev);
+        messageApi.error(res.error || "设置镜像失败");
+      }
+    },
+    [mirror, messageApi],
+  );
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -294,6 +441,10 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
             )}
           </div>
         )}
+
+        <div className="nd-meta" style={{ marginTop: nvmInfo ? 8 : 14 }}>
+          <MirrorSelector mirror={mirror} onMirrorChange={handleMirrorChange} />
+        </div>
       </div>
 
       {/* ── Toolbar ── */}
