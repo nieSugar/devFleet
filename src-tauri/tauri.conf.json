@@ -20,7 +20,10 @@
         "resizable": true,
         "fullscreen": false,
         "decorations": false,
-        "shadow": true
+        "shadow": true,
+        "titleBarStyle": "Transparent",
+        "hiddenTitle": true,
+        "acceptFirstMouse": true
       }
     ],
     "security": {

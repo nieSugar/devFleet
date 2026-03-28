@@ -9,11 +9,17 @@ interface TitleBarProps {
   onOpenNodeManager?: () => void;
 }
 
+const IS_MACOS =
+  typeof window !== "undefined" &&
+  /mac/i.test(window.navigator.userAgent);
+
 const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
   const { theme, toggleTheme } = useTheme();
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
+    if (IS_MACOS) return;
+
     const win = getCurrentWindow();
     let cancelled = false;
     let unlisten: (() => void) | undefined;
@@ -46,9 +52,12 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
 
   return (
     <header className="titlebar">
-      <div className="titlebar-brand" data-tauri-drag-region>
+      <div
+        className="titlebar-brand"
+        {...(!IS_MACOS ? { "data-tauri-drag-region": true } : {})}
+      >
         <img className="titlebar-logo" src={appIcon} alt="devFleet" />
-        <span className="titlebar-name" data-tauri-drag-region>
+        <span className="titlebar-name">
           devFleet
         </span>
       </div>
@@ -72,65 +81,67 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
           {theme === "dark" ? <SunIcon /> : <MoonIcon />}
         </button>
 
-        <div className="tb-win-controls">
-          <button
-            className="tb-btn win-btn"
-            onClick={() => getCurrentWindow().minimize()}
-            title="最小化"
-          >
-            <svg width="10" height="1" viewBox="0 0 10 1">
-              <rect width="10" height="1" fill="currentColor" />
-            </svg>
-          </button>
-
-          <button
-            className="tb-btn win-btn"
-            onClick={() => getCurrentWindow().toggleMaximize()}
-            title={maximized ? "还原" : "最大化"}
-          >
-            {maximized ? (
-              <svg
-                width="10"
-                height="10"
-                viewBox="0 0 10 10"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1"
-              >
-                <rect x="2" y="0.5" width="7.5" height="7" rx="1" />
-                <rect x="0.5" y="2.5" width="7.5" height="7" rx="1" />
-              </svg>
-            ) : (
-              <svg
-                width="10"
-                height="10"
-                viewBox="0 0 10 10"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1"
-              >
-                <rect x="0.5" y="0.5" width="9" height="9" rx="1.5" />
-              </svg>
-            )}
-          </button>
-
-          <button
-            className="tb-btn win-btn close-btn"
-            onClick={() => getCurrentWindow().close()}
-            title="关闭"
-          >
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 10 10"
-              stroke="currentColor"
-              strokeWidth="1.2"
-              strokeLinecap="round"
+        {!IS_MACOS && (
+          <div className="tb-win-controls">
+            <button
+              className="tb-btn win-btn"
+              onClick={() => getCurrentWindow().minimize()}
+              title="最小化"
             >
-              <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" />
-            </svg>
-          </button>
-        </div>
+              <svg width="10" height="1" viewBox="0 0 10 1">
+                <rect width="10" height="1" fill="currentColor" />
+              </svg>
+            </button>
+
+            <button
+              className="tb-btn win-btn"
+              onClick={() => getCurrentWindow().toggleMaximize()}
+              title={maximized ? "还原" : "最大化"}
+            >
+              {maximized ? (
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 10 10"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                >
+                  <rect x="2" y="0.5" width="7.5" height="7" rx="1" />
+                  <rect x="0.5" y="2.5" width="7.5" height="7" rx="1" />
+                </svg>
+              ) : (
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 10 10"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                >
+                  <rect x="0.5" y="0.5" width="9" height="9" rx="1.5" />
+                </svg>
+              )}
+            </button>
+
+            <button
+              className="tb-btn win-btn close-btn"
+              onClick={() => getCurrentWindow().close()}
+              title="关闭"
+            >
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                stroke="currentColor"
+                strokeWidth="1.2"
+                strokeLinecap="round"
+              >
+                <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

@@ -1,3 +1,6 @@
+#[cfg(target_os = "macos")]
+use tauri::{Manager, TitleBarStyle};
+
 // mod 声明：告诉 Rust 编译器"把这些同目录下的 .rs 文件纳入编译"
 // 每个 mod 对应 src/ 下的一个同名文件，比如 mod commands → commands.rs
 // Rust 的模块系统：必须显式声明 mod，文件不会自动被编译（跟 JS 的 import 不同）
@@ -13,6 +16,18 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                // macOS 上保留原生窗口装饰，避免无边框窗口吞掉点击或出现假死。
+                if let Some(window) = app.get_webview_window("main") {
+                    window.set_decorations(true)?;
+                    window.set_title_bar_style(TitleBarStyle::Transparent)?;
+                }
+            }
+
+            Ok(())
+        })
         // invoke_handler 注册所有前端可调用的命令
         // generate_handler! 宏会自动为每个函数生成 IPC 路由
         // 前端通过 invoke('函数名', {参数}) 即可调用对应的 Rust 函数
