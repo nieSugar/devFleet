@@ -14,6 +14,17 @@
     border-color var(--transition-slow);
 }
 
+/* 确保整个标题栏都可以拖动 */
+.titlebar[data-tauri-drag-region] {
+  -webkit-app-region: drag;
+}
+
+/* 按钮等交互元素需要设置为非拖动区域 */
+.titlebar-actions,
+.tb-btn {
+  -webkit-app-region: no-drag;
+}
+
 .titlebar-brand {
   display: flex;
   align-items: center;
