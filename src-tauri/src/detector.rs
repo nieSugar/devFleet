@@ -7,6 +7,19 @@ use std::process::Command;
 use std::sync::{LazyLock, OnceLock};
 use std::time::{Duration, Instant};
 
+/// 回收子进程退出状态，避免 Unix 上产生僵尸进程
+fn detach_child(result: std::io::Result<std::process::Child>) -> bool {
+    match result {
+        Ok(mut child) => {
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+            true
+        }
+        Err(_) => false,
+    }
+}
+
 /// Windows 上创建隐藏窗口的 cmd.exe Command，避免弹出黑色控制台窗口
 fn new_cmd() -> Command {
     let mut cmd = Command::new("cmd");
@@ -153,57 +166,60 @@ pub fn detect_editors() -> (bool, bool, bool) {
 /// 用指定编辑器打开项目目录
 /// macOS 用 `open -a` 打开 .app，Windows/Linux 直接执行 CLI 命令
 pub fn open_editor(editor: &str, project_path: &str) -> bool {
-    let result = match editor {
+    match editor {
         "vscode" => {
             if cfg!(target_os = "macos") {
-                Command::new("open")
-                    .args(["-a", "Visual Studio Code", project_path])
-                    .spawn()
+                detach_child(
+                    Command::new("open")
+                        .args(["-a", "Visual Studio Code", project_path])
+                        .spawn(),
+                )
             } else {
-                // shell_spawn() 是下面定义的 trait 扩展方法
-                // Windows 下需要通过 cmd /C 间接执行，否则某些 PATH 里的命令找不到
-                Command::new("code").arg(project_path).shell_spawn()
+                detach_child(Command::new("code").arg(project_path).shell_spawn())
             }
         }
         "cursor" => {
             if cfg!(target_os = "macos") {
-                Command::new("open")
-                    .args(["-a", "Cursor", project_path])
-                    .spawn()
+                detach_child(
+                    Command::new("open")
+                        .args(["-a", "Cursor", project_path])
+                        .spawn(),
+                )
             } else {
-                Command::new("cursor").arg(project_path).shell_spawn()
+                detach_child(Command::new("cursor").arg(project_path).shell_spawn())
             }
         }
         "webstorm" => {
             if cfg!(target_os = "macos") {
-                Command::new("open")
-                    .args(["-a", "WebStorm", project_path])
-                    .spawn()
+                detach_child(
+                    Command::new("open")
+                        .args(["-a", "WebStorm", project_path])
+                        .spawn(),
+                )
             } else if cfg!(target_os = "windows") {
-                // WebStorm 在 Windows 上的可执行文件名不确定，逐个尝试
                 for cmd in &["webstorm", "webstorm64", "webstorm.exe", "webstorm64.exe"] {
                     if is_command_available(cmd)
-                        && Command::new(cmd).arg(project_path).shell_spawn().is_ok()
+                        && detach_child(
+                            Command::new(cmd).arg(project_path).shell_spawn(),
+                        )
                     {
                         return true;
                     }
                 }
-                return false;
+                false
             } else {
                 for cmd in &["webstorm", "jetbrains-webstorm", "webstorm.sh"] {
                     if is_command_available(cmd)
-                        && Command::new(cmd).arg(project_path).spawn().is_ok()
+                        && detach_child(Command::new(cmd).arg(project_path).spawn())
                     {
                         return true;
                     }
                 }
-                return false;
+                false
             }
         }
-        // _ 是通配符，匹配所有未列出的情况（类似 switch 的 default）
-        _ => return false,
-    };
-    result.is_ok()
+        _ => false,
+    }
 }
 
 // ── Node 版本管理器检测 ──

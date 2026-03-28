@@ -9,6 +9,19 @@ use crate::models::{IpcResponse, NodeVersionManager, PackageManager, ProjectConf
 use crate::project;
 use std::process::Command;
 
+/// 启动子进程并在后台线程回收退出状态，避免 Unix 上产生僵尸进程
+fn spawn_and_detach(cmd: &mut Command) -> bool {
+    match cmd.spawn() {
+        Ok(mut child) => {
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+            true
+        }
+        Err(_) => false,
+    }
+}
+
 /// 校验脚本名称是否合法，防止命令注入攻击
 fn validate_script_name(name: &str) -> bool {
     !name.is_empty()
@@ -52,46 +65,50 @@ pub fn load_project_config() -> IpcResponse {
 
 #[tauri::command]
 pub async fn refresh_project_config() -> IpcResponse {
-    let mut cfg = config::load_and_refresh();
+    tokio::task::spawn_blocking(|| {
+        let mut cfg = config::load_and_refresh();
 
-    let indices: Vec<usize> = cfg
-        .projects
-        .iter()
-        .enumerate()
-        .filter(|(_, p)| p.package_manager.is_none())
-        .map(|(i, _)| i)
-        .collect();
-
-    if !indices.is_empty() {
-        let paths: Vec<String> = indices
+        let indices: Vec<usize> = cfg
+            .projects
             .iter()
-            .map(|&i| cfg.projects[i].path.clone())
+            .enumerate()
+            .filter(|(_, p)| p.package_manager.is_none())
+            .map(|(i, _)| i)
             .collect();
-        let results: Vec<String> = std::thread::scope(|s| {
-            let handles: Vec<_> = paths
-                .iter()
-                .map(|path| s.spawn(|| detector::detect_package_manager(path).to_string()))
-                .collect();
-            handles
-                .into_iter()
-                .map(|h| {
-                    h.join().unwrap_or_else(|e| {
-                        eprintln!(
-                            "[devfleet] package manager detection thread panicked: {:?}",
-                            e
-                        );
-                        "npm".to_string()
-                    })
-                })
-                .collect()
-        });
-        for (idx, pm) in indices.into_iter().zip(results) {
-            cfg.projects[idx].package_manager = Some(pm);
-        }
-    }
 
-    config::save(&cfg);
-    IpcResponse::ok(cfg)
+        if !indices.is_empty() {
+            let paths: Vec<String> = indices
+                .iter()
+                .map(|&i| cfg.projects[i].path.clone())
+                .collect();
+            let results: Vec<String> = std::thread::scope(|s| {
+                let handles: Vec<_> = paths
+                    .iter()
+                    .map(|path| s.spawn(|| detector::detect_package_manager(path).to_string()))
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|h| {
+                        h.join().unwrap_or_else(|e| {
+                            eprintln!(
+                                "[devfleet] package manager detection thread panicked: {:?}",
+                                e
+                            );
+                            "npm".to_string()
+                        })
+                    })
+                    .collect()
+            });
+            for (idx, pm) in indices.into_iter().zip(results) {
+                cfg.projects[idx].package_manager = Some(pm);
+            }
+        }
+
+        config::save(&cfg);
+        IpcResponse::ok(cfg)
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
 }
 
 #[tauri::command]
@@ -154,7 +171,7 @@ end tell"#,
         path = safe_path,
         cmd = safe_cmd,
     );
-    Command::new("osascript").args(["-e", &osa]).spawn().is_ok()
+    spawn_and_detach(Command::new("osascript").args(["-e", &osa]))
 }
 
 /// Linux: 依次尝试 gnome-terminal → konsole → xterm，用第一个可用的
@@ -169,11 +186,11 @@ fn spawn_external_terminal(project_path: &str, run_command: &str) -> bool {
     ];
     // .any() 遍历尝试，只要有一个成功就返回 true
     terminals.iter().any(|(cmd, args)| {
-        Command::new(cmd)
-            .args(args.clone())
-            .current_dir(project_path)
-            .spawn()
-            .is_ok()
+        spawn_and_detach(
+            Command::new(cmd)
+                .args(args.clone())
+                .current_dir(project_path),
+        )
     })
 }
 
@@ -240,20 +257,24 @@ pub fn run_script(
 /// 检测系统中安装了哪些代码编辑器（带缓存，force=true 时强制重新检测）
 #[tauri::command]
 pub async fn detect_editors(force: Option<bool>) -> IpcResponse {
-    if force != Some(true) {
-        if let Some(cached) = config::load_editor_cache() {
-            return IpcResponse::ok(cached);
+    tokio::task::spawn_blocking(move || {
+        if force != Some(true) {
+            if let Some(cached) = config::load_editor_cache() {
+                return IpcResponse::ok(cached);
+            }
         }
-    }
 
-    let (vscode, cursor, webstorm) = detector::detect_editors();
-    let cache = crate::models::EditorCache {
-        vscode,
-        cursor,
-        webstorm,
-    };
-    config::save_editor_cache(&cache);
-    IpcResponse::ok(cache)
+        let (vscode, cursor, webstorm) = detector::detect_editors();
+        let cache = crate::models::EditorCache {
+            vscode,
+            cursor,
+            webstorm,
+        };
+        config::save_editor_cache(&cache);
+        IpcResponse::ok(cache)
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
 }
 
 /// 用指定编辑器打开项目
@@ -271,7 +292,9 @@ pub fn open_in_editor(editor: String, project_path: String) -> IpcResponse {
 /// 获取系统的 Node 版本管理器信息（nvm/nvmd/nvs 及已安装的版本列表）
 #[tauri::command]
 pub async fn get_nvm_info() -> IpcResponse {
-    IpcResponse::ok(detector::get_nvm_info())
+    tokio::task::spawn_blocking(|| IpcResponse::ok(detector::get_nvm_info()))
+        .await
+        .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
 }
 
 /// 检测项目指定的 Node 版本（从 .nvmrc/.node-version 等文件读取）
@@ -284,11 +307,15 @@ pub fn detect_project_node_version(project_path: String) -> IpcResponse {
 /// 获取所有远程可用的 Node.js 版本列表（自动读取镜像配置）
 #[tauri::command]
 pub async fn fetch_remote_node_versions() -> IpcResponse {
-    let mirror = config::load_node_mirror();
-    match detector::fetch_remote_node_versions(mirror.as_deref()) {
-        Ok(versions) => IpcResponse::ok(versions),
-        Err(e) => IpcResponse::err(e),
-    }
+    tokio::task::spawn_blocking(|| {
+        let mirror = config::load_node_mirror();
+        match detector::fetch_remote_node_versions(mirror.as_deref()) {
+            Ok(versions) => IpcResponse::ok(versions),
+            Err(e) => IpcResponse::err(e),
+        }
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
 }
 
 /// 获取当前配置的 Node 镜像地址（空字符串表示官方源）
@@ -327,55 +354,67 @@ fn resolve_manager(manager: Option<String>) -> NodeVersionManager {
 /// 通过版本管理器安装指定版本的 Node.js
 #[tauri::command]
 pub async fn install_node_version(version: String, manager: Option<String>) -> IpcResponse {
-    let mgr = resolve_manager(manager);
+    tokio::task::spawn_blocking(move || {
+        let mgr = resolve_manager(manager);
 
-    if mgr == NodeVersionManager::None {
-        return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm/nvs）");
-    }
+        if mgr == NodeVersionManager::None {
+            return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm/nvs）");
+        }
 
-    match detector::install_node_version(&version, &mgr) {
-        Ok(output) => IpcResponse::ok(serde_json::json!({
-            "message": format!("Node.js {} 安装成功", version),
-            "output": output,
-        })),
-        Err(e) => IpcResponse::err(e),
-    }
+        match detector::install_node_version(&version, &mgr) {
+            Ok(output) => IpcResponse::ok(serde_json::json!({
+                "message": format!("Node.js {} 安装成功", version),
+                "output": output,
+            })),
+            Err(e) => IpcResponse::err(e),
+        }
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
 }
 
 /// 切换系统当前使用的 Node.js 版本
 #[tauri::command]
 pub async fn switch_node_version(version: String, manager: Option<String>) -> IpcResponse {
-    let mgr = resolve_manager(manager);
+    tokio::task::spawn_blocking(move || {
+        let mgr = resolve_manager(manager);
 
-    if mgr == NodeVersionManager::None {
-        return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm/nvs）");
-    }
+        if mgr == NodeVersionManager::None {
+            return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm/nvs）");
+        }
 
-    match detector::switch_node_version(&version, &mgr) {
-        Ok(output) => IpcResponse::ok(serde_json::json!({
-            "message": format!("已切换到 Node.js {}", version),
-            "output": output,
-        })),
-        Err(e) => IpcResponse::err(e),
-    }
+        match detector::switch_node_version(&version, &mgr) {
+            Ok(output) => IpcResponse::ok(serde_json::json!({
+                "message": format!("已切换到 Node.js {}", version),
+                "output": output,
+            })),
+            Err(e) => IpcResponse::err(e),
+        }
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
 }
 
 /// 通过版本管理器卸载指定已安装版本的 Node.js
 #[tauri::command]
 pub async fn uninstall_node_version(version: String, manager: Option<String>) -> IpcResponse {
-    let mgr = resolve_manager(manager);
+    tokio::task::spawn_blocking(move || {
+        let mgr = resolve_manager(manager);
 
-    if mgr == NodeVersionManager::None {
-        return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm/nvs）");
-    }
+        if mgr == NodeVersionManager::None {
+            return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm/nvs）");
+        }
 
-    match detector::uninstall_node_version(&version, &mgr) {
-        Ok(output) => IpcResponse::ok(serde_json::json!({
-            "message": format!("Node.js {} 已卸载", version),
-            "output": output,
-        })),
-        Err(e) => IpcResponse::err(e),
-    }
+        match detector::uninstall_node_version(&version, &mgr) {
+            Ok(output) => IpcResponse::ok(serde_json::json!({
+                "message": format!("Node.js {} 已卸载", version),
+                "output": output,
+            })),
+            Err(e) => IpcResponse::err(e),
+        }
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
 }
 
 /// 设置项目的 Node 版本（写入对应的版本文件，如 .nvmrc）
