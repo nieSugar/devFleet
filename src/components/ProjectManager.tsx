@@ -8,7 +8,7 @@ import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import ProjectHeader from "./ProjectHeader";
 import ProjectCard from "./ProjectCard";
 import { PlusOutlined, FolderOpenOutlined } from "@ant-design/icons";
-import { message, Modal, Button } from "antd";
+import { App, Button } from "antd";
 import "./ProjectManager.css";
 
 interface ProjectManagerProps {
@@ -29,7 +29,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
   } = useProjects();
   const { editors, openInEditor, refreshEditors } = useEditors();
   const { nvmInfo, changeNodeVersion, refreshNvmInfo } = useNvmInfo();
-  const [messageApi, contextHolder] = message.useMessage();
+  const { modal, message: messageApi } = App.useApp();
   const [searchText, setSearchText] = useState("");
 
   useEffect(() => {
@@ -73,7 +73,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
   };
 
   const handleRemove = useCallback((projectId: string, projectName: string) => {
-    Modal.confirm({
+    modal.confirm({
       title: "确认删除",
       content: `确定要删除项目「${projectName}」吗？此操作不会删除项目文件。`,
       okText: "删除",
@@ -89,7 +89,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
         }
       },
     });
-  }, [removeProject, showMsg]);
+  }, [modal, removeProject, showMsg]);
 
   const handleScriptChange = useCallback(async (projectId: string, scriptName: string) => {
     const result = await updateScriptSelection(projectId, scriptName);
@@ -165,7 +165,6 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
 
   return (
     <div className="project-manager">
-      {contextHolder}
 
       <ProjectHeader
         loading={loading}
