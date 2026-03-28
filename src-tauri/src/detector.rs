@@ -80,39 +80,83 @@ pub fn detect_package_manager(project_path: &str) -> PackageManager {
 
 // ── 编辑器检测 ──
 
-/// 通过执行 `cmd --version` 检测命令行工具是否可用
+/// 通过执行 `cmd --version` 检测命令行工具是否可用（带 5 秒超时）
 fn is_command_available(cmd: &str) -> bool {
-    // cfg!() 是编译时宏，返回 bool
-    // 注意：cfg!() 不会排除代码（两个分支都会编译），只是条件分支
-    // 而 #[cfg()] 属性会真正排除代码（不编译另一个分支）
-    let result = if cfg!(target_os = "windows") {
+    let child = if cfg!(target_os = "windows") {
         new_cmd()
             .args(["/C", &format!("{} --version", cmd)])
-            // Stdio::null() 丢弃输出，不需要看 --version 输出什么，只关心退出码
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .status()
+            .spawn()
     } else {
-        // Unix 用 `command -v` 检查命令是否存在（比 which 更标准）
         Command::new("sh")
             .args(["-c", &format!("command -v {} >/dev/null 2>&1", cmd)])
-            .status()
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
     };
-    // matches!() 宏：模式匹配 + 布尔返回，相当于 match + true/false
-    // Ok(s) if s.success() → 命令执行成功且退出码为 0
-    matches!(result, Ok(s) if s.success())
+    match child {
+        Ok(mut c) => {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                match c.try_wait() {
+                    Ok(Some(s)) => return s.success(),
+                    Ok(None) if Instant::now() >= deadline => {
+                        let _ = c.kill();
+                        let _ = c.wait();
+                        return false;
+                    }
+                    Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+                    Err(_) => return false,
+                }
+            }
+        }
+        Err(_) => false,
+    }
 }
 
-/// macOS 特有：用 Spotlight 搜索检查 .app 是否安装
+/// macOS 特有：用 Spotlight 搜索检查 .app 是否安装（带超时保护）
 #[cfg(target_os = "macos")]
 fn is_mac_app_installed(app_name: &str) -> bool {
-    let result = Command::new("mdfind")
+    let cmd = Command::new("mdfind")
         .arg(format!(
             "kMDItemKind == \"Application\" && kMDItemDisplayName == \"{}\"",
             app_name
         ))
-        .output();
-    matches!(result, Ok(o) if o.status.success() && !o.stdout.is_empty())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+    match cmd {
+        Ok(mut child) => {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        if !status.success() {
+                            return false;
+                        }
+                        return child
+                            .stdout
+                            .take()
+                            .and_then(|mut s| {
+                                let mut buf = [0u8; 1];
+                                use std::io::Read;
+                                s.read(&mut buf).ok().map(|n| n > 0)
+                            })
+                            .unwrap_or(false);
+                    }
+                    Ok(None) if Instant::now() >= deadline => {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return false;
+                    }
+                    Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+                    Err(_) => return false,
+                }
+            }
+        }
+        Err(_) => false,
+    }
 }
 
 /// 检测三种编辑器是否可用，返回 (vscode, cursor, webstorm) 布尔元组
@@ -232,11 +276,19 @@ pub fn open_editor(editor: &str, project_path: &str) -> bool {
 /// 检测 Unix 系统下 nvm 是否安装
 /// nvm 是 shell 函数不是可执行文件，所以不能用 is_command_available 检测
 /// 必须先 source nvm.sh 再检查 command -v nvm
+/// 注意：不使用 -l（login shell），避免 source 完整 profile 导致卡顿
 fn is_unix_nvm_installed() -> bool {
+    let nvm_dir_check = std::env::var("NVM_DIR")
+        .ok()
+        .or_else(|| std::env::var("HOME").ok().map(|h| format!("{}/.nvm", h)));
+    if let Some(dir) = &nvm_dir_check {
+        if Path::new(dir).join("nvm.sh").exists() {
+            return true;
+        }
+    }
     let result = Command::new("bash")
         .args([
-            "-lc",
-            // r#"..."# 是 Rust 的原始字符串语法，里面的 \ 和 " 不需要转义
+            "-c",
             r#"export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && command -v nvm >/dev/null 2>&1"#,
         ])
         .stdout(std::process::Stdio::null())

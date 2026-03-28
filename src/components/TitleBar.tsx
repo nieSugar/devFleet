@@ -17,15 +17,20 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
     const win = getCurrentWindow();
     let cancelled = false;
     let unlisten: (() => void) | undefined;
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
     win.isMaximized().then((m) => {
       if (!cancelled) setMaximized(m);
     });
 
     win
-      .onResized(async () => {
-        const m = await win.isMaximized();
-        if (!cancelled) setMaximized(m);
+      .onResized(() => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(async () => {
+          if (cancelled) return;
+          const m = await win.isMaximized();
+          if (!cancelled) setMaximized(m);
+        }, 150);
       })
       .then((fn) => {
         if (cancelled) fn();
@@ -34,6 +39,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
 
     return () => {
       cancelled = true;
+      clearTimeout(debounceTimer);
       unlisten?.();
     };
   }, []);
