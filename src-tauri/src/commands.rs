@@ -8,16 +8,25 @@ use crate::detector;
 use crate::models::{IpcResponse, NodeVersionManager, PackageManager, ProjectConfig};
 use crate::project;
 use std::process::Command;
+use std::sync::{mpsc, OnceLock};
 
-/// 启动子进程并在后台线程回收退出状态，避免 Unix 上产生僵尸进程
+fn reaper_tx() -> &'static mpsc::Sender<std::process::Child> {
+    static TX: OnceLock<mpsc::Sender<std::process::Child>> = OnceLock::new();
+    TX.get_or_init(|| {
+        let (tx, rx) = mpsc::channel::<std::process::Child>();
+        std::thread::spawn(move || {
+            for mut child in rx {
+                let _ = child.wait();
+            }
+        });
+        tx
+    })
+}
+
+/// 启动子进程并通过单一 reaper 线程回收退出状态，避免 Unix 上产生僵尸进程
 fn spawn_and_detach(cmd: &mut Command) -> bool {
     match cmd.spawn() {
-        Ok(mut child) => {
-            std::thread::spawn(move || {
-                let _ = child.wait();
-            });
-            true
-        }
+        Ok(child) => reaper_tx().send(child).is_ok(),
         Err(_) => false,
     }
 }
@@ -150,12 +159,12 @@ pub fn remove_project_from_config(project_id: String) -> IpcResponse {
 fn spawn_external_terminal(project_path: &str, run_command: &str) -> bool {
     use std::os::windows::process::CommandExt;
     const CREATE_NEW_CONSOLE: u32 = 0x00000010;
-    Command::new("cmd")
-        .raw_arg(format!("/K {}", run_command))
-        .current_dir(project_path)
-        .creation_flags(CREATE_NEW_CONSOLE)
-        .spawn()
-        .is_ok()
+    spawn_and_detach(
+        Command::new("cmd")
+            .raw_arg(format!("/K {}", run_command))
+            .current_dir(project_path)
+            .creation_flags(CREATE_NEW_CONSOLE),
+    )
 }
 
 /// macOS: 用 AppleScript 控制 Terminal.app 打开新窗口

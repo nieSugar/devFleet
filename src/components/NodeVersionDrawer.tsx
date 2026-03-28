@@ -191,11 +191,12 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   const [mirror, setMirror] = useState("");
 
   useEffect(() => {
-    if (open) {
-      tauriAPI.getNodeMirror().then((res) => {
-        if (res.success && res.data) setMirror(res.data.mirror);
-      });
-    }
+    if (!open) return;
+    let cancelled = false;
+    tauriAPI.getNodeMirror().then((res) => {
+      if (!cancelled && res.success && res.data) setMirror(res.data.mirror);
+    });
+    return () => { cancelled = true; };
   }, [open]);
 
   const handleMirrorChange = useCallback(
@@ -214,13 +215,17 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
     [mirror, messageApi],
   );
 
+  const cancelledRef = useRef(false);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
+    cancelledRef.current = false;
     try {
       const [remoteResult, nvmResult] = await Promise.all([
         tauriAPI.fetchRemoteNodeVersions(),
         tauriAPI.getNvmInfo(),
       ]);
+      if (cancelledRef.current) return;
       if (remoteResult.success && remoteResult.data) {
         setRemoteVersions(remoteResult.data);
       } else {
@@ -231,9 +236,10 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       }
       setHasFetched(true);
     } catch {
-      messageApi.error("获取版本数据失败，请检查网络连接");
+      if (!cancelledRef.current)
+        messageApi.error("获取版本数据失败，请检查网络连接");
     } finally {
-      setLoading(false);
+      if (!cancelledRef.current) setLoading(false);
     }
   }, [messageApi]);
 
@@ -241,6 +247,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
     if (open && !hasFetched) {
       fetchData();
     }
+    return () => { cancelledRef.current = true; };
   }, [open, hasFetched, fetchData]);
 
   const refreshNvmInfo = useCallback(async () => {

@@ -6,6 +6,7 @@ use crate::detector;
 use crate::models::{NodeVersionManager, NpmScript, Project};
 use std::fs;
 use std::path::Path;
+use std::sync::LazyLock;
 
 /// 读取项目 package.json 中的 scripts 字段，返回脚本列表
 pub fn get_package_scripts(project_path: &str) -> Vec<NpmScript> {
@@ -185,14 +186,15 @@ pub fn get_node_version(project_path: &str) -> Option<String> {
                 .and_then(|e| e.get("node"))
                 .and_then(|n| n.as_str())
             {
-                // engines.node 可能是 ">=18.0.0" 或 "^20"，用正则提取纯版本号
-                let re = regex_lite::Regex::new(r"(\d+\.\d+\.\d+)").unwrap();
-                if let Some(caps) = re.captures(node_ver) {
+                static VERSION_RE: LazyLock<regex_lite::Regex> =
+                    LazyLock::new(|| regex_lite::Regex::new(r"(\d+\.\d+\.\d+)").unwrap());
+                static MAJOR_RE: LazyLock<regex_lite::Regex> =
+                    LazyLock::new(|| regex_lite::Regex::new(r"(\d+)").unwrap());
+
+                if let Some(caps) = VERSION_RE.captures(node_ver) {
                     return Some(caps[1].to_string());
                 }
-                // 退而求其次，只取主版本号（如 ">=18" → "18"）
-                let re_major = regex_lite::Regex::new(r"(\d+)").unwrap();
-                if let Some(caps) = re_major.captures(node_ver) {
+                if let Some(caps) = MAJOR_RE.captures(node_ver) {
                     return Some(caps[1].to_string());
                 }
             }

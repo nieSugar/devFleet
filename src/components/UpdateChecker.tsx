@@ -26,12 +26,22 @@ const UpdateChecker: React.FC = () => {
   const [error, setError] = useState("");
   const [currentVersion, setCurrentVersion] = useState("");
   const updateRef = useRef<Update | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      updateRef.current = null;
+    };
+  }, []);
 
   const checkForUpdate = useCallback(async (manual: boolean) => {
     if (manual) setStatus("checking");
     setError("");
     try {
       const result = await check();
+      if (!mountedRef.current) return;
       if (result?.available) {
         updateRef.current = result;
         setInfo({
@@ -44,6 +54,7 @@ const UpdateChecker: React.FC = () => {
         if (manual) setStatus("idle");
       }
     } catch (e) {
+      if (!mountedRef.current) return;
       if (manual) {
         setError(String(e));
         setStatus("error");
@@ -52,9 +63,10 @@ const UpdateChecker: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    getVersion().then(setCurrentVersion).catch(() => {});
+    let cancelled = false;
+    getVersion().then((v) => { if (!cancelled) setCurrentVersion(v); }).catch(() => {});
     const timer = setTimeout(() => checkForUpdate(false), 3000);
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [checkForUpdate]);
 
   const handleDownload = async () => {
@@ -66,6 +78,7 @@ const UpdateChecker: React.FC = () => {
       let downloaded = 0;
       let total = 0;
       await update.downloadAndInstall((event) => {
+        if (!mountedRef.current) return;
         switch (event.event) {
           case "Started":
             total = event.data.contentLength ?? 0;
@@ -79,8 +92,9 @@ const UpdateChecker: React.FC = () => {
             break;
         }
       });
-      setStatus("ready");
+      if (mountedRef.current) setStatus("ready");
     } catch (e) {
+      if (!mountedRef.current) return;
       setError(String(e));
       setStatus("error");
     }

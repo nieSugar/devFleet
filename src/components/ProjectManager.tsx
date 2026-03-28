@@ -33,9 +33,12 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
   const [searchText, setSearchText] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
     loadProjects().then((r) => {
-      if (r && !r.success) messageApi.error(r.error || "加载项目配置失败");
+      if (!cancelled && r && !r.success)
+        messageApi.error(r.error || "加载项目配置失败");
     });
+    return () => { cancelled = true; };
   }, [loadProjects, messageApi]);
 
   const nvmRefreshKeyRef = useRef(nvmRefreshKey);

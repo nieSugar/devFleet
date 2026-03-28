@@ -15,16 +15,27 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
 
   useEffect(() => {
     const win = getCurrentWindow();
-    win.isMaximized().then(setMaximized);
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
 
-    let cleanup: (() => void) | undefined;
+    win.isMaximized().then((m) => {
+      if (!cancelled) setMaximized(m);
+    });
+
     win
-      .onResized(async () => setMaximized(await win.isMaximized()))
-      .then((u) => {
-        cleanup = u;
+      .onResized(async () => {
+        const m = await win.isMaximized();
+        if (!cancelled) setMaximized(m);
+      })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
       });
 
-    return () => cleanup?.();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, []);
 
   return (

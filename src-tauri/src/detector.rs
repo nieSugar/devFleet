@@ -7,15 +7,20 @@ use std::process::Command;
 use std::sync::{LazyLock, OnceLock};
 use std::time::{Duration, Instant};
 
-/// 回收子进程退出状态，避免 Unix 上产生僵尸进程
+/// 回收子进程退出状态，通过单一 reaper 线程避免 Unix 上产生僵尸进程
 fn detach_child(result: std::io::Result<std::process::Child>) -> bool {
-    match result {
-        Ok(mut child) => {
-            std::thread::spawn(move || {
+    static REAPER_TX: OnceLock<std::sync::mpsc::Sender<std::process::Child>> = OnceLock::new();
+    let tx = REAPER_TX.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::channel::<std::process::Child>();
+        std::thread::spawn(move || {
+            for mut child in rx {
                 let _ = child.wait();
-            });
-            true
-        }
+            }
+        });
+        tx
+    });
+    match result {
+        Ok(child) => tx.send(child).is_ok(),
         Err(_) => false,
     }
 }
@@ -471,12 +476,14 @@ pub fn fetch_remote_node_versions(mirror: Option<&str>) -> Result<Vec<RemoteNode
     let base = mirror.unwrap_or(DEFAULT_NODE_DIST_BASE);
     let url = format!("{}/index.json", base.trim_end_matches('/'));
 
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(10))
-        .timeout_read(Duration::from_secs(30))
-        .build();
+    static HTTP_AGENT: LazyLock<ureq::Agent> = LazyLock::new(|| {
+        ureq::AgentBuilder::new()
+            .timeout_connect(Duration::from_secs(10))
+            .timeout_read(Duration::from_secs(30))
+            .build()
+    });
 
-    let resp = agent
+    let resp = HTTP_AGENT
         .get(&url)
         .call()
         .map_err(|e| format!("请求 Node.js 版本列表失败（{}）: {}", url, e))?;
@@ -507,7 +514,8 @@ fn collect_output(o: &std::process::Output) -> String {
 
 const CMD_TIMEOUT_SECS: u64 = 30;
 
-/// 带超时保护的命令执行，防止 nvm-windows 等工具卡死时阻塞整个应用
+/// 带超时保护的命令执行，防止 nvm-windows 等工具卡死时阻塞整个应用。
+/// 在独立线程中读取 stdout/stderr 以避免管道缓冲区满导致死锁。
 fn output_with_timeout(
     mut cmd: Command,
     timeout_secs: u64,
@@ -518,14 +526,30 @@ fn output_with_timeout(
         .spawn()
         .map_err(|e| format!("启动命令失败: {}", e))?;
 
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let stdout_handle = std::thread::spawn(move || {
+        use std::io::Read;
+        let mut buf = Vec::new();
+        if let Some(mut r) = stdout { let _ = r.read_to_end(&mut buf); }
+        buf
+    });
+    let stderr_handle = std::thread::spawn(move || {
+        use std::io::Read;
+        let mut buf = Vec::new();
+        if let Some(mut r) = stderr { let _ = r.read_to_end(&mut buf); }
+        buf
+    });
+
     let deadline = Instant::now() + Duration::from_secs(timeout_secs);
 
     loop {
         match child.try_wait() {
-            Ok(Some(_)) => {
-                return child
-                    .wait_with_output()
-                    .map_err(|e| format!("读取命令输出失败: {}", e));
+            Ok(Some(status)) => {
+                let stdout_bytes = stdout_handle.join().unwrap_or_default();
+                let stderr_bytes = stderr_handle.join().unwrap_or_default();
+                return Ok(std::process::Output { status, stdout: stdout_bytes, stderr: stderr_bytes });
             }
             Ok(None) if Instant::now() >= deadline => {
                 let _ = child.kill();
@@ -536,7 +560,11 @@ fn output_with_timeout(
                 ));
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(200)),
-            Err(e) => return Err(format!("等待命令完成失败: {}", e)),
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("等待命令完成失败: {}", e));
+            }
         }
     }
 }
