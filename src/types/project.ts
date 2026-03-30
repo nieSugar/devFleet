@@ -60,8 +60,4 @@ export interface RemoteNodeVersion {
   security: boolean;
 }
 
-export interface EditorStatus {
-  vscode: boolean;
-  cursor: boolean;
-  webstorm: boolean;
-}
+export type EditorStatus = Record<string, boolean>;

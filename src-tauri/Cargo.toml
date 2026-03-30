@@ -61,6 +61,9 @@ tauri-plugin-updater = "2"
 # Tauri 进程管理插件（提供 relaunch 能力）
 tauri-plugin-process = "2"
 
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
+
 [profile.release]
 # release 编译优化配置（cargo build --release 时生效）
 # panic = "abort": panic 时直接终止进程（不展开栈帧），减小二进制体积

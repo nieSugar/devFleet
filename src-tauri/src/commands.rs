@@ -288,14 +288,9 @@ pub async fn detect_editors(force: Option<bool>) -> IpcResponse {
             }
         }
 
-        let (vscode, cursor, webstorm) = detector::detect_editors();
-        let cache = crate::models::EditorCache {
-            vscode,
-            cursor,
-            webstorm,
-        };
-        config::save_editor_cache(&cache);
-        IpcResponse::ok(cache)
+        let editors = detector::detect_editors();
+        config::save_editor_cache(&editors);
+        IpcResponse::ok(editors)
     })
     .await
     .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))

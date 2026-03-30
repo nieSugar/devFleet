@@ -6,8 +6,22 @@ import EditorButton from "./EditorButton";
 import NodeVersionSelect from "./NodeVersionSelect";
 import vscodeSvg from "../img/vscode.svg";
 import cursorSvg from "../img/cursor.svg";
+import windsurfSvg from "../img/windsurf.svg";
+import traeSvg from "../img/trae.svg";
 import webstormSvg from "../img/webstorm.svg";
+import ideaSvg from "../img/idea.svg";
+import zedSvg from "../img/zed.svg";
 import "./ProjectCard.css";
+
+const EDITOR_REGISTRY: { id: string; name: string; icon: string }[] = [
+  { id: "vscode", name: "VS Code", icon: vscodeSvg },
+  { id: "cursor", name: "Cursor", icon: cursorSvg },
+  { id: "windsurf", name: "Windsurf", icon: windsurfSvg },
+  { id: "trae", name: "Trae", icon: traeSvg },
+  { id: "webstorm", name: "WebStorm", icon: webstormSvg },
+  { id: "idea", name: "IntelliJ IDEA", icon: ideaSvg },
+  { id: "zed", name: "Zed", icon: zedSvg },
+];
 
 interface ProjectCardProps {
   project: Project;
@@ -109,30 +123,17 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
       {/* Editors + Node */}
       <div className="card-meta">
         <div className="card-editors">
-          {editors?.vscode && (
-            <EditorButton
-              icon={vscodeSvg}
-              alt="VS Code"
-              title="VS Code"
-              onClick={() => editorAction("vscode")}
-            />
-          )}
-          {editors?.cursor && (
-            <EditorButton
-              icon={cursorSvg}
-              alt="Cursor"
-              title="Cursor"
-              onClick={() => editorAction("cursor")}
-            />
-          )}
-          {editors?.webstorm && (
-            <EditorButton
-              icon={webstormSvg}
-              alt="WebStorm"
-              title="WebStorm"
-              onClick={() => editorAction("webstorm")}
-            />
-          )}
+          {editors && EDITOR_REGISTRY
+            .filter((e) => editors[e.id])
+            .map((e) => (
+              <EditorButton
+                key={e.id}
+                icon={e.icon}
+                alt={e.name}
+                title={e.name}
+                onClick={() => editorAction(e.id)}
+              />
+            ))}
         </div>
         {nvmInfo?.isInstalled && (
           <div className="card-node">
