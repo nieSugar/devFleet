@@ -78,13 +78,10 @@ pub struct AppSettings {
 }
 
 // ── 编辑器缓存 ──
+// 使用 HashMap 代替固定字段结构体，新增编辑器无需改类型
+// key = 编辑器 id（如 "vscode"、"cursor"），value = 是否安装
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct EditorCache {
-    pub vscode: bool,
-    pub cursor: bool,
-    pub webstorm: bool,
-}
+pub type EditorCache = std::collections::HashMap<String, bool>;
 
 // ── 项目相关类型 ──
 

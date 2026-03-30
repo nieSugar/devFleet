@@ -2,6 +2,7 @@
 // 核心思路：通过检查 lock 文件是否存在、CLI 命令是否可用来判断用户安装了什么
 
 use crate::models::{NodeVersion, NodeVersionManager, NvmInfo, PackageManager, RemoteNodeVersion};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{LazyLock, OnceLock};
@@ -84,8 +85,305 @@ pub fn detect_package_manager(project_path: &str) -> PackageManager {
 }
 
 // ── 编辑器检测 ──
+// 分层检测策略（命中即停，后续层不执行）：
+//   Layer 1: OS 原生注册信息 — Win Registry / macOS .app / Linux .desktop（微秒级）
+//   Layer 2: 已知安装路径探测 — fs::exists（微秒级）
+//   Layer 3: CLI 兜底 — spawn 子进程（秒级，并发执行）
 
-/// 通过执行 `cmd --version` 检测命令行工具是否可用（带 5 秒超时）
+/// 编辑器规格表
+#[allow(dead_code)]
+struct EditorSpec {
+    id: &'static str,
+    /// Windows: URL scheme 注册表键名（HKCR\{scheme}\shell\open\command）
+    url_schemes: &'static [&'static str],
+    /// Windows: App Paths 注册表键名
+    win_app_path_keys: &'static [&'static str],
+    /// macOS: .app 名称列表（按优先级排列，用于检测和 open -a）
+    mac_apps: &'static [&'static str],
+    /// Linux: .desktop 文件名（不含后缀）
+    linux_desktop_names: &'static [&'static str],
+    /// 回退：已知安装路径（支持 %ENV_VAR% 展开）
+    win_paths: &'static [&'static str],
+    linux_paths: &'static [&'static str],
+    /// 最终回退：CLI 命令名
+    cli_cmds: &'static [&'static str],
+}
+
+const EDITORS: &[EditorSpec] = &[
+    EditorSpec {
+        id: "vscode",
+        url_schemes: &["vscode"],
+        win_app_path_keys: &["Code.exe"],
+        mac_apps: &["Visual Studio Code"],
+        linux_desktop_names: &["code", "code-url-handler", "visual-studio-code"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe",
+            r"%ProgramFiles%\Microsoft VS Code\Code.exe",
+        ],
+        linux_paths: &["/usr/bin/code", "/usr/share/code/code", "/snap/bin/code"],
+        cli_cmds: &["code"],
+    },
+    EditorSpec {
+        id: "cursor",
+        url_schemes: &["cursor"],
+        win_app_path_keys: &["Cursor.exe"],
+        mac_apps: &["Cursor"],
+        linux_desktop_names: &["cursor", "cursor-url-handler"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Programs\cursor\Cursor.exe",
+            r"%LOCALAPPDATA%\cursor\Cursor.exe",
+        ],
+        linux_paths: &["/usr/bin/cursor", "/opt/Cursor/cursor"],
+        cli_cmds: &["cursor"],
+    },
+    EditorSpec {
+        id: "windsurf",
+        url_schemes: &["windsurf"],
+        win_app_path_keys: &[],
+        mac_apps: &["Windsurf"],
+        linux_desktop_names: &["windsurf"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Programs\Windsurf\Windsurf.exe",
+            r"%LOCALAPPDATA%\Programs\windsurf\Windsurf.exe",
+        ],
+        linux_paths: &["/usr/bin/windsurf"],
+        cli_cmds: &["windsurf"],
+    },
+    EditorSpec {
+        id: "trae",
+        url_schemes: &["trae"],
+        win_app_path_keys: &[],
+        mac_apps: &["Trae", "Trae CN"],
+        linux_desktop_names: &["trae"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Programs\Trae\Trae.exe",
+            r"%LOCALAPPDATA%\Programs\Trae CN\Trae CN.exe",
+        ],
+        linux_paths: &["/usr/bin/trae"],
+        cli_cmds: &["trae"],
+    },
+    EditorSpec {
+        id: "webstorm",
+        url_schemes: &[],
+        win_app_path_keys: &[],
+        mac_apps: &["WebStorm"],
+        linux_desktop_names: &["webstorm", "jetbrains-webstorm"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\JetBrains\Toolbox\scripts\webstorm.cmd",
+        ],
+        linux_paths: &["/usr/bin/webstorm", "/snap/bin/webstorm"],
+        cli_cmds: &["webstorm", "webstorm64"],
+    },
+    EditorSpec {
+        id: "idea",
+        url_schemes: &[],
+        win_app_path_keys: &[],
+        mac_apps: &["IntelliJ IDEA", "IntelliJ IDEA CE"],
+        linux_desktop_names: &[
+            "idea", "jetbrains-idea",
+            "intellij-idea-ultimate", "intellij-idea-community",
+        ],
+        win_paths: &[
+            r"%LOCALAPPDATA%\JetBrains\Toolbox\scripts\idea.cmd",
+        ],
+        linux_paths: &[
+            "/usr/bin/idea",
+            "/snap/bin/intellij-idea-ultimate",
+            "/snap/bin/intellij-idea-community",
+        ],
+        cli_cmds: &["idea", "idea64"],
+    },
+    EditorSpec {
+        id: "zed",
+        url_schemes: &["zed"],
+        win_app_path_keys: &["Zed.exe"],
+        mac_apps: &["Zed"],
+        linux_desktop_names: &["zed", "dev.zed.Zed"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Zed\zed.exe",
+            r"%LOCALAPPDATA%\Programs\Zed\Zed.exe",
+        ],
+        linux_paths: &["/usr/bin/zed", "/usr/local/bin/zed"],
+        cli_cmds: &["zed"],
+    },
+];
+
+/// 展开路径模板中的 %ENV_VAR% 和 ~ 前缀
+/// 环境变量缺失时返回 None（该路径不可用），孤立的 % 不再导致整个函数提前返回
+fn expand_env_path(template: &str) -> Option<PathBuf> {
+    let mut result = template.to_string();
+    for _ in 0..10 {
+        let start = match result.find('%') {
+            Some(i) => i,
+            None => break,
+        };
+        let end = match result[start + 1..].find('%') {
+            Some(e) => e,
+            None => break,
+        };
+        let var_name = &result[start + 1..start + 1 + end];
+        let value = std::env::var(var_name).ok()?;
+        result = format!("{}{}{}", &result[..start], value, &result[start + 2 + end..]);
+    }
+    if result.starts_with('~') {
+        let home = std::env::var(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).ok()?;
+        result = format!("{}{}", home, &result[1..]);
+    }
+    Some(PathBuf::from(result))
+}
+
+// ── Layer 1: OS 原生应用注册信息 ──
+
+/// 从注册表命令字符串中提取 exe 路径
+/// 格式如: "C:\...\Code.exe" "--open-url" -- "%1"
+#[cfg(target_os = "windows")]
+fn parse_exe_from_command(cmd: &str) -> Option<PathBuf> {
+    let trimmed = cmd.trim();
+    let path_str = if trimmed.starts_with('"') {
+        trimmed[1..].find('"').map(|end| &trimmed[1..1 + end])
+    } else {
+        trimmed.split_whitespace().next()
+    }?;
+    let p = PathBuf::from(path_str);
+    if p.exists() { Some(p) } else { None }
+}
+
+/// Windows: 通过注册表检测编辑器，返回 exe 路径
+/// 先查 URL Scheme（HKCR\{scheme}\shell\open\command），再查 App Paths
+#[cfg(target_os = "windows")]
+fn find_exe_via_registry(spec: &EditorSpec) -> Option<PathBuf> {
+    use winreg::enums::*;
+    use winreg::RegKey;
+
+    for scheme in spec.url_schemes {
+        if let Ok(key) = RegKey::predef(HKEY_CLASSES_ROOT)
+            .open_subkey(format!(r"{}\shell\open\command", scheme))
+        {
+            if let Ok(cmd_str) = key.get_value::<String, _>("") {
+                if let Some(exe) = parse_exe_from_command(&cmd_str) {
+                    return Some(exe);
+                }
+            }
+        }
+    }
+
+    for root in [HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER] {
+        for key_name in spec.win_app_path_keys {
+            let sub = format!(
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{}",
+                key_name
+            );
+            if let Ok(key) = RegKey::predef(root).open_subkey(&sub) {
+                if let Ok(exe_str) = key.get_value::<String, _>("") {
+                    let p = PathBuf::from(exe_str.trim_matches('"'));
+                    if p.exists() {
+                        return Some(p);
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Linux: 解析 .desktop 文件中的 Exec= 行获取可执行文件路径
+#[cfg(target_os = "linux")]
+fn parse_desktop_exec(desktop_path: &Path) -> Option<PathBuf> {
+    let content = std::fs::read_to_string(desktop_path).ok()?;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("Exec=") {
+            let exec = trimmed.trim_start_matches("Exec=");
+            let exe = exec.split_whitespace().next()?;
+            return Some(PathBuf::from(exe));
+        }
+    }
+    None
+}
+
+/// Linux: 从标准 .desktop 文件目录检测编辑器
+#[cfg(target_os = "linux")]
+fn find_exe_via_desktop_file(spec: &EditorSpec) -> Option<PathBuf> {
+    const DESKTOP_DIRS: &[&str] = &[
+        "/usr/share/applications",
+        "/usr/local/share/applications",
+        "/var/lib/snapd/desktop/applications",
+        "/var/lib/flatpak/exports/share/applications",
+    ];
+    let home = std::env::var("HOME").ok();
+
+    for name in spec.linux_desktop_names {
+        let filename = format!("{}.desktop", name);
+        for dir in DESKTOP_DIRS {
+            let p = Path::new(dir).join(&filename);
+            if let Some(exe) = parse_desktop_exec(&p) {
+                return Some(exe);
+            }
+        }
+        if let Some(ref h) = home {
+            let p = Path::new(h).join(".local/share/applications").join(&filename);
+            if let Some(exe) = parse_desktop_exec(&p) {
+                return Some(exe);
+            }
+        }
+    }
+
+    None
+}
+
+// ── Layer 2: 已知安装路径探测 ──
+
+#[cfg(target_os = "windows")]
+fn find_win_exe(spec: &EditorSpec) -> Option<PathBuf> {
+    spec.win_paths
+        .iter()
+        .find_map(|p| expand_env_path(p).filter(|ep| ep.exists()))
+}
+
+#[cfg(target_os = "linux")]
+fn find_linux_exe(spec: &EditorSpec) -> Option<PathBuf> {
+    spec.linux_paths
+        .iter()
+        .find_map(|p| expand_env_path(p).filter(|ep| ep.exists()))
+}
+
+// ── 综合快速检测 ──
+
+/// 依次尝试 OS 原生检测 → 已知路径（全部微秒级，零子进程）
+fn is_editor_found_fast(spec: &EditorSpec) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        return find_exe_via_registry(spec).is_some()
+            || spec.win_paths.iter().any(|p| {
+                expand_env_path(p).map(|ep| ep.exists()).unwrap_or(false)
+            });
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        return spec.mac_apps.iter().any(|app| {
+            Path::new(&format!("/Applications/{}.app", app)).exists()
+                || std::env::var("HOME")
+                    .ok()
+                    .map(|h| Path::new(&format!("{}/Applications/{}.app", h, app)).exists())
+                    .unwrap_or(false)
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        return find_exe_via_desktop_file(spec).is_some()
+            || spec.linux_paths.iter().any(|p| {
+                expand_env_path(p).map(|ep| ep.exists()).unwrap_or(false)
+            });
+    }
+
+    #[allow(unreachable_code)]
+    false
+}
+
+/// 通过 CLI 命令检测是否可用（慢，需要 spawn 进程，带 5 秒超时）
 fn is_command_available(cmd: &str) -> bool {
     let child = if cfg!(target_os = "windows") {
         new_cmd()
@@ -120,173 +418,111 @@ fn is_command_available(cmd: &str) -> bool {
     }
 }
 
-/// macOS 特有：用 Spotlight 搜索检查 .app 是否安装（带超时保护）
-#[cfg(target_os = "macos")]
-fn is_mac_app_installed(app_name: &str) -> bool {
-    let cmd = Command::new("mdfind")
-        .arg(format!(
-            "kMDItemKind == \"Application\" && kMDItemDisplayName == \"{}\"",
-            app_name
-        ))
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn();
-    match cmd {
-        Ok(mut child) => {
-            let deadline = Instant::now() + Duration::from_secs(5);
-            loop {
-                match child.try_wait() {
-                    Ok(Some(status)) => {
-                        if !status.success() {
-                            return false;
-                        }
-                        return child
-                            .stdout
-                            .take()
-                            .and_then(|mut s| {
-                                let mut buf = [0u8; 1];
-                                use std::io::Read;
-                                s.read(&mut buf).ok().map(|n| n > 0)
-                            })
-                            .unwrap_or(false);
-                    }
-                    Ok(None) if Instant::now() >= deadline => {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        return false;
-                    }
-                    Ok(None) => std::thread::sleep(Duration::from_millis(50)),
-                    Err(_) => return false,
-                }
+/// 检测所有已知编辑器，返回 { id: installed } 映射
+/// 快速检测（Registry / .app / .desktop + 已知路径）未命中的，并发走 CLI 兜底
+pub fn detect_editors() -> HashMap<String, bool> {
+    let mut result = HashMap::new();
+    let mut need_cli: Vec<&EditorSpec> = Vec::new();
+
+    for spec in EDITORS {
+        if is_editor_found_fast(spec) {
+            result.insert(spec.id.to_string(), true);
+        } else {
+            need_cli.push(spec);
+        }
+    }
+
+    if !need_cli.is_empty() {
+        let handles: Vec<_> = need_cli
+            .into_iter()
+            .map(|spec| {
+                let id = spec.id.to_string();
+                let cmds: Vec<String> = spec.cli_cmds.iter().map(|s| s.to_string()).collect();
+                std::thread::spawn(move || {
+                    let found = cmds.iter().any(|cmd| is_command_available(cmd));
+                    (id, found)
+                })
+            })
+            .collect();
+
+        for h in handles {
+            if let Ok((id, found)) = h.join() {
+                result.insert(id, found);
             }
         }
-        Err(_) => false,
+    }
+
+    result
+}
+
+/// Windows: 启动 exe 或 cmd/bat 脚本打开项目
+#[cfg(target_os = "windows")]
+fn launch_win_exe(exe: &Path, project_path: &str) -> bool {
+    let ext = exe.extension().and_then(|e| e.to_str()).unwrap_or("");
+    if ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat") {
+        detach_child(
+            new_cmd()
+                .args(["/C", &exe.to_string_lossy(), project_path])
+                .spawn(),
+        )
+    } else {
+        detach_child(Command::new(exe).arg(project_path).shell_spawn())
     }
 }
 
-/// 检测三种编辑器是否可用，返回 (vscode, cursor, webstorm) 布尔元组
-/// 每个平台的检测方式不同：macOS 可以搜索 .app，Windows/Linux 只能检查 CLI
-pub fn detect_editors() -> (bool, bool, bool) {
+/// 用指定编辑器打开项目目录
+/// macOS 遍历 mac_apps 列表兼容多变体（Trae CN / IntelliJ IDEA CE），
+/// Windows 优先注册表路径，Linux 优先 .desktop Exec 路径，最终 CLI 兜底
+pub fn open_editor(editor_id: &str, project_path: &str) -> bool {
+    let spec = match EDITORS.iter().find(|s| s.id == editor_id) {
+        Some(s) => s,
+        None => return false,
+    };
+
     #[cfg(target_os = "macos")]
     {
-        let h1 = std::thread::spawn(|| {
-            is_mac_app_installed("Visual Studio Code") || is_command_available("code")
-        });
-        let h2 =
-            std::thread::spawn(|| is_mac_app_installed("Cursor") || is_command_available("cursor"));
-        let h3 = std::thread::spawn(|| is_mac_app_installed("WebStorm"));
-
-        let vscode = h1.join().unwrap_or(false);
-        let cursor = h2.join().unwrap_or(false);
-        let webstorm = h3.join().unwrap_or(false);
-        return (vscode, cursor, webstorm);
+        for app in spec.mac_apps {
+            if detach_child(
+                Command::new("open")
+                    .args(["-a", app, project_path])
+                    .spawn(),
+            ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     #[cfg(target_os = "windows")]
     {
-        let h1 = std::thread::spawn(|| is_command_available("code"));
-        let h2 = std::thread::spawn(|| is_command_available("cursor"));
-        let h3 = std::thread::spawn(|| {
-            is_command_available("webstorm") || is_command_available("webstorm64")
-        });
-
-        let vscode = h1.join().unwrap_or(false);
-        let cursor = h2.join().unwrap_or(false);
-        let webstorm = h3.join().unwrap_or(false);
-        return (vscode, cursor, webstorm);
+        if let Some(exe) = find_exe_via_registry(spec).or_else(|| find_win_exe(spec)) {
+            return launch_win_exe(&exe, project_path);
+        }
+        for cmd in spec.cli_cmds {
+            if detach_child(Command::new(cmd).arg(project_path).shell_spawn()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     #[cfg(target_os = "linux")]
     {
-        let h1 = std::thread::spawn(|| is_command_available("code"));
-        let h2 = std::thread::spawn(|| is_command_available("cursor"));
-        let h3 = std::thread::spawn(|| {
-            is_command_available("webstorm")
-                || is_command_available("jetbrains-webstorm")
-                || is_command_available("webstorm.sh")
-        });
-
-        let vscode = h1.join().unwrap_or(false);
-        let cursor = h2.join().unwrap_or(false);
-        let webstorm = h3.join().unwrap_or(false);
-        return (vscode, cursor, webstorm);
+        if let Some(exe) = find_exe_via_desktop_file(spec).or_else(|| find_linux_exe(spec)) {
+            if detach_child(Command::new(&exe).arg(project_path).spawn()) {
+                return true;
+            }
+        }
+        for cmd in spec.cli_cmds {
+            if detach_child(Command::new(cmd).arg(project_path).spawn()) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    // 理论上不会走到这里（上面三个平台已覆盖），但 Rust 要求所有分支都有返回值
     #[allow(unreachable_code)]
-    (false, false, false)
-}
-
-/// 用指定编辑器打开项目目录（始终在新窗口打开，不覆盖已有窗口）
-/// macOS 用 `open -a` + `--args --new-window` 打开 .app
-/// Windows/Linux 直接执行 CLI 命令并带 `--new-window`
-pub fn open_editor(editor: &str, project_path: &str) -> bool {
-    match editor {
-        "vscode" => {
-            if cfg!(target_os = "macos") {
-                detach_child(
-                    Command::new("open")
-                        .args([
-                            "-a",
-                            "Visual Studio Code",
-                            project_path,
-                            "--args",
-                            "--new-window",
-                        ])
-                        .spawn(),
-                )
-            } else {
-                detach_child(
-                    Command::new("code")
-                        .args(["--new-window", project_path])
-                        .shell_spawn(),
-                )
-            }
-        }
-        "cursor" => {
-            if cfg!(target_os = "macos") {
-                detach_child(
-                    Command::new("open")
-                        .args(["-a", "Cursor", project_path, "--args", "--new-window"])
-                        .spawn(),
-                )
-            } else {
-                detach_child(
-                    Command::new("cursor")
-                        .args(["--new-window", project_path])
-                        .shell_spawn(),
-                )
-            }
-        }
-        "webstorm" => {
-            if cfg!(target_os = "macos") {
-                detach_child(
-                    Command::new("open")
-                        .args(["-a", "WebStorm", project_path])
-                        .spawn(),
-                )
-            } else if cfg!(target_os = "windows") {
-                for cmd in &["webstorm", "webstorm64", "webstorm.exe", "webstorm64.exe"] {
-                    if is_command_available(cmd)
-                        && detach_child(Command::new(cmd).arg(project_path).shell_spawn())
-                    {
-                        return true;
-                    }
-                }
-                false
-            } else {
-                for cmd in &["webstorm", "jetbrains-webstorm", "webstorm.sh"] {
-                    if is_command_available(cmd)
-                        && detach_child(Command::new(cmd).arg(project_path).spawn())
-                    {
-                        return true;
-                    }
-                }
-                false
-            }
-        }
-        _ => false,
-    }
+    false
 }
 
 // ── Node 版本管理器检测 ──
@@ -489,7 +725,7 @@ pub fn get_node_versions(manager: &NodeVersionManager) -> Vec<NodeVersion> {
         LazyLock::new(|| regex_lite::Regex::new(r"(?:node/)?v?(\d+\.\d+\.\d+)").unwrap());
     let version_re = &*VERSION_RE;
     // HashMap 用于去重，同一版本号只保留第一次出现的
-    let mut seen = std::collections::HashMap::new();
+    let mut seen = HashMap::new();
 
     for line in text.lines() {
         // nvm ls 输出中 "N/A" 表示 alias 指向的版本未安装（如 lts/argon -> v4.9.1 (-> N/A)），跳过
