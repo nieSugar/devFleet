@@ -28,10 +28,10 @@ const NodeVersionSelect: React.FC<NodeVersionSelectProps> = ({
   nvmInfo,
   onChange,
 }) => {
-  if (!nvmInfo?.isInstalled) {
+  if (!nvmInfo?.isInstalled && !nvmInfo?.availableVersions?.length) {
     return (
       <Tag color="default" style={{ cursor: "not-allowed" }}>
-        未安装版本管理器
+        无可用 Node 版本
       </Tag>
     );
   }

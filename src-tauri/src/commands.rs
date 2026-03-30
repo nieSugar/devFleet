@@ -349,6 +349,7 @@ pub fn set_node_mirror(mirror: String) -> IpcResponse {
 fn resolve_manager(manager: Option<String>) -> NodeVersionManager {
     if let Some(m) = manager {
         match m.as_str() {
+            "builtin" => NodeVersionManager::Builtin,
             "nvmd" => NodeVersionManager::Nvmd,
             "nvs" => NodeVersionManager::Nvs,
             "nvm" => NodeVersionManager::Nvm,
@@ -360,15 +361,21 @@ fn resolve_manager(manager: Option<String>) -> NodeVersionManager {
     }
 }
 
+/// resolve_manager 的变体：当检测结果为 None 时自动 fallback 到 Builtin
+fn resolve_manager_or_builtin(manager: Option<String>) -> NodeVersionManager {
+    let mgr = resolve_manager(manager);
+    if mgr == NodeVersionManager::None {
+        NodeVersionManager::Builtin
+    } else {
+        mgr
+    }
+}
+
 /// 通过版本管理器安装指定版本的 Node.js
 #[tauri::command]
 pub async fn install_node_version(version: String, manager: Option<String>) -> IpcResponse {
     tokio::task::spawn_blocking(move || {
-        let mgr = resolve_manager(manager);
-
-        if mgr == NodeVersionManager::None {
-            return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm/nvs）");
-        }
+        let mgr = resolve_manager_or_builtin(manager);
 
         match detector::install_node_version(&version, &mgr) {
             Ok(output) => IpcResponse::ok(serde_json::json!({
@@ -386,11 +393,7 @@ pub async fn install_node_version(version: String, manager: Option<String>) -> I
 #[tauri::command]
 pub async fn switch_node_version(version: String, manager: Option<String>) -> IpcResponse {
     tokio::task::spawn_blocking(move || {
-        let mgr = resolve_manager(manager);
-
-        if mgr == NodeVersionManager::None {
-            return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm/nvs）");
-        }
+        let mgr = resolve_manager_or_builtin(manager);
 
         match detector::switch_node_version(&version, &mgr) {
             Ok(output) => IpcResponse::ok(serde_json::json!({
@@ -408,11 +411,7 @@ pub async fn switch_node_version(version: String, manager: Option<String>) -> Ip
 #[tauri::command]
 pub async fn uninstall_node_version(version: String, manager: Option<String>) -> IpcResponse {
     tokio::task::spawn_blocking(move || {
-        let mgr = resolve_manager(manager);
-
-        if mgr == NodeVersionManager::None {
-            return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm/nvs）");
-        }
+        let mgr = resolve_manager_or_builtin(manager);
 
         match detector::uninstall_node_version(&version, &mgr) {
             Ok(output) => IpcResponse::ok(serde_json::json!({
@@ -426,6 +425,72 @@ pub async fn uninstall_node_version(version: String, manager: Option<String>) ->
     .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
 }
 
+/// 获取 Node 安装目录（空字符串表示默认路径）
+#[tauri::command]
+pub fn get_node_install_dir() -> IpcResponse {
+    let dir = crate::node_manager::get_install_dir();
+    let custom = config::load_node_install_dir().unwrap_or_default();
+    IpcResponse::ok(serde_json::json!({
+        "dir": dir.to_string_lossy(),
+        "custom": custom,
+    }))
+}
+
+/// 将 builtin 管理器的 current 目录添加到系统 PATH
+#[tauri::command]
+pub async fn setup_node_global_path() -> IpcResponse {
+    tokio::task::spawn_blocking(|| {
+        match crate::node_manager::add_to_system_path() {
+            Ok(msg) => IpcResponse::ok(serde_json::json!({ "message": msg })),
+            Err(e) => IpcResponse::err(e),
+        }
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
+}
+
+/// 检查 builtin Node 是否已在系统 PATH 中，
+/// 同时检测系统中 node 命令是否可用（避免用户已有外部 node 时误报）
+#[tauri::command]
+pub fn check_node_in_path() -> IpcResponse {
+    let bin_path = crate::node_manager::get_current_bin_path();
+    let in_path = bin_path.as_ref().map_or(false, |p| {
+        let s = p.to_string_lossy();
+        crate::node_manager::is_path_configured(&s)
+    });
+    let node_available = if in_path {
+        true
+    } else {
+        detector::get_current_node_version().is_some()
+    };
+    IpcResponse::ok(serde_json::json!({
+        "inPath": in_path,
+        "binPath": bin_path.map(|p| p.to_string_lossy().to_string()),
+        "nodeAvailable": node_available,
+    }))
+}
+
+/// 设置 Node 安装目录（传空字符串恢复默认）
+#[tauri::command]
+pub fn set_node_install_dir(dir: String) -> IpcResponse {
+    let value = if dir.trim().is_empty() {
+        None
+    } else {
+        let p = std::path::Path::new(dir.trim());
+        if !p.exists() {
+            if let Err(e) = std::fs::create_dir_all(p) {
+                return IpcResponse::err(format!("创建目录失败: {}", e));
+            }
+        }
+        if !p.is_dir() {
+            return IpcResponse::err("指定路径不是有效目录");
+        }
+        Some(dir.trim())
+    };
+    config::save_node_install_dir(value);
+    IpcResponse::ok_msg("安装目录已更新")
+}
+
 /// 设置项目的 Node 版本（写入对应的版本文件，如 .nvmrc）
 #[tauri::command]
 pub fn set_project_node_version(project_id: String, node_version: Option<String>) -> IpcResponse {
@@ -436,9 +501,9 @@ pub fn set_project_node_version(project_id: String, node_version: Option<String>
         None => return IpcResponse::err("项目不存在"),
     };
 
-    let manager = detector::detect_node_version_manager();
+    let mut manager = detector::detect_node_version_manager();
     if manager == NodeVersionManager::None {
-        return IpcResponse::err("未检测到 Node 版本管理器（nvmd/nvm）");
+        manager = NodeVersionManager::Builtin;
     }
 
     // .as_deref() 把 Option<String> 转为 Option<&str>
@@ -462,6 +527,7 @@ pub fn set_project_node_version(project_id: String, node_version: Option<String>
     }
 
     let file_name = match manager {
+        NodeVersionManager::Builtin => ".node-version",
         NodeVersionManager::Nvmd => ".nvmdrc",
         NodeVersionManager::Nvs => ".node-version",
         _ => ".nvmrc",

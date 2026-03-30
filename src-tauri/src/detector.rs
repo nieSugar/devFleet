@@ -298,8 +298,12 @@ fn is_unix_nvm_installed() -> bool {
 }
 
 /// 检测系统中安装了哪种 Node 版本管理器
-/// 优先级：nvmd > nvs > nvm/nvm-windows
+/// 优先级：builtin（有已安装版本时）> nvmd > nvs > nvm/nvm-windows > builtin（兜底）
 pub fn detect_node_version_manager() -> NodeVersionManager {
+    if !crate::node_manager::list_installed_versions().is_empty() {
+        return NodeVersionManager::Builtin;
+    }
+
     // nvmd（跨平台 GUI 版本管理器）
     let nvmd_available = if cfg!(target_os = "windows") {
         let mut cmd = new_cmd();
@@ -339,7 +343,8 @@ pub fn detect_node_version_manager() -> NodeVersionManager {
         return NodeVersionManager::Nvm;
     }
 
-    NodeVersionManager::None
+    // 所有外部管理器都没找到，fallback 到内建管理器
+    NodeVersionManager::Builtin
 }
 
 /// 获取当前系统正在使用的 Node.js 版本号
@@ -368,6 +373,10 @@ pub fn get_current_node_version() -> Option<String> {
 /// nvmd 的 node shim 在某些进程上下文中可能返回缓存值，
 /// 直接用 `nvmd current` 可以绕过 shim 读取真实配置。
 fn get_current_version_by_manager(manager: &NodeVersionManager) -> Option<String> {
+    if *manager == NodeVersionManager::Builtin {
+        return crate::config::load_builtin_current_version();
+    }
+
     let output = match manager {
         NodeVersionManager::Nvmd => {
             if cfg!(target_os = "windows") {
@@ -402,6 +411,10 @@ fn get_current_version_by_manager(manager: &NodeVersionManager) -> Option<String
 
 /// 获取指定版本管理器已安装的所有 Node 版本列表
 pub fn get_node_versions(manager: &NodeVersionManager) -> Vec<NodeVersion> {
+    if *manager == NodeVersionManager::Builtin {
+        return crate::node_manager::list_installed_versions();
+    }
+
     let current = get_current_version_by_manager(manager);
 
     // 不同版本管理器用不同的命令列出已安装版本
@@ -442,7 +455,7 @@ pub fn get_node_versions(manager: &NodeVersionManager) -> Vec<NodeVersion> {
             ]);
             output_with_timeout(cmd, VERSION_LIST_TIMEOUT_SECS)
         }
-        NodeVersionManager::None => return vec![],
+        NodeVersionManager::Builtin | NodeVersionManager::None => return vec![],
     };
 
     let output = match output {
@@ -780,6 +793,9 @@ pub fn get_node_bin_dir(version: &str, manager: &NodeVersionManager) -> Option<P
                 .join(format!("v{}", ver))
                 .join("bin")
         }
+        NodeVersionManager::Builtin => {
+            return crate::node_manager::get_bin_dir(ver);
+        }
         // nvmd 通过 shim 自动处理，无需 PATH 注入
         NodeVersionManager::Nvmd | NodeVersionManager::None => return None,
     };
@@ -871,6 +887,10 @@ fn create_dir_link(link: &Path, target: &Path) -> bool {
 /// nvmd CLI 不支持 install，在 Windows 下 fallback 到 nvm-windows，
 /// 安装完成后自动创建目录 junction 桥接 nvm-windows → nvmd 格式。
 pub fn install_node_version(version: &str, manager: &NodeVersionManager) -> Result<String, String> {
+    if *manager == NodeVersionManager::Builtin {
+        return crate::node_manager::install_version(version);
+    }
+
     let ver = version.trim_start_matches('v');
     let via_nvm_for_nvmd = *manager == NodeVersionManager::Nvmd;
 
@@ -928,7 +948,9 @@ pub fn install_node_version(version: &str, manager: &NodeVersionManager) -> Resu
             cmd.args(["-c", &script]);
             output_with_timeout(cmd, 120)
         }
-        NodeVersionManager::None => return Err("未检测到 Node 版本管理器".to_string()),
+        NodeVersionManager::Builtin | NodeVersionManager::None => {
+            return Err("未检测到 Node 版本管理器".to_string())
+        }
     };
 
     match result {
@@ -965,6 +987,10 @@ fn verify_switch(expected: &str, output: String) -> Result<String, String> {
 /// nvmd 的错误通过关键词匹配判断，成功时信任其 CLI 输出。
 /// nvm-windows / nvs 切换后会通过 `node --version` 二次验证。
 pub fn switch_node_version(version: &str, manager: &NodeVersionManager) -> Result<String, String> {
+    if *manager == NodeVersionManager::Builtin {
+        return crate::node_manager::switch_version(version);
+    }
+
     let ver = version.trim_start_matches('v');
 
     match manager {
@@ -1061,7 +1087,9 @@ pub fn switch_node_version(version: &str, manager: &NodeVersionManager) -> Resul
                 Err(e) => Err(format!("执行切换命令失败: {}", e)),
             }
         }
-        NodeVersionManager::None => Err("未检测到 Node 版本管理器".to_string()),
+        NodeVersionManager::Builtin | NodeVersionManager::None => {
+            Err("未检测到 Node 版本管理器".to_string())
+        }
     }
 }
 
@@ -1071,6 +1099,10 @@ pub fn uninstall_node_version(
     version: &str,
     manager: &NodeVersionManager,
 ) -> Result<String, String> {
+    if *manager == NodeVersionManager::Builtin {
+        return crate::node_manager::uninstall_version(version);
+    }
+
     let ver = version.trim_start_matches('v');
 
     let result = match manager {
@@ -1134,7 +1166,9 @@ pub fn uninstall_node_version(
             cmd.args(["-c", &script]);
             output_with_timeout(cmd, CMD_TIMEOUT_SECS)
         }
-        NodeVersionManager::None => return Err("未检测到 Node 版本管理器".to_string()),
+        NodeVersionManager::Builtin | NodeVersionManager::None => {
+            return Err("未检测到 Node 版本管理器".to_string())
+        }
     };
 
     match result {

@@ -34,7 +34,7 @@ export interface IpcResponse<T = unknown> {
   error?: string;
 }
 
-export type NodeVersionManager = 'nvm' | 'nvm-windows' | 'nvmd' | 'nvs' | 'none';
+export type NodeVersionManager = 'builtin' | 'nvm' | 'nvm-windows' | 'nvmd' | 'nvs' | 'none';
 
 export interface NodeVersion {
   version: string;

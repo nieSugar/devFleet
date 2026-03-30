@@ -13,6 +13,10 @@ import {
   GlobalOutlined,
   CheckOutlined,
   EditOutlined,
+  FolderOutlined,
+  FolderOpenOutlined,
+  ApiOutlined,
+  CheckCircleOutlined,
 } from "@ant-design/icons";
 import { tauriAPI } from "../lib/tauri";
 import type {
@@ -44,6 +48,7 @@ interface EnrichedVersion extends RemoteNodeVersion {
 }
 
 const MANAGER_LABELS: Record<NodeVersionManager, string> = {
+  builtin: "内建管理",
   nvmd: "nvmd",
   nvs: "nvs",
   nvm: "nvm",
@@ -170,6 +175,102 @@ const MirrorSelector: React.FC<MirrorSelectorProps> = ({
   );
 };
 
+interface InstallDirSelectorProps {
+  dir: string;
+  resolvedDir: string;
+  onDirChange: (dir: string) => void;
+}
+
+const InstallDirSelector: React.FC<InstallDirSelectorProps> = ({
+  dir,
+  resolvedDir,
+  onDirChange,
+}) => {
+  const [open, setOpen] = useState(false);
+  const [inputVal, setInputVal] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  const displayDir = resolvedDir || dir || "默认路径";
+  const truncated =
+    displayDir.length > 35
+      ? "..." + displayDir.slice(-32)
+      : displayDir;
+
+  const toggleOpen = useCallback(() => {
+    setOpen((prev) => {
+      if (!prev) setInputVal(dir);
+      return !prev;
+    });
+  }, [dir]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    if (open) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const submit = () => {
+    onDirChange(inputVal.trim());
+    setOpen(false);
+  };
+
+  const resetDefault = () => {
+    onDirChange("");
+    setOpen(false);
+  };
+
+  return (
+    <div className="nd-mirror" ref={ref}>
+      <button
+        className="nd-mirror-trigger"
+        onClick={toggleOpen}
+        title={`安装目录: ${dir || "默认"}`}
+      >
+        <FolderOutlined />
+        <span>{truncated}</span>
+        <DownOutlined className={`nd-mirror-arrow ${open ? "open" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="nd-mirror-dropdown">
+          <div className="nd-mirror-custom nd-install-dir-panel">
+            <div className="nd-install-dir-label">
+              <FolderOpenOutlined />
+              <span>Node.js 安装目录</span>
+            </div>
+            <input
+              className="nd-mirror-input"
+              placeholder="留空使用默认路径"
+              value={inputVal}
+              onChange={(e) => setInputVal(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submit()}
+              autoFocus
+            />
+            <div className="nd-install-dir-actions">
+              <button className="nd-mirror-save" onClick={submit}>
+                确定
+              </button>
+              {dir && (
+                <button
+                  className="nd-mirror-save"
+                  onClick={resetDefault}
+                  style={{ opacity: 0.7 }}
+                >
+                  恢复默认
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 type BusyAction = { version: string; type: "install" | "switch" | "uninstall" };
 
 const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
@@ -189,6 +290,20 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   const [messageApi, contextHolder] = message.useMessage();
   const [hasFetched, setHasFetched] = useState(false);
   const [mirror, setMirror] = useState("");
+  const [installDir, setInstallDir] = useState("");
+  const [installDirDisplay, setInstallDirDisplay] = useState("");
+  const [nodeInPath, setNodeInPath] = useState(true);
+  const [nodeAvailable, setNodeAvailable] = useState(true);
+  const [pathSetupBusy, setPathSetupBusy] = useState(false);
+
+  const checkPathStatus = useCallback(() => {
+    tauriAPI.checkNodeInPath().then((res) => {
+      if (res.success && res.data) {
+        setNodeInPath(res.data.inPath);
+        setNodeAvailable(res.data.nodeAvailable);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -196,8 +311,15 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
     tauriAPI.getNodeMirror().then((res) => {
       if (!cancelled && res.success && res.data) setMirror(res.data.mirror);
     });
+    tauriAPI.getNodeInstallDir().then((res) => {
+      if (!cancelled && res.success && res.data) {
+        setInstallDir(res.data.custom);
+        setInstallDirDisplay(res.data.dir);
+      }
+    });
+    checkPathStatus();
     return () => { cancelled = true; };
-  }, [open]);
+  }, [open, checkPathStatus]);
 
   const handleMirrorChange = useCallback(
     async (url: string) => {
@@ -213,6 +335,43 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       }
     },
     [mirror, messageApi],
+  );
+
+  const handleSetupPath = useCallback(async () => {
+    setPathSetupBusy(true);
+    try {
+      const res = await tauriAPI.setupNodeGlobalPath();
+      if (res.success && res.data) {
+        messageApi.success(res.data.message);
+        setNodeInPath(true);
+      } else {
+        messageApi.error(res.error || "设置失败");
+      }
+    } catch {
+      messageApi.error("设置 PATH 失败");
+    } finally {
+      setPathSetupBusy(false);
+    }
+  }, [messageApi]);
+
+  const handleInstallDirChange = useCallback(
+    async (dir: string) => {
+      const prev = installDir;
+      setInstallDir(dir);
+      const res = await tauriAPI.setNodeInstallDir(dir);
+      if (res.success) {
+        messageApi.success("安装目录已更新");
+        const dirRes = await tauriAPI.getNodeInstallDir();
+        if (dirRes.success && dirRes.data) {
+          setInstallDirDisplay(dirRes.data.dir);
+        }
+        setHasFetched(false);
+      } else {
+        setInstallDir(prev);
+        messageApi.error(res.error || "设置安装目录失败");
+      }
+    },
+    [installDir, messageApi],
   );
 
   const cancelledRef = useRef(false);
@@ -253,7 +412,8 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   const refreshNvmInfo = useCallback(async () => {
     const nvmResult = await tauriAPI.getNvmInfo();
     if (nvmResult.success && nvmResult.data) setNvmInfo(nvmResult.data);
-  }, []);
+    checkPathStatus();
+  }, [checkPathStatus]);
 
   const installedSet = useMemo(() => {
     const set = new Set<string>();
@@ -325,13 +485,10 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       >,
       errorMsg: string,
     ) => {
-      if (!nvmInfo?.isInstalled) {
-        messageApi.error("未检测到版本管理器");
-        return;
-      }
+      const mgr = nvmInfo?.isInstalled ? nvmInfo.manager : "builtin";
       setBusy({ version, type });
       try {
-        const result = await apiFn({ version, manager: nvmInfo.manager });
+        const result = await apiFn({ version, manager: mgr });
         if (result.success && result.data) {
           messageApi.success(result.data.message);
           await refreshNvmInfo();
@@ -449,9 +606,33 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
           </div>
         )}
 
-        <div className="nd-meta" style={{ marginTop: nvmInfo ? 8 : 14 }}>
+        <div className="nd-meta" style={{ marginTop: nvmInfo ? 8 : 14, gap: 8, flexWrap: "wrap" }}>
           <MirrorSelector mirror={mirror} onMirrorChange={handleMirrorChange} />
+          {nvmInfo?.manager === "builtin" && (
+            <InstallDirSelector
+              dir={installDir}
+              resolvedDir={installDirDisplay}
+              onDirChange={handleInstallDirChange}
+            />
+          )}
         </div>
+
+        {nvmInfo?.manager === "builtin" && nvmInfo.currentVersion && !nodeInPath && !nodeAvailable && (
+          <div className="nd-path-banner">
+            <div className="nd-path-banner-text">
+              <ApiOutlined />
+              <span>node / npm 未加入系统 PATH，终端中无法直接使用</span>
+            </div>
+            <button
+              className="nd-path-btn"
+              onClick={handleSetupPath}
+              disabled={pathSetupBusy}
+            >
+              {pathSetupBusy ? <LoadingOutlined /> : <CheckCircleOutlined />}
+              <span>加入 PATH</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Toolbar ── */}

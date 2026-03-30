@@ -190,9 +190,58 @@ pub fn load_node_mirror() -> Option<String> {
 pub fn save_node_mirror(mirror: Option<&str>) {
     let _guard = config_lock().lock().unwrap_or_else(|e| e.into_inner());
     let mut cfg = load_unlocked();
-    let settings = cfg.settings.get_or_insert(AppSettings { node_mirror: None });
+    let settings = cfg.settings.get_or_insert(default_settings());
     settings.node_mirror = mirror
         .map(|m| m.trim().to_string())
         .filter(|m| !m.is_empty());
     save_unlocked(&cfg);
+}
+
+/// 读取 Node 安装目录，None 表示使用默认路径
+pub fn load_node_install_dir() -> Option<String> {
+    let _guard = config_lock().lock().unwrap_or_else(|e| e.into_inner());
+    load_unlocked()
+        .settings
+        .and_then(|s| s.node_install_dir)
+        .filter(|d| !d.trim().is_empty())
+}
+
+/// 保存 Node 安装目录（传入 None 恢复默认路径）
+pub fn save_node_install_dir(dir: Option<&str>) {
+    let _guard = config_lock().lock().unwrap_or_else(|e| e.into_inner());
+    let mut cfg = load_unlocked();
+    let settings = cfg.settings.get_or_insert(default_settings());
+    settings.node_install_dir = dir
+        .map(|d| d.trim().to_string())
+        .filter(|d| !d.is_empty());
+    save_unlocked(&cfg);
+}
+
+/// 读取 builtin 管理器的当前版本
+pub fn load_builtin_current_version() -> Option<String> {
+    let _guard = config_lock().lock().unwrap_or_else(|e| e.into_inner());
+    load_unlocked()
+        .settings
+        .and_then(|s| s.builtin_current_version)
+        .filter(|v| !v.trim().is_empty())
+}
+
+/// 保存 builtin 管理器的当前版本
+pub fn save_builtin_current_version(version: Option<impl Into<String>>) {
+    let _guard = config_lock().lock().unwrap_or_else(|e| e.into_inner());
+    let mut cfg = load_unlocked();
+    let settings = cfg.settings.get_or_insert(default_settings());
+    settings.builtin_current_version = version.map(|v| {
+        let s: String = v.into();
+        s.trim().trim_start_matches('v').to_string()
+    }).filter(|v| !v.is_empty());
+    save_unlocked(&cfg);
+}
+
+fn default_settings() -> AppSettings {
+    AppSettings {
+        node_mirror: None,
+        node_install_dir: None,
+        builtin_current_version: None,
+    }
 }

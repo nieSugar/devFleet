@@ -8,6 +8,7 @@ mod commands;
 mod config;
 mod detector;
 mod models;
+mod node_manager;
 mod project;
 
 /// 应用主入口，构建并启动 Tauri 应用
@@ -51,6 +52,10 @@ pub fn run() {
             commands::uninstall_node_version,
             commands::get_node_mirror,
             commands::set_node_mirror,
+            commands::get_node_install_dir,
+            commands::set_node_install_dir,
+            commands::setup_node_global_path,
+            commands::check_node_in_path,
         ])
         // generate_context!() 宏在编译时读取 tauri.conf.json，生成应用上下文
         // run() 启动事件循环（类似前端的 app.mount()）

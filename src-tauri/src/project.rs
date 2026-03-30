@@ -212,8 +212,8 @@ pub fn set_node_version_file(
     node_version: Option<&str>,
     manager: &NodeVersionManager,
 ) -> bool {
-    // 根据版本管理器类型选择对应的配置文件名
     let file_name = match manager {
+        NodeVersionManager::Builtin => ".node-version",
         NodeVersionManager::Nvmd => ".nvmdrc",
         NodeVersionManager::Nvs => ".node-version",
         _ => ".nvmrc",

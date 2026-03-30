@@ -50,6 +50,10 @@ regex-lite = "0.1"
 # ureq: 轻量级同步 HTTP 客户端（用于获取远程版本列表）
 # native-certs: 让 rustls 使用系统证书链，兼容企业代理 / 自签名证书
 ureq = { version = "2", features = ["json", "native-certs"] }
+# 内建 Node 版本管理器所需的解压依赖
+zip = "2"
+flate2 = "1"
+tar = "0.4"
 # tokio: 异步运行时（仅用 spawn_blocking 将阻塞操作移出 async 线程）
 tokio = { version = "1", features = ["rt"] }
 # Tauri 自动更新插件

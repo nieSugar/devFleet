@@ -71,6 +71,10 @@ impl IpcResponse {
 pub struct AppSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub node_mirror: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_install_dir: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub builtin_current_version: Option<String>,
 }
 
 // ── 编辑器缓存 ──
@@ -131,6 +135,7 @@ pub struct ProjectConfig {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum NodeVersionManager {
+    Builtin,
     Nvm,
     NvmWindows,
     Nvmd,

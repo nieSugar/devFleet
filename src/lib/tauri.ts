@@ -113,4 +113,16 @@ export const tauriAPI = {
 
   setNodeMirror: (mirror: string): Promise<IpcResponse<{ message: string }>> =>
     invoke("set_node_mirror", { mirror }),
+
+  getNodeInstallDir: (): Promise<IpcResponse<{ dir: string; custom: string }>> =>
+    invoke("get_node_install_dir"),
+
+  setNodeInstallDir: (dir: string): Promise<IpcResponse<{ message: string }>> =>
+    invoke("set_node_install_dir", { dir }),
+
+  setupNodeGlobalPath: (): Promise<IpcResponse<{ message: string }>> =>
+    invoke("setup_node_global_path"),
+
+  checkNodeInPath: (): Promise<IpcResponse<{ inPath: boolean; binPath: string | null; nodeAvailable: boolean }>> =>
+    invoke("check_node_in_path"),
 };
