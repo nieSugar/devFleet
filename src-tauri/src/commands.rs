@@ -209,6 +209,17 @@ fn spawn_external_terminal(project_path: &str, run_command: &str) -> bool {
 /// 比 `nvm use` 更好：不修改全局状态，多终端可同时使用不同版本
 fn build_node_path_prefix(version: &str, manager: &NodeVersionManager) -> Option<String> {
     let dir = detector::get_node_bin_dir(version, manager)?;
+    format_path_prefix(&dir)
+}
+
+/// 构建 builtin 管理器 current 目录的 PATH 注入命令，
+/// 用于项目未指定 Node 版本时保证 node/npm/pnpm 等全局工具可用
+fn build_builtin_current_path_prefix() -> Option<String> {
+    let dir = crate::node_manager::get_current_bin_path()?;
+    format_path_prefix(&dir)
+}
+
+fn format_path_prefix(dir: &std::path::Path) -> Option<String> {
     let dir_str = dir.to_string_lossy();
     if cfg!(target_os = "windows") {
         Some(format!(r#"set "PATH={};%PATH%""#, dir_str))
@@ -237,7 +248,8 @@ pub fn run_script(
 
     let base_command = pm.run_command(&script_name);
 
-    // 如果项目指定了 Node 版本，在实际命令前注入版本切换命令
+    // 项目指定了 Node 版本 → 注入该版本的 bin 目录
+    // 未指定 → fallback 注入 builtin current 目录，确保全局安装的 pnpm/yarn 等可用
     let run_command = match node_version.as_deref().filter(|v| !v.trim().is_empty()) {
         Some(ver) => {
             let manager = detector::detect_node_version_manager();
@@ -246,7 +258,10 @@ pub fn run_script(
                 None => base_command,
             }
         }
-        None => base_command,
+        None => match build_builtin_current_path_prefix() {
+            Some(prefix) => format!("{} && {}", prefix, base_command),
+            None => base_command,
+        },
     };
 
     if !spawn_external_terminal(&project_path, &run_command) {
