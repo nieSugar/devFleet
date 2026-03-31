@@ -5,7 +5,7 @@
 **轻量、快速的跨平台开发项目管理工具**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.1.3-green.svg)](https://github.com/nieSugar/devFleet/releases)
+[![Version](https://img.shields.io/badge/version-2.1.6-green.svg)](https://github.com/nieSugar/devFleet/releases)
 [![Tauri](https://img.shields.io/badge/Tauri-2-24C8D8?logo=tauri&logoColor=white)](https://v2.tauri.app)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
 [![Rust](https://img.shields.io/badge/Rust-2021-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org)
@@ -146,7 +146,7 @@ pnpm tauri build
 | 前端 | [React 19](https://react.dev) + [TypeScript 5.9](https://www.typescriptlang.org/) + [Vite 7](https://vite.dev) |
 | UI | [Ant Design 5](https://ant.design/) + [@ant-design/icons 6](https://ant.design/components/icon) |
 | 字体 | [Plus Jakarta Sans](https://fonts.google.com/specimen/Plus+Jakarta+Sans) + [JetBrains Mono](https://www.jetbrains.com/lp/mono/) |
-| 后端 | [Rust](https://www.rust-lang.org/) (serde · ureq · chrono · regex-lite) |
+| 后端 | [Rust](https://www.rust-lang.org/) (serde · ureq · tokio · chrono · regex-lite · zip · flate2 · tar) |
 | 插件 | Tauri Dialog · Updater · Process |
 | 代码质量 | [ESLint 9](https://eslint.org/) (flat config) + [Prettier](https://prettier.io/) + Clippy + rustfmt |
 | CI/CD | GitHub Actions — 前后端 CI 检查 + 多平台自动构建与发布 |
@@ -160,16 +160,22 @@ pnpm tauri build
 src/                              # 前端源码 (React + TypeScript)
 ├── renderer.tsx                  # 应用入口
 ├── App.tsx                       # 根组件（主题 / 布局）
+├── App.css                       # 根组件样式
 ├── index.css                     # 全局样式与 CSS 变量
 ├── components/
 │   ├── TitleBar.tsx              # 自定义标题栏（窗口控制 / 主题切换）
+│   ├── TitleBar.css
 │   ├── ProjectManager.tsx        # 项目列表与搜索
+│   ├── ProjectManager.css
 │   ├── ProjectCard.tsx           # 项目卡片
+│   ├── ProjectCard.css
 │   ├── ProjectHeader.tsx         # 项目头部信息
 │   ├── EditorButton.tsx          # 编辑器快捷按钮
 │   ├── NodeVersionDrawer.tsx     # Node 版本管理抽屉
+│   ├── NodeVersionDrawer.css
 │   ├── NodeVersionSelect.tsx     # Node 版本选择器
 │   ├── UpdateChecker.tsx         # 应用更新检查
+│   ├── UpdateChecker.css
 │   └── ErrorBoundary.tsx         # 错误边界
 ├── contexts/
 │   └── ThemeContext.tsx           # 主题上下文
@@ -181,16 +187,22 @@ src/                              # 前端源码 (React + TypeScript)
 ├── lib/
 │   └── tauri.ts                  # Tauri IPC 命令封装
 ├── types/
-│   └── project.ts                # 类型定义
+│   ├── project.ts                # 类型定义
+│   └── assets.d.ts               # 静态资源类型声明
 └── img/                          # 编辑器 SVG 图标
+    ├── cursor.svg
+    ├── vscode.svg
+    └── webstorm.svg
 
 src-tauri/                        # 后端源码 (Rust + Tauri)
 ├── src/
+│   ├── main.rs                   # 程序入口
 │   ├── lib.rs                    # Tauri 启动与命令注册
 │   ├── commands.rs               # IPC 命令实现
 │   ├── config.rs                 # 配置文件读写
 │   ├── detector.rs               # 包管理器 / 编辑器 / NVM 检测
 │   ├── models.rs                 # 数据模型
+│   ├── node_manager.rs           # Node.js 版本下载 / 安装 / 卸载
 │   └── project.rs                # 项目逻辑
 ├── capabilities/                 # Tauri 权限声明
 ├── icons/                        # 应用图标（多平台多尺寸）
