@@ -107,3 +107,22 @@ jobs:
           releaseDraft: true
           prerelease: ${{ github.event.inputs.prerelease }}
           args: ${{ matrix.args }}
+
+      - name: Create portable zip (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $conf = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
+          $version = $conf.version
+          $exe = "src-tauri/target/release/devFleet.exe"
+          $zip = "devFleet_${version}_x64_portable.zip"
+          Compress-Archive -Path $exe -DestinationPath $zip
+          echo "PORTABLE_ZIP=$zip" >> $env:GITHUB_ENV
+          echo "APP_VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Upload portable zip (Windows)
+        if: matrix.platform == 'windows-latest'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: gh release upload "v${APP_VERSION}" "$PORTABLE_ZIP" --clobber
