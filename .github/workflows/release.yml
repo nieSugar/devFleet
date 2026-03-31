@@ -65,6 +65,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
+      - name: Override version (if provided)
+        if: github.event.inputs.version != ''
+        shell: bash
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          # Update tauri.conf.json
+          cd src-tauri
+          node -e "
+            const fs = require('fs');
+            const conf = JSON.parse(fs.readFileSync('tauri.conf.json', 'utf8'));
+            conf.version = '${VERSION}';
+            fs.writeFileSync('tauri.conf.json', JSON.stringify(conf, null, 2) + '\n');
+          "
+          # Update Cargo.toml
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
