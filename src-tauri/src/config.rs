@@ -151,9 +151,7 @@ pub fn load_and_refresh() -> ProjectConfig {
     config.projects.retain_mut(|p| {
         if project::is_valid_path(&p.path) {
             p.scripts = project::get_package_scripts(&p.path);
-            if p.node_version.is_none() {
-                p.node_version = project::get_node_version(&p.path);
-            }
+            p.node_version = project::get_node_version(&p.path);
             true
         } else {
             false

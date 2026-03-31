@@ -217,30 +217,45 @@ pub fn detect_editors() -> (bool, bool, bool) {
     (false, false, false)
 }
 
-/// 用指定编辑器打开项目目录
-/// macOS 用 `open -a` 打开 .app，Windows/Linux 直接执行 CLI 命令
+/// 用指定编辑器打开项目目录（始终在新窗口打开，不覆盖已有窗口）
+/// macOS 用 `open -a` + `--args --new-window` 打开 .app
+/// Windows/Linux 直接执行 CLI 命令并带 `--new-window`
 pub fn open_editor(editor: &str, project_path: &str) -> bool {
     match editor {
         "vscode" => {
             if cfg!(target_os = "macos") {
                 detach_child(
                     Command::new("open")
-                        .args(["-a", "Visual Studio Code", project_path])
+                        .args([
+                            "-a",
+                            "Visual Studio Code",
+                            project_path,
+                            "--args",
+                            "--new-window",
+                        ])
                         .spawn(),
                 )
             } else {
-                detach_child(Command::new("code").arg(project_path).shell_spawn())
+                detach_child(
+                    Command::new("code")
+                        .args(["--new-window", project_path])
+                        .shell_spawn(),
+                )
             }
         }
         "cursor" => {
             if cfg!(target_os = "macos") {
                 detach_child(
                     Command::new("open")
-                        .args(["-a", "Cursor", project_path])
+                        .args(["-a", "Cursor", project_path, "--args", "--new-window"])
                         .spawn(),
                 )
             } else {
-                detach_child(Command::new("cursor").arg(project_path).shell_spawn())
+                detach_child(
+                    Command::new("cursor")
+                        .args(["--new-window", project_path])
+                        .shell_spawn(),
+                )
             }
         }
         "webstorm" => {
