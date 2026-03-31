@@ -17,6 +17,7 @@
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-deep);
   position: relative;
+  z-index: 11;
 }
 .nd-header::after {
   content: '';
@@ -79,6 +80,9 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   font-size: 13px;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
 }
 .nd-icon-btn:hover {
   background: var(--bg-hover);
@@ -153,6 +157,7 @@
 /* ── Mirror Selector ── */
 .nd-mirror {
   position: relative;
+  z-index: 20;
 }
 
 .nd-mirror-trigger {
@@ -170,6 +175,10 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  line-height: 1.5;
 }
 .nd-mirror-trigger:hover {
   border-color: var(--accent);
@@ -214,6 +223,10 @@
   border-radius: var(--radius-sm);
   transition: background var(--transition-fast);
   text-align: left;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  line-height: 1.5;
 }
 .nd-mirror-option:hover {
   background: var(--bg-hover);
@@ -269,6 +282,9 @@
   font-size: var(--text-xs);
   outline: none;
   transition: border-color var(--transition-fast);
+  -webkit-appearance: none;
+  appearance: none;
+  line-height: 1.5;
 }
 .nd-mirror-input:focus {
   border-color: var(--accent);
@@ -308,6 +324,10 @@
   cursor: pointer;
   transition: opacity var(--transition-fast);
   white-space: nowrap;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  line-height: 1.5;
 }
 .nd-mirror-save:hover {
   opacity: 0.85;
@@ -323,10 +343,16 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
 .node-drawer .nd-search {
   border-radius: var(--radius-sm);
+}
+.node-drawer .nd-search .ant-input {
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .nd-filters {
@@ -346,6 +372,10 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  line-height: 1.5;
 }
 .nd-filter-btn:hover {
   border-color: var(--accent);
@@ -414,6 +444,10 @@
   font-weight: 600;
   cursor: pointer;
   transition: all var(--transition-fast);
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  line-height: 1.5;
 }
 .nd-retry-btn:hover {
   background: var(--accent);
@@ -631,6 +665,10 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  line-height: 1.5;
 }
 .nd-switch-btn:hover:not(:disabled) {
   background: var(--success);
@@ -661,6 +699,9 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   flex-shrink: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
 }
 .nd-uninstall-btn:hover:not(:disabled) {
   border-color: #e74c3c;
@@ -693,6 +734,10 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  line-height: 1.5;
 }
 .nd-install-btn:hover:not(:disabled) {
   border-color: var(--accent);
@@ -725,6 +770,10 @@
   cursor: help;
   transition: all var(--transition-fast);
   white-space: nowrap;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  line-height: 1.5;
 }
 .nd-nvmd-hint:hover {
   border-color: var(--warning);
@@ -767,6 +816,10 @@
   transition: all var(--transition-fast);
   white-space: nowrap;
   flex-shrink: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  line-height: 1.5;
 }
 .nd-path-btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--warning) 15%, transparent);

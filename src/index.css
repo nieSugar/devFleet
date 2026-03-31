@@ -10,6 +10,18 @@
   padding: 0;
 }
 
+button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type="text"],
+input[type="search"],
+input[type="url"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 /* ── Design Tokens ── */
 :root {
   --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont,
