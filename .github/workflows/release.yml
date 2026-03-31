@@ -79,7 +79,12 @@ jobs:
             fs.writeFileSync('tauri.conf.json', JSON.stringify(conf, null, 2) + '\n');
           "
           # Update Cargo.toml
-          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          node -e "
+            const fs = require('fs');
+            let cargo = fs.readFileSync('Cargo.toml', 'utf8');
+            cargo = cargo.replace(/^version = \".*\"/m, 'version = \"${VERSION}\"');
+            fs.writeFileSync('Cargo.toml', cargo);
+          "
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
