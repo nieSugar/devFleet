@@ -2,7 +2,7 @@
   height: var(--titlebar-h);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 0 0 0 14px;
   background: var(--bg-deep);
   border-bottom: 1px solid var(--border-subtle);
@@ -23,30 +23,6 @@
 .titlebar-actions,
 .tb-btn {
   -webkit-app-region: no-drag;
-}
-
-.titlebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.titlebar-logo {
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
-  flex-shrink: 0;
-  object-fit: contain;
-  pointer-events: none;
-}
-
-.titlebar-name {
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  font-weight: 800;
-  color: var(--text-secondary);
-  letter-spacing: 0.06em;
-  text-transform: lowercase;
 }
 
 /* ── Buttons ── */

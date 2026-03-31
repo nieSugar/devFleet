@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTheme } from "../contexts/ThemeContext";
 import UpdateChecker from "./UpdateChecker";
-import appIcon from "../assets/app-icon.png";
 import "./TitleBar.css";
 
 interface TitleBarProps {
@@ -55,13 +54,6 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
       className="titlebar"
       {...(!IS_MACOS ? { "data-tauri-drag-region": true } : {})}
     >
-      <div className="titlebar-brand">
-        <img className="titlebar-logo" src={appIcon} alt="devFleet" />
-        <span className="titlebar-name">
-          devFleet
-        </span>
-      </div>
-
       <div className="titlebar-actions">
         <button
           className="tb-btn node-btn"
