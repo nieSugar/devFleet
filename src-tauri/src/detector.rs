@@ -477,6 +477,10 @@ pub fn get_node_versions(manager: &NodeVersionManager) -> Vec<NodeVersion> {
     let mut seen = std::collections::HashMap::new();
 
     for line in text.lines() {
+        // nvm ls 输出中 "N/A" 表示 alias 指向的版本未安装（如 lts/argon -> v4.9.1 (-> N/A)），跳过
+        if line.contains("N/A") {
+            continue;
+        }
         if let Some(caps) = version_re.captures(line) {
             // caps[1] 是正则的第一个捕获组（括号里的部分）
             let ver = caps[1].to_string();

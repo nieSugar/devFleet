@@ -156,6 +156,8 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
             value: s.name,
           }))}
           size="small"
+          showSearch
+          optionFilterProp="label"
           popupMatchSelectWidth={false}
         />
         <button
