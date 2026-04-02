@@ -13,7 +13,8 @@
     "tauri:build": "tauri build",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "icon": "tauri icon ./logo.png"
   },
   "author": {
     "name": "nieSugar",
