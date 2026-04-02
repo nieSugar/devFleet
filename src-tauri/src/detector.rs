@@ -109,6 +109,9 @@ struct EditorSpec {
     linux_paths: &'static [&'static str],
     /// 最终回退：CLI 命令名
     cli_cmds: &'static [&'static str],
+    /// Windows: JetBrains 直装版注册表检测
+    /// (SOFTWARE\JetBrains\{product_name}\*\InstallLocation, bin\{exe_name})
+    win_jetbrains: Option<(&'static str, &'static str)>,
 }
 
 const EDITORS: &[EditorSpec] = &[
@@ -125,6 +128,7 @@ const EDITORS: &[EditorSpec] = &[
         ],
         linux_paths: &["/usr/bin/code", "/usr/share/code/code", "/snap/bin/code"],
         cli_cmds: &["code"],
+        win_jetbrains: None,
     },
     EditorSpec {
         id: "vscode-insiders",
@@ -139,6 +143,7 @@ const EDITORS: &[EditorSpec] = &[
         ],
         linux_paths: &["/usr/bin/code-insiders", "/usr/share/code-insiders/code-insiders", "/snap/bin/code-insiders"],
         cli_cmds: &["code-insiders"],
+        win_jetbrains: None,
     },
     EditorSpec {
         id: "cursor",
@@ -153,6 +158,7 @@ const EDITORS: &[EditorSpec] = &[
         ],
         linux_paths: &["/usr/bin/cursor", "/opt/Cursor/cursor"],
         cli_cmds: &["cursor"],
+        win_jetbrains: None,
     },
     EditorSpec {
         id: "windsurf",
@@ -167,6 +173,7 @@ const EDITORS: &[EditorSpec] = &[
         ],
         linux_paths: &["/usr/bin/windsurf"],
         cli_cmds: &["windsurf"],
+        win_jetbrains: None,
     },
     EditorSpec {
         id: "trae",
@@ -181,12 +188,15 @@ const EDITORS: &[EditorSpec] = &[
         ],
         linux_paths: &["/usr/bin/trae"],
         cli_cmds: &["trae"],
+        win_jetbrains: None,
     },
     EditorSpec {
         id: "webstorm",
         name: "WebStorm",
-        url_schemes: &[],
-        win_app_path_keys: &[],
+        // JetBrains 直装版会在 HKCR 注册 webstorm:// 协议处理器
+        url_schemes: &["webstorm"],
+        // 直装版同时写入 App Paths（Toolbox 不写，但直装版写）
+        win_app_path_keys: &["webstorm64.exe", "webstorm.exe"],
         mac_apps: &["WebStorm"],
         linux_desktop_names: &["webstorm", "jetbrains-webstorm"],
         win_paths: &[
@@ -194,12 +204,15 @@ const EDITORS: &[EditorSpec] = &[
         ],
         linux_paths: &["/usr/bin/webstorm", "/snap/bin/webstorm"],
         cli_cmds: &["webstorm", "webstorm64"],
+        // 直装版通过 HKLM\SOFTWARE\JetBrains\WebStorm\{ver}\InstallLocation 定位
+        win_jetbrains: Some(("WebStorm", "webstorm64.exe")),
     },
     EditorSpec {
         id: "idea",
         name: "IntelliJ IDEA",
-        url_schemes: &[],
-        win_app_path_keys: &[],
+        // JetBrains 直装版会在 HKCR 注册 idea:// 协议处理器
+        url_schemes: &["idea"],
+        win_app_path_keys: &["idea64.exe", "idea.exe"],
         mac_apps: &["IntelliJ IDEA", "IntelliJ IDEA CE"],
         linux_desktop_names: &[
             "idea", "jetbrains-idea",
@@ -214,6 +227,7 @@ const EDITORS: &[EditorSpec] = &[
             "/snap/bin/intellij-idea-community",
         ],
         cli_cmds: &["idea", "idea64"],
+        win_jetbrains: Some(("IntelliJ IDEA", "idea64.exe")),
     },
     EditorSpec {
         id: "zed",
@@ -228,6 +242,7 @@ const EDITORS: &[EditorSpec] = &[
         ],
         linux_paths: &["/usr/bin/zed", "/usr/local/bin/zed"],
         cli_cmds: &["zed"],
+        win_jetbrains: None,
     },
     EditorSpec {
         id: "kiro",
@@ -241,6 +256,7 @@ const EDITORS: &[EditorSpec] = &[
         ],
         linux_paths: &["/usr/bin/kiro", "~/.local/bin/kiro"],
         cli_cmds: &["kiro"],
+        win_jetbrains: None,
     },
     EditorSpec {
         id: "antigravity",
@@ -254,6 +270,7 @@ const EDITORS: &[EditorSpec] = &[
         ],
         linux_paths: &["/usr/bin/antigravity"],
         cli_cmds: &["antigravity", "agy"],
+        win_jetbrains: None,
     },
 ];
 
@@ -336,6 +353,38 @@ fn find_exe_via_registry(spec: &EditorSpec) -> Option<PathBuf> {
     None
 }
 
+/// Windows: 枚举 HKLM/HKCU\SOFTWARE\JetBrains\{product}\* 注册表，
+/// 找到最新版本的 InstallLocation 并拼接 bin\{exe_name}。
+/// 用于通过直装包安装（而非 Toolbox）的 JetBrains 产品。
+/// 版本号按字符串倒序排列（"2025.1" > "2024.3"），取第一个存在的 exe。
+#[cfg(target_os = "windows")]
+fn find_jetbrains_exe(product_name: &str, exe_name: &str) -> Option<PathBuf> {
+    use winreg::enums::*;
+    use winreg::RegKey;
+
+    for &root in &[HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER] {
+        let key_path = format!(r"SOFTWARE\JetBrains\{}", product_name);
+        let key = match RegKey::predef(root).open_subkey(&key_path) {
+            Ok(k) => k,
+            Err(_) => continue,
+        };
+        let mut versions: Vec<String> = key.enum_keys().filter_map(|k| k.ok()).collect();
+        // 倒序：版本号越大越靠前（"2025.1" > "2024.3.5" 字典序成立）
+        versions.sort_unstable_by(|a, b| b.cmp(a));
+        for ver in &versions {
+            if let Ok(ver_key) = key.open_subkey(ver) {
+                if let Ok(location) = ver_key.get_value::<String, _>("InstallLocation") {
+                    let exe = PathBuf::from(location.trim_matches('"')).join("bin").join(exe_name);
+                    if exe.exists() {
+                        return Some(exe);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Linux: 解析 .desktop 文件中的 Exec= 行获取可执行文件路径
 #[cfg(target_os = "linux")]
 fn parse_desktop_exec(desktop_path: &Path) -> Option<PathBuf> {
@@ -403,10 +452,21 @@ fn find_linux_exe(spec: &EditorSpec) -> Option<PathBuf> {
 fn is_editor_found_fast(spec: &EditorSpec) -> bool {
     #[cfg(target_os = "windows")]
     {
-        return find_exe_via_registry(spec).is_some()
-            || spec.win_paths.iter().any(|p| {
-                expand_env_path(p).map(|ep| ep.exists()).unwrap_or(false)
-            });
+        if find_exe_via_registry(spec).is_some() {
+            return true;
+        }
+        if spec.win_paths.iter().any(|p| {
+            expand_env_path(p).map(|ep| ep.exists()).unwrap_or(false)
+        }) {
+            return true;
+        }
+        // 直装版 JetBrains：枚举 SOFTWARE\JetBrains\{product}\* 注册表
+        if let Some((product, exe)) = spec.win_jetbrains {
+            if find_jetbrains_exe(product, exe).is_some() {
+                return true;
+            }
+        }
+        return false;
     }
 
     #[cfg(target_os = "macos")]
@@ -565,7 +625,13 @@ pub fn open_editor(editor_id: &str, project_path: &str) -> bool {
 
     #[cfg(target_os = "windows")]
     {
-        if let Some(exe) = find_exe_via_registry(spec).or_else(|| find_win_exe(spec)) {
+        let exe = find_exe_via_registry(spec)
+            .or_else(|| find_win_exe(spec))
+            .or_else(|| {
+                spec.win_jetbrains
+                    .and_then(|(product, exe_name)| find_jetbrains_exe(product, exe_name))
+            });
+        if let Some(exe) = exe {
             return launch_win_exe(&exe, project_path);
         }
         for cmd in spec.cli_cmds {
