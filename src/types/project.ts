@@ -60,4 +60,9 @@ export interface RemoteNodeVersion {
   security: boolean;
 }
 
-export type EditorStatus = Record<string, boolean>;
+export interface EditorInfo {
+  name: string;
+  installed: boolean;
+}
+
+export type EditorStatus = Record<string, EditorInfo>;

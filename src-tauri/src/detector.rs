@@ -1,7 +1,7 @@
 // 这个文件负责「检测」：包管理器、编辑器、Node 版本管理器
 // 核心思路：通过检查 lock 文件是否存在、CLI 命令是否可用来判断用户安装了什么
 
-use crate::models::{NodeVersion, NodeVersionManager, NvmInfo, PackageManager, RemoteNodeVersion};
+use crate::models::{EditorInfo, NodeVersion, NodeVersionManager, NvmInfo, PackageManager, RemoteNodeVersion};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -94,6 +94,8 @@ pub fn detect_package_manager(project_path: &str) -> PackageManager {
 #[allow(dead_code)]
 struct EditorSpec {
     id: &'static str,
+    /// 前端显示名称（作为 IPC 数据的 single source of truth）
+    name: &'static str,
     /// Windows: URL scheme 注册表键名（HKCR\{scheme}\shell\open\command）
     url_schemes: &'static [&'static str],
     /// Windows: App Paths 注册表键名
@@ -112,6 +114,7 @@ struct EditorSpec {
 const EDITORS: &[EditorSpec] = &[
     EditorSpec {
         id: "vscode",
+        name: "VS Code",
         url_schemes: &["vscode"],
         win_app_path_keys: &["Code.exe"],
         mac_apps: &["Visual Studio Code"],
@@ -124,7 +127,22 @@ const EDITORS: &[EditorSpec] = &[
         cli_cmds: &["code"],
     },
     EditorSpec {
+        id: "vscode-insiders",
+        name: "VS Code Insiders",
+        url_schemes: &["vscode-insiders"],
+        win_app_path_keys: &["Code - Insiders.exe"],
+        mac_apps: &["Visual Studio Code - Insiders"],
+        linux_desktop_names: &["code-insiders", "code-insiders-url-handler", "visual-studio-code-insiders"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Programs\Microsoft VS Code Insiders\Code - Insiders.exe",
+            r"%ProgramFiles%\Microsoft VS Code Insiders\Code - Insiders.exe",
+        ],
+        linux_paths: &["/usr/bin/code-insiders", "/usr/share/code-insiders/code-insiders", "/snap/bin/code-insiders"],
+        cli_cmds: &["code-insiders"],
+    },
+    EditorSpec {
         id: "cursor",
+        name: "Cursor",
         url_schemes: &["cursor"],
         win_app_path_keys: &["Cursor.exe"],
         mac_apps: &["Cursor"],
@@ -138,6 +156,7 @@ const EDITORS: &[EditorSpec] = &[
     },
     EditorSpec {
         id: "windsurf",
+        name: "Windsurf",
         url_schemes: &["windsurf"],
         win_app_path_keys: &[],
         mac_apps: &["Windsurf"],
@@ -151,6 +170,7 @@ const EDITORS: &[EditorSpec] = &[
     },
     EditorSpec {
         id: "trae",
+        name: "Trae",
         url_schemes: &["trae"],
         win_app_path_keys: &[],
         mac_apps: &["Trae", "Trae CN"],
@@ -164,6 +184,7 @@ const EDITORS: &[EditorSpec] = &[
     },
     EditorSpec {
         id: "webstorm",
+        name: "WebStorm",
         url_schemes: &[],
         win_app_path_keys: &[],
         mac_apps: &["WebStorm"],
@@ -176,6 +197,7 @@ const EDITORS: &[EditorSpec] = &[
     },
     EditorSpec {
         id: "idea",
+        name: "IntelliJ IDEA",
         url_schemes: &[],
         win_app_path_keys: &[],
         mac_apps: &["IntelliJ IDEA", "IntelliJ IDEA CE"],
@@ -195,6 +217,7 @@ const EDITORS: &[EditorSpec] = &[
     },
     EditorSpec {
         id: "zed",
+        name: "Zed",
         url_schemes: &["zed"],
         win_app_path_keys: &["Zed.exe"],
         mac_apps: &["Zed"],
@@ -205,6 +228,32 @@ const EDITORS: &[EditorSpec] = &[
         ],
         linux_paths: &["/usr/bin/zed", "/usr/local/bin/zed"],
         cli_cmds: &["zed"],
+    },
+    EditorSpec {
+        id: "kiro",
+        name: "Kiro",
+        url_schemes: &["kiro"],
+        win_app_path_keys: &["Kiro.exe"],
+        mac_apps: &["Kiro"],
+        linux_desktop_names: &["kiro", "kiro-url-handler"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Programs\Kiro\Kiro.exe",
+        ],
+        linux_paths: &["/usr/bin/kiro", "~/.local/bin/kiro"],
+        cli_cmds: &["kiro"],
+    },
+    EditorSpec {
+        id: "antigravity",
+        name: "Antigravity",
+        url_schemes: &["antigravity"],
+        win_app_path_keys: &["Antigravity.exe"],
+        mac_apps: &["Antigravity"],
+        linux_desktop_names: &["antigravity", "google-antigravity"],
+        win_paths: &[
+            r"%ProgramFiles%\Google\Antigravity\Antigravity.exe",
+        ],
+        linux_paths: &["/usr/bin/antigravity"],
+        cli_cmds: &["antigravity", "agy"],
     },
 ];
 
@@ -418,15 +467,18 @@ fn is_command_available(cmd: &str) -> bool {
     }
 }
 
-/// 检测所有已知编辑器，返回 { id: installed } 映射
+/// 检测所有已知编辑器，返回 { id: EditorInfo } 映射
 /// 快速检测（Registry / .app / .desktop + 已知路径）未命中的，并发走 CLI 兜底
-pub fn detect_editors() -> HashMap<String, bool> {
+pub fn detect_editors() -> HashMap<String, EditorInfo> {
     let mut result = HashMap::new();
     let mut need_cli: Vec<&EditorSpec> = Vec::new();
 
     for spec in EDITORS {
         if is_editor_found_fast(spec) {
-            result.insert(spec.id.to_string(), true);
+            result.insert(spec.id.to_string(), EditorInfo {
+                name: spec.name.to_string(),
+                installed: true,
+            });
         } else {
             need_cli.push(spec);
         }
@@ -437,17 +489,18 @@ pub fn detect_editors() -> HashMap<String, bool> {
             .into_iter()
             .map(|spec| {
                 let id = spec.id.to_string();
+                let name = spec.name.to_string();
                 let cmds: Vec<String> = spec.cli_cmds.iter().map(|s| s.to_string()).collect();
                 std::thread::spawn(move || {
                     let found = cmds.iter().any(|cmd| is_command_available(cmd));
-                    (id, found)
+                    (id, name, found)
                 })
             })
             .collect();
 
         for h in handles {
-            if let Ok((id, found)) = h.join() {
-                result.insert(id, found);
+            if let Ok((id, name, found)) = h.join() {
+                result.insert(id, EditorInfo { name, installed: found });
             }
         }
     }
@@ -470,8 +523,18 @@ fn launch_win_exe(exe: &Path, project_path: &str) -> bool {
     }
 }
 
+/// macOS: 检查 .app 是否存在于 /Applications 或 ~/Applications
+#[cfg(target_os = "macos")]
+fn mac_app_exists(app_name: &str) -> bool {
+    Path::new(&format!("/Applications/{}.app", app_name)).exists()
+        || std::env::var("HOME")
+            .ok()
+            .map(|h| Path::new(&format!("{}/Applications/{}.app", h, app_name)).exists())
+            .unwrap_or(false)
+}
+
 /// 用指定编辑器打开项目目录
-/// macOS 遍历 mac_apps 列表兼容多变体（Trae CN / IntelliJ IDEA CE），
+/// macOS 先检测 .app 是否存在再调用 open -a（避免系统弹错误弹窗），
 /// Windows 优先注册表路径，Linux 优先 .desktop Exec 路径，最终 CLI 兜底
 pub fn open_editor(editor_id: &str, project_path: &str) -> bool {
     let spec = match EDITORS.iter().find(|s| s.id == editor_id) {
@@ -482,11 +545,18 @@ pub fn open_editor(editor_id: &str, project_path: &str) -> bool {
     #[cfg(target_os = "macos")]
     {
         for app in spec.mac_apps {
-            if detach_child(
-                Command::new("open")
-                    .args(["-a", app, project_path])
-                    .spawn(),
-            ) {
+            if mac_app_exists(app) {
+                if detach_child(
+                    Command::new("open")
+                        .args(["-a", app, project_path])
+                        .spawn(),
+                ) {
+                    return true;
+                }
+            }
+        }
+        for cmd in spec.cli_cmds {
+            if detach_child(Command::new(cmd).arg(project_path).spawn()) {
                 return true;
             }
         }

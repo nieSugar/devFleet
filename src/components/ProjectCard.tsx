@@ -1,27 +1,30 @@
 import React from "react";
 import { Select, Typography, Tooltip } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
+import { Cursor, Trae, Windsurf, Antigravity } from "@lobehub/icons";
 import { Project, NvmInfo, EditorStatus } from "../types/project";
 import EditorButton from "./EditorButton";
 import NodeVersionSelect from "./NodeVersionSelect";
 import vscodeSvg from "../img/vscode.svg";
-import cursorSvg from "../img/cursor.svg";
-import windsurfSvg from "../img/windsurf.svg";
-import traeSvg from "../img/trae.svg";
+import vscodeInsidersSvg from "../img/vscode-insiders.svg";
 import webstormSvg from "../img/webstorm.svg";
 import ideaSvg from "../img/idea.svg";
 import zedSvg from "../img/zed.svg";
+import kiroSvg from "../img/kiro.svg";
 import "./ProjectCard.css";
 
-const EDITOR_REGISTRY: { id: string; name: string; icon: string }[] = [
-  { id: "vscode", name: "VS Code", icon: vscodeSvg },
-  { id: "cursor", name: "Cursor", icon: cursorSvg },
-  { id: "windsurf", name: "Windsurf", icon: windsurfSvg },
-  { id: "trae", name: "Trae", icon: traeSvg },
-  { id: "webstorm", name: "WebStorm", icon: webstormSvg },
-  { id: "idea", name: "IntelliJ IDEA", icon: ideaSvg },
-  { id: "zed", name: "Zed", icon: zedSvg },
-];
+const EDITOR_ICONS: Record<string, React.ReactNode> = {
+  vscode: <img alt="VSCode" src={vscodeSvg} draggable={false} />,
+  "vscode-insiders": <img alt="VSCode Insiders" src={vscodeInsidersSvg} draggable={false} />,
+  cursor: <Cursor size={16} />,
+  windsurf: <Windsurf size={16} />,
+  trae: <Trae.Color size={16} />,
+  webstorm: <img alt="WebStorm" src={webstormSvg} draggable={false} />,
+  idea: <img alt="IntelliJ IDEA" src={ideaSvg} draggable={false} />,
+  zed: <img alt="Zed" src={zedSvg} draggable={false} />,
+  kiro: <img alt="Kiro" src={kiroSvg} draggable={false} />,
+  antigravity: <Antigravity.Color size={16} />,
+};
 
 interface ProjectCardProps {
   project: Project;
@@ -123,15 +126,15 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
       {/* Editors + Node */}
       <div className="card-meta">
         <div className="card-editors">
-          {editors && EDITOR_REGISTRY
-            .filter((e) => editors[e.id])
-            .map((e) => (
+          {editors && Object.entries(editors)
+            .filter(([, info]) => info.installed)
+            .map(([id, info]) => (
               <EditorButton
-                key={e.id}
-                icon={e.icon}
-                alt={e.name}
-                title={e.name}
-                onClick={() => editorAction(e.id)}
+                key={id}
+                icon={EDITOR_ICONS[id]}
+                alt={info.name}
+                title={info.name}
+                onClick={() => editorAction(id)}
               />
             ))}
         </div>

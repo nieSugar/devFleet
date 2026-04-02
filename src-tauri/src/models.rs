@@ -78,10 +78,50 @@ pub struct AppSettings {
 }
 
 // ── 编辑器缓存 ──
-// 使用 HashMap 代替固定字段结构体，新增编辑器无需改类型
-// key = 编辑器 id（如 "vscode"、"cursor"），value = 是否安装
 
-pub type EditorCache = std::collections::HashMap<String, bool>;
+#[derive(Serialize, Clone, Debug)]
+pub struct EditorInfo {
+    pub name: String,
+    pub installed: bool,
+}
+
+impl<'de> serde::Deserialize<'de> for EditorInfo {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{self, MapAccess, Visitor};
+
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = EditorInfo;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a boolean or { name, installed } object")
+            }
+            fn visit_bool<E: de::Error>(self, v: bool) -> Result<EditorInfo, E> {
+                Ok(EditorInfo { name: String::new(), installed: v })
+            }
+            fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<EditorInfo, M::Error> {
+                let mut name = None;
+                let mut installed = None;
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "name" => name = Some(map.next_value()?),
+                        "installed" => installed = Some(map.next_value()?),
+                        _ => { let _ = map.next_value::<serde::de::IgnoredAny>()?; }
+                    }
+                }
+                Ok(EditorInfo {
+                    name: name.unwrap_or_default(),
+                    installed: installed.unwrap_or(false),
+                })
+            }
+        }
+        deserializer.deserialize_any(V)
+    }
+}
+
+pub type EditorCache = std::collections::HashMap<String, EditorInfo>;
 
 // ── 项目相关类型 ──
 
