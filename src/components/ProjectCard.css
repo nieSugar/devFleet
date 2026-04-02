@@ -177,10 +177,22 @@
 .editor-btn:active {
   background: var(--bg-active);
 }
-.editor-btn img {
+.editor-btn img,
+.editor-btn svg {
   width: 16px;
   height: 16px;
   pointer-events: none;
+}
+.editor-btn-text {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-secondary);
+  pointer-events: none;
+  max-width: 26px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Actions */
