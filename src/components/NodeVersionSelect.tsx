@@ -40,8 +40,8 @@ const NodeVersionSelect: React.FC<NodeVersionSelectProps> = ({
     <Select<string | undefined>
       value={record.nodeVersion || undefined}
       placeholder="选择版本"
-      style={{ width: 150 }}
       allowClear
+      popupMatchSelectWidth={false}
       onChange={(v) => onChange(record.id, v)}
       options={(nvmInfo.availableVersions || []).map((v) => ({
         label: (

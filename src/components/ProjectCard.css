@@ -155,6 +155,12 @@
 .card-node {
   flex-shrink: 0;
 }
+.card-node .ant-select {
+  min-width: 130px;
+}
+.card-node .ant-select .ant-select-selector {
+  border-radius: var(--radius-sm) !important;
+}
 
 /* Editor buttons (used by EditorButton component) */
 .editor-btn {
@@ -204,7 +210,10 @@
 }
 .card-script-select {
   flex: none;
-  width: 140px;
+  min-width: 110px;
+}
+.card-actions .ant-select .ant-select-selector {
+  border-radius: var(--radius-sm) !important;
 }
 
 /* ── Run Button ── */
@@ -215,7 +224,7 @@
   justify-content: center;
   gap: 7px;
   height: 32px;
-  padding: 0 14px;
+  padding: 0 16px;
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   background: transparent;

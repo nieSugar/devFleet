@@ -159,7 +159,6 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
             label: s.name,
             value: s.name,
           }))}
-          size="small"
           showSearch
           optionFilterProp="label"
           popupMatchSelectWidth={false}

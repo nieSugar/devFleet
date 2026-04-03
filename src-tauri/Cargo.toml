@@ -36,7 +36,7 @@ tauri-plugin-dialog = "2"
 # features = ["derive"] 启用 #[derive(Serialize, Deserialize)] 宏
 serde = { version = "1", features = ["derive"] }
 # serde_json: JSON 格式的 serde 实现（类似 JSON.parse/stringify）
-serde_json = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
 
 # dirs: 跨平台获取标准目录路径（如配置目录、主目录）
 dirs = "6"
