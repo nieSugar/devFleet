@@ -527,6 +527,47 @@ fn is_command_available(cmd: &str) -> bool {
     }
 }
 
+/// macOS: 通过 Spotlight 索引批量检测已安装的 .app（单次 mdfind 调用，毫秒级）
+/// 用于覆盖未安装在 /Applications 或 ~/Applications 的应用（如 JetBrains Toolbox 安装的 IDE）
+#[cfg(target_os = "macos")]
+fn find_installed_mac_apps(specs: &[&EditorSpec]) -> std::collections::HashSet<String> {
+    let all_apps: Vec<&str> = specs
+        .iter()
+        .flat_map(|s| s.mac_apps.iter().copied())
+        .collect();
+
+    if all_apps.is_empty() {
+        return std::collections::HashSet::new();
+    }
+
+    let conditions: Vec<String> = all_apps
+        .iter()
+        .map(|app| format!("kMDItemFSName == '{}.app'", app))
+        .collect();
+    let query = format!(
+        "kMDItemContentType == 'com.apple.application-bundle' && ({})",
+        conditions.join(" || ")
+    );
+
+    let mut cmd = Command::new("mdfind");
+    cmd.arg(&query);
+    let output = output_with_timeout(cmd, DISCOVERY_TIMEOUT_SECS);
+
+    let mut found = std::collections::HashSet::new();
+    if let Ok(o) = output {
+        if o.status.success() {
+            let text = String::from_utf8_lossy(&o.stdout);
+            for line in text.lines() {
+                let path = Path::new(line.trim());
+                if let Some(stem) = path.file_stem() {
+                    found.insert(stem.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+    found
+}
+
 /// 检测所有已知编辑器，返回 { id: EditorInfo } 映射
 /// 快速检测（Registry / .app / .desktop + 已知路径）未命中的，并发走 CLI 兜底
 pub fn detect_editors() -> HashMap<String, EditorInfo> {
@@ -541,6 +582,30 @@ pub fn detect_editors() -> HashMap<String, EditorInfo> {
             });
         } else {
             need_cli.push(spec);
+        }
+    }
+
+    // macOS: Spotlight 中间层 — 通过 mdfind 批量查找未在标准路径下发现的 .app
+    // 覆盖 JetBrains Toolbox、Homebrew --cask 非标准路径安装等场景
+    #[cfg(target_os = "macos")]
+    if !need_cli.is_empty() {
+        let spotlight_apps = find_installed_mac_apps(&need_cli);
+        if !spotlight_apps.is_empty() {
+            let mut still_need_cli = Vec::new();
+            for spec in need_cli {
+                if spec.mac_apps.iter().any(|app| spotlight_apps.contains(*app)) {
+                    result.insert(
+                        spec.id.to_string(),
+                        EditorInfo {
+                            name: spec.name.to_string(),
+                            installed: true,
+                        },
+                    );
+                } else {
+                    still_need_cli.push(spec);
+                }
+            }
+            need_cli = still_need_cli;
         }
     }
 
@@ -583,16 +648,6 @@ fn launch_win_exe(exe: &Path, project_path: &str) -> bool {
     }
 }
 
-/// macOS: 检查 .app 是否存在于 /Applications 或 ~/Applications
-#[cfg(target_os = "macos")]
-fn mac_app_exists(app_name: &str) -> bool {
-    Path::new(&format!("/Applications/{}.app", app_name)).exists()
-        || std::env::var("HOME")
-            .ok()
-            .map(|h| Path::new(&format!("{}/Applications/{}.app", h, app_name)).exists())
-            .unwrap_or(false)
-}
-
 /// 用指定编辑器打开项目目录
 /// macOS 先检测 .app 是否存在再调用 open -a（避免系统弹错误弹窗），
 /// Windows 优先注册表路径，Linux 优先 .desktop Exec 路径，最终 CLI 兜底
@@ -604,15 +659,15 @@ pub fn open_editor(editor_id: &str, project_path: &str) -> bool {
 
     #[cfg(target_os = "macos")]
     {
+        // open -a 走 LaunchServices，能找到系统上任意位置的 .app（不限于 /Applications）
         for app in spec.mac_apps {
-            if mac_app_exists(app) {
-                if detach_child(
-                    Command::new("open")
-                        .args(["-a", app, project_path])
-                        .spawn(),
-                ) {
-                    return true;
-                }
+            let status = Command::new("open")
+                .args(["-a", app, project_path])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+            if matches!(status, Ok(s) if s.success()) {
+                return true;
             }
         }
         for cmd in spec.cli_cmds {
