@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "macos-about-window",
+  "description": "仅在 macOS 上为关于窗口开放关闭、语言同步和标题栏主题同步能力",
+  "windows": ["about"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:app:allow-set-app-theme"
+  ],
+  "platforms": ["macOS"]
+}

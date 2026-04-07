@@ -1,6 +1,6 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
-import { tauriAPI } from "../lib/tauri";
+import { syncMacOSAppLanguage } from "../lib/macosNative";
 
 const STORAGE_KEY = "devfleet-lang";
 const DEFAULT_LANGUAGE = "zh-CN";
@@ -50,9 +50,9 @@ function getInitialLanguage(): string {
 
 async function syncNativeLanguage(language: string) {
   try {
-    await tauriAPI.syncAppLanguage(language);
+    await syncMacOSAppLanguage(language);
   } catch {
-    // 浏览器预览或非 Tauri 运行时会走到这里，忽略即可。
+    // 非 macOS 或非 Tauri 运行时会提前短路，真正报错时再静默忽略即可。
   }
 }
 

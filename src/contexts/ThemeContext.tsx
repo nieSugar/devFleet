@@ -5,6 +5,7 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
+import { syncMacOSNativeTheme } from "../lib/macosNative";
 
 type Theme = "dark" | "light";
 
@@ -38,6 +39,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
+    // Web 侧继续控制 CSS 主题；macOS 标题栏主题由独立的原生同步模块处理。
+    void syncMacOSNativeTheme(theme).catch((error) => {
+      console.warn("[theme] failed to sync macOS native theme", error);
+    });
+
     try {
       localStorage.setItem(STORAGE_KEY, theme);
     } catch {

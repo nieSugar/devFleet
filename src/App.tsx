@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { Suspense, useState, useCallback, useMemo } from "react";
 import { ConfigProvider, App as AntdApp, theme as antdTheme } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import enUS from "antd/locale/en_US";
@@ -9,9 +9,11 @@ import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import TitleBar from "./components/TitleBar";
 import ProjectManager from "./components/ProjectManager";
 import NodeVersionDrawer from "./components/NodeVersionDrawer";
-import AboutWindow from "./components/AboutWindow";
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./App.css";
+
+// About 窗口只在 macOS 菜单中打开，按需加载可以避免 Windows / Linux 主入口主动引入它。
+const AboutWindow = React.lazy(() => import("./components/AboutWindow"));
 
 // 自定义 About 窗口目前只在 macOS 菜单栏中创建。
 // 其他平台即使共用同一套前端代码，也始终走主应用界面，避免影响 Windows / Linux。
@@ -71,7 +73,9 @@ const AppContent: React.FC = () => {
       <AntdApp>
         <ErrorBoundary>
           {isAboutWindow ? (
-            <AboutWindow />
+            <Suspense fallback={null}>
+              <AboutWindow />
+            </Suspense>
           ) : (
             <div className="app">
               <TitleBar onOpenNodeManager={() => setNodeDrawerOpen(true)} />
