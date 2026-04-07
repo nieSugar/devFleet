@@ -3,9 +3,13 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 
 const host = process.env.TAURI_DEV_HOST;
+const buildDate = new Date().toISOString();
 
 export default defineConfig(async () => ({
   plugins: [react()],
+  define: {
+    __APP_BUILD_DATE__: JSON.stringify(buildDate),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),

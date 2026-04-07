@@ -131,9 +131,12 @@
     "unknown": "未知错误"
   },
   "about": {
-    "close": "关闭(C)",
-    "copiedAndClose": "已复制并关闭",
-    "copyAndClose": "复制并关闭",
+    "close": "关闭",
+    "productName": "DevFleet",
+    "versionAndBuildDate": "版本 {{version}} · 构建于 {{date}}",
+    "copyright": "版权所有 © {{year}} DevFleet。保留所有权利。",
+    "copyInfo": "复制信息",
+    "copied": "已复制",
     "appName": "当前应用名",
     "appVersion": "当前版本号"
   },

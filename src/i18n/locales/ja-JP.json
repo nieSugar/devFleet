@@ -131,9 +131,12 @@
     "unknown": "不明なエラー"
   },
   "about": {
-    "close": "閉じる(C)",
-    "copiedAndClose": "コピーして閉じました",
-    "copyAndClose": "コピーして閉じる",
+    "close": "閉じる",
+    "productName": "DevFleet",
+    "versionAndBuildDate": "バージョン {{version}} · ビルド日 {{date}}",
+    "copyright": "Copyright © {{year}} DevFleet. All rights reserved.",
+    "copyInfo": "情報をコピー",
+    "copied": "コピーしました",
     "appName": "現在のアプリ名",
     "appVersion": "現在のバージョン番号"
   },
