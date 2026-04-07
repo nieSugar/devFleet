@@ -12,7 +12,7 @@ use tauri::{
         HELP_SUBMENU_ID, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu,
         WINDOW_SUBMENU_ID,
     },
-    AppHandle, Manager, Runtime, TitleBarStyle, WebviewUrl, WebviewWindowBuilder,
+    AppHandle, Emitter, Manager, Runtime, TitleBarStyle, WebviewUrl, WebviewWindowBuilder,
 };
 
 // mod 声明：告诉 Rust 编译器"把这些同目录下的 .rs 文件纳入编译"
@@ -29,6 +29,10 @@ mod project;
 const ABOUT_WINDOW_LABEL: &str = "about";
 #[cfg(target_os = "macos")]
 const ABOUT_MENU_ID: &str = "open-about-window";
+#[cfg(target_os = "macos")]
+const ADD_PROJECT_MENU_ID: &str = "trigger-add-project";
+#[cfg(target_os = "macos")]
+const ADD_PROJECT_EVENT: &str = "macos://add-project";
 #[cfg(target_os = "macos")]
 static LOCALE_FILES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../src/i18n/locales");
 #[cfg(target_os = "macos")]
@@ -56,6 +60,7 @@ struct MacStatusBarTranslations {
     hide: Option<String>,
     hide_others: Option<String>,
     quit: Option<String>,
+    add_project: Option<String>,
     close_window: Option<String>,
     undo: Option<String>,
     redo: Option<String>,
@@ -81,6 +86,7 @@ struct ResolvedMacStatusBarTranslations {
     hide: String,
     hide_others: String,
     quit: String,
+    add_project: String,
     close_window: String,
     undo: String,
     redo: String,
@@ -211,6 +217,12 @@ fn resolve_mac_status_bar_translations(app_name: &str) -> ResolvedMacStatusBarTr
             "退出 {{appName}}",
             app_name,
         ),
+        add_project: resolve_text(
+            current.add_project,
+            fallback.add_project,
+            "添加项目",
+            app_name,
+        ),
         close_window: resolve_text(
             current.close_window,
             fallback.close_window,
@@ -289,6 +301,13 @@ fn build_macos_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         true,
         None::<&str>,
     )?;
+    let add_project_item = MenuItem::with_id(
+        app,
+        ADD_PROJECT_MENU_ID,
+        &translations.add_project,
+        true,
+        Some("CmdOrCtrl+N"),
+    )?;
 
     let app_menu = Submenu::with_items(
         app,
@@ -310,10 +329,14 @@ fn build_macos_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         app,
         &translations.file,
         true,
-        &[&PredefinedMenuItem::close_window(
-            app,
-            Some(translations.close_window.as_str()),
-        )?],
+        &[
+            &add_project_item,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::close_window(
+                app,
+                Some(translations.close_window.as_str()),
+            )?,
+        ],
     )?;
 
     let edit_menu = Submenu::with_items(
@@ -405,6 +428,11 @@ fn handle_macos_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     if event.id() == ABOUT_MENU_ID {
         if let Err(e) = open_about_window(app) {
             eprintln!("[devfleet] 打开关于窗口失败: {}", e);
+        }
+    } else if event.id() == ADD_PROJECT_MENU_ID {
+        // 原生菜单只负责发一个 macOS 专用事件，真正的添加流程仍由前端既有逻辑处理。
+        if let Err(e) = app.emit_to("main", ADD_PROJECT_EVENT, ()) {
+            eprintln!("[devfleet] 派发添加项目事件失败: {}", e);
         }
     }
 }

@@ -1,4 +1,7 @@
 type ThemeMode = "light" | "dark";
+type Unlisten = () => void;
+
+const MACOS_ADD_PROJECT_EVENT = "macos://add-project";
 
 function isMacOSUserAgent() {
   return typeof window !== "undefined" && /mac/i.test(window.navigator.userAgent);
@@ -26,4 +29,16 @@ export async function syncMacOSAppLanguage(language: string) {
 
   const { tauriAPI } = await import("./tauri");
   await tauriAPI.syncAppLanguage(language);
+}
+
+export async function listenForMacOSAddProject(
+  handler: () => void | Promise<void>,
+): Promise<Unlisten> {
+  // 原生菜单的“添加项目”只会在 macOS 上发事件，其他平台直接返回空清理函数。
+  if (!(await isMacOSTauriRuntime())) return () => {};
+
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen(MACOS_ADD_PROJECT_EVENT, () => {
+    void handler();
+  });
 }

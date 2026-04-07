@@ -149,6 +149,7 @@
     "hide": "{{appName}} を隠す",
     "hideOthers": "ほかを隠す",
     "quit": "{{appName}} を終了",
+    "addProject": "プロジェクトを追加",
     "closeWindow": "ウインドウを閉じる",
     "undo": "取り消す",
     "redo": "やり直す",

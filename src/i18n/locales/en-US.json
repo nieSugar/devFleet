@@ -149,6 +149,7 @@
     "hide": "Hide {{appName}}",
     "hideOthers": "Hide Others",
     "quit": "Quit {{appName}}",
+    "addProject": "Add Project",
     "closeWindow": "Close Window",
     "undo": "Undo",
     "redo": "Redo",

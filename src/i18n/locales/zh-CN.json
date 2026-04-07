@@ -149,6 +149,7 @@
     "hide": "隐藏 {{appName}}",
     "hideOthers": "隐藏其他",
     "quit": "退出 {{appName}}",
+    "addProject": "添加项目",
     "closeWindow": "关闭窗口",
     "undo": "撤销",
     "redo": "重做",

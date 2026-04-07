@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useTranslation } from "react-i18next";
 import { Project, ProjectConfig } from "../types/project";
 import { tauriAPI } from "../lib/tauri";
+import { listenForMacOSAddProject } from "../lib/macosNative";
 import { useProjects } from "../hooks/useProjects";
 import { useEditors } from "../hooks/useEditors";
 import { useNvmInfo } from "../hooks/useNvmInfo";
@@ -69,13 +70,29 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
     else messageApi.error(text);
   }, [messageApi]);
 
-  const handleAdd = async () => {
+  const handleAdd = useCallback(async () => {
     const result = await addProject();
     if (!result) return;
     if (result.success && result.data)
       showMsg("success", t("project.addSuccess", { name: result.data.name }));
     else showMsg("error", result.error || t("project.addFailed"));
-  };
+  }, [addProject, showMsg, t]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    // macOS 原生菜单的“添加项目”最终仍然复用前端现有的 handleAdd 流程。
+    void listenForMacOSAddProject(handleAdd).then((cleanup) => {
+      if (cancelled) cleanup();
+      else unlisten = cleanup;
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [handleAdd]);
 
   const handleRemove = useCallback((projectId: string, projectName: string) => {
     modal.confirm({
