@@ -74,9 +74,9 @@ const SettingsWindow: React.FC = () => {
     try {
       await setAutostartEnabled(checked);
       message.success(
-        t("settings.startupUpdated", {
-          state: checked ? t("settings.startupOn") : t("settings.startupOff"),
-        }),
+        checked
+          ? t("settings.startupEnabledMessage")
+          : t("settings.startupDisabledMessage"),
       );
     } catch (error) {
       console.warn("[settings] failed to update autostart", error);
@@ -174,8 +174,6 @@ const SettingsWindow: React.FC = () => {
 
             <Switch
               checked={autostartEnabled}
-              checkedChildren={t("common.confirm")}
-              unCheckedChildren={t("common.close")}
               disabled={!autostartSupported || autostartLoading || autostartSaving}
               loading={autostartLoading || autostartSaving}
               onChange={(checked) => void handleAutostartChange(checked)}

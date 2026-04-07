@@ -158,7 +158,8 @@
     "startupOn": "On. DevFleet will launch automatically after sign-in.",
     "startupOff": "Off. Start DevFleet manually when needed.",
     "startupUnsupported": "This feature is not available in the current environment.",
-    "startupUpdated": "Launch on startup updated: {{state}}",
+    "startupEnabledMessage": "Launch on startup enabled",
+    "startupDisabledMessage": "Launch on startup disabled",
     "startupUpdateFailed": "Failed to update launch-on-startup",
     "current": "Currently selected",
     "close": "Close"
@@ -173,6 +174,7 @@
     "view": "View",
     "window": "Window",
     "help": "Help",
+    "helpCenter": "DevFleet Website",
     "services": "Services",
     "hide": "Hide {{appName}}",
     "hideOthers": "Hide Others",

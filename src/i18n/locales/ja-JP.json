@@ -158,7 +158,8 @@
     "startupOn": "オン。サインイン後に自動で起動します。",
     "startupOff": "オフ。必要なときに手動で起動します。",
     "startupUnsupported": "現在の環境ではこの機能を利用できません。",
-    "startupUpdated": "ログイン時起動を更新しました: {{state}}",
+    "startupEnabledMessage": "ログイン時起動を有効にしました",
+    "startupDisabledMessage": "ログイン時起動を無効にしました",
     "startupUpdateFailed": "ログイン時起動の更新に失敗しました",
     "current": "現在使用中",
     "close": "閉じる"
@@ -173,6 +174,7 @@
     "view": "表示",
     "window": "ウインドウ",
     "help": "ヘルプ",
+    "helpCenter": "DevFleet 公式サイト",
     "services": "サービス",
     "hide": "{{appName}} を隠す",
     "hideOthers": "ほかを隠す",

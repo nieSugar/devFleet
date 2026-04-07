@@ -16,19 +16,19 @@ const AppShell: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    let unlisten: (() => void) | undefined;
+    let settingsUnlisten: (() => void) | undefined;
 
     // macOS 原生菜单的“设置”会切回主窗口并导航到 /settings。
     void listenForMacOSOpenSettings(() => {
       navigate("/settings");
     }).then((cleanup) => {
       if (cancelled) cleanup();
-      else unlisten = cleanup;
+      else settingsUnlisten = cleanup;
     });
 
     return () => {
       cancelled = true;
-      unlisten?.();
+      settingsUnlisten?.();
     };
   }, [navigate]);
 

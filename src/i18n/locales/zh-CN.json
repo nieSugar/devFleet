@@ -158,7 +158,8 @@
     "startupOn": "已开启，登录系统后会自动启动。",
     "startupOff": "已关闭，需要手动启动应用。",
     "startupUnsupported": "当前环境不支持此功能。",
-    "startupUpdated": "开机启动已更新为：{{state}}",
+    "startupEnabledMessage": "已开启开机启动",
+    "startupDisabledMessage": "已关闭开机启动",
     "startupUpdateFailed": "更新开机启动设置失败",
     "current": "当前使用中",
     "close": "关闭"
@@ -173,6 +174,7 @@
     "view": "视图",
     "window": "窗口",
     "help": "帮助",
+    "helpCenter": "DevFleet 官网",
     "services": "服务",
     "hide": "隐藏 {{appName}}",
     "hideOthers": "隐藏其他",

@@ -32,11 +32,15 @@ const ABOUT_MENU_ID: &str = "open-about-window";
 #[cfg(target_os = "macos")]
 const SETTINGS_MENU_ID: &str = "open-settings-window";
 #[cfg(target_os = "macos")]
+const HELP_CENTER_MENU_ID: &str = "open-help-website";
+#[cfg(target_os = "macos")]
 const ADD_PROJECT_MENU_ID: &str = "trigger-add-project";
 #[cfg(target_os = "macos")]
 const ADD_PROJECT_EVENT: &str = "macos://add-project";
 #[cfg(target_os = "macos")]
 const OPEN_SETTINGS_EVENT: &str = "macos://open-settings";
+#[cfg(target_os = "macos")]
+const HELP_WEBSITE_URL: &str = "https://devfleet.ruiange.com";
 #[cfg(target_os = "macos")]
 static LOCALE_FILES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../src/i18n/locales");
 #[cfg(target_os = "macos")]
@@ -61,6 +65,7 @@ struct MacStatusBarTranslations {
     view: Option<String>,
     window: Option<String>,
     help: Option<String>,
+    help_center: Option<String>,
     services: Option<String>,
     hide: Option<String>,
     hide_others: Option<String>,
@@ -88,6 +93,7 @@ struct ResolvedMacStatusBarTranslations {
     view: String,
     window: String,
     help: String,
+    help_center: String,
     services: String,
     hide: String,
     hide_others: String,
@@ -205,6 +211,12 @@ fn resolve_mac_status_bar_translations(app_name: &str) -> ResolvedMacStatusBarTr
         view: resolve_text(current.view, fallback.view, "视图", app_name),
         window: resolve_text(current.window, fallback.window, "窗口", app_name),
         help: resolve_text(current.help, fallback.help, "帮助", app_name),
+        help_center: resolve_text(
+            current.help_center,
+            fallback.help_center,
+            "DevFleet 官网",
+            app_name,
+        ),
         services: resolve_text(current.services, fallback.services, "服务", app_name),
         hide: resolve_text(
             current.hide,
@@ -395,8 +407,23 @@ fn build_macos_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         ],
     )?;
 
-    let help_menu =
-        Submenu::with_id_and_items(app, HELP_SUBMENU_ID, &translations.help, true, &[])?;
+    // Help 菜单至少保留一个真实菜单项，这样 macOS 才会把它当成可交互的原生 Help 菜单，
+    // 并在顶部展示系统自带的搜索框。
+    let help_center_item = MenuItem::with_id(
+        app,
+        HELP_CENTER_MENU_ID,
+        &translations.help_center,
+        true,
+        None::<&str>,
+    )?;
+
+    let help_menu = Submenu::with_id_and_items(
+        app,
+        HELP_SUBMENU_ID,
+        &translations.help,
+        true,
+        &[&help_center_item],
+    )?;
 
     Menu::with_items(
         app,
@@ -453,6 +480,14 @@ fn handle_macos_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
 
         if let Err(e) = app.emit_to("main", OPEN_SETTINGS_EVENT, ()) {
             eprintln!("[devfleet] 派发设置页面跳转事件失败: {}", e);
+        }
+    } else if event.id() == HELP_CENTER_MENU_ID {
+        // Help 菜单直接打开官网，不再走应用内路由页。
+        if let Err(e) = std::process::Command::new("open")
+            .arg(HELP_WEBSITE_URL)
+            .spawn()
+        {
+            eprintln!("[devfleet] 打开帮助网址失败: {}", e);
         }
     } else if event.id() == ADD_PROJECT_MENU_ID {
         // 原生菜单只负责发一个 macOS 专用事件，真正的添加流程仍由前端既有逻辑处理。
