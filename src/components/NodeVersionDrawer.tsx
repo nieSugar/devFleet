@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Drawer, Input, Spin, Tooltip, message } from "antd";
 import {
   SearchOutlined,
@@ -47,18 +48,18 @@ interface EnrichedVersion extends RemoteNodeVersion {
   isCurrent: boolean;
 }
 
-const MANAGER_LABELS: Record<NodeVersionManager, string> = {
-  builtin: "内建管理",
-  nvmd: "nvmd",
-  nvs: "nvs",
-  nvm: "nvm",
-  "nvm-windows": "nvm-windows",
-  none: "未检测到",
+const MANAGER_KEYS: Record<NodeVersionManager, string> = {
+  builtin: "nodeDrawer.manager.builtin",
+  nvmd: "nodeDrawer.manager.nvmd",
+  nvs: "nodeDrawer.manager.nvs",
+  nvm: "nodeDrawer.manager.nvm",
+  "nvm-windows": "nodeDrawer.manager.nvm-windows",
+  none: "nodeDrawer.manager.none",
 };
 
-const MIRROR_PRESETS: { label: string; url: string }[] = [
-  { label: "官方源", url: "" },
-  { label: "npmmirror", url: "https://npmmirror.com/mirrors/node" },
+const MIRROR_PRESETS: { labelKey: string; url: string }[] = [
+  { labelKey: "nodeDrawer.mirror.official", url: "" },
+  { labelKey: "npmmirror", url: "https://npmmirror.com/mirrors/node" },
 ];
 
 interface MirrorSelectorProps {
@@ -70,14 +71,17 @@ const MirrorSelector: React.FC<MirrorSelectorProps> = ({
   mirror,
   onMirrorChange,
 }) => {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [customMode, setCustomMode] = useState(false);
   const [customUrl, setCustomUrl] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
   const isPreset = MIRROR_PRESETS.some((p) => p.url === mirror);
-  const activeLabel =
-    MIRROR_PRESETS.find((p) => p.url === mirror)?.label ?? "自定义";
+  const matchedPreset = MIRROR_PRESETS.find((p) => p.url === mirror);
+  const activeLabel = matchedPreset
+    ? (matchedPreset.labelKey === "npmmirror" ? "npmmirror" : t(matchedPreset.labelKey))
+    : t("nodeDrawer.mirror.custom");
 
   const toggleOpen = useCallback(() => {
     setOpen((prev) => {
@@ -115,7 +119,7 @@ const MirrorSelector: React.FC<MirrorSelectorProps> = ({
       <button
         className="nd-mirror-trigger"
         onClick={toggleOpen}
-        title="Node 镜像源"
+        title={t("nodeDrawer.mirror.title")}
       >
         <GlobalOutlined />
         <span>{activeLabel}</span>
@@ -130,7 +134,9 @@ const MirrorSelector: React.FC<MirrorSelectorProps> = ({
               className={`nd-mirror-option ${mirror === p.url ? "active" : ""}`}
               onClick={() => selectPreset(p.url)}
             >
-              <span className="nd-mirror-option-label">{p.label}</span>
+              <span className="nd-mirror-option-label">
+                {p.labelKey === "npmmirror" ? "npmmirror" : t(p.labelKey)}
+              </span>
               {p.url && (
                 <span className="nd-mirror-option-url">{p.url}</span>
               )}
@@ -151,7 +157,7 @@ const MirrorSelector: React.FC<MirrorSelectorProps> = ({
                 autoFocus
               />
               <button className="nd-mirror-save" onClick={submitCustom}>
-                确定
+                {t("common.confirm")}
               </button>
             </div>
           ) : (
@@ -163,7 +169,7 @@ const MirrorSelector: React.FC<MirrorSelectorProps> = ({
               }}
             >
               <EditOutlined />
-              <span className="nd-mirror-option-label">自定义镜像</span>
+              <span className="nd-mirror-option-label">{t("nodeDrawer.mirror.customMirror")}</span>
               {!isPreset && mirror && (
                 <CheckOutlined className="nd-mirror-check" />
               )}
@@ -186,11 +192,12 @@ const InstallDirSelector: React.FC<InstallDirSelectorProps> = ({
   resolvedDir,
   onDirChange,
 }) => {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [inputVal, setInputVal] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
-  const displayDir = resolvedDir || dir || "默认路径";
+  const displayDir = resolvedDir || dir || t("nodeDrawer.installDir.default");
   const truncated =
     displayDir.length > 35
       ? "..." + displayDir.slice(-32)
@@ -228,7 +235,7 @@ const InstallDirSelector: React.FC<InstallDirSelectorProps> = ({
       <button
         className="nd-mirror-trigger"
         onClick={toggleOpen}
-        title={`安装目录: ${dir || "默认"}`}
+        title={t("nodeDrawer.installDir.tooltip", { dir: dir || t("nodeDrawer.installDir.default") })}
       >
         <FolderOutlined />
         <span>{truncated}</span>
@@ -240,11 +247,11 @@ const InstallDirSelector: React.FC<InstallDirSelectorProps> = ({
           <div className="nd-mirror-custom nd-install-dir-panel">
             <div className="nd-install-dir-label">
               <FolderOpenOutlined />
-              <span>Node.js 安装目录</span>
+              <span>{t("nodeDrawer.installDir.title")}</span>
             </div>
             <input
               className="nd-mirror-input"
-              placeholder="留空使用默认路径"
+              placeholder={t("nodeDrawer.installDir.placeholder")}
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submit()}
@@ -252,7 +259,7 @@ const InstallDirSelector: React.FC<InstallDirSelectorProps> = ({
             />
             <div className="nd-install-dir-actions">
               <button className="nd-mirror-save" onClick={submit}>
-                确定
+                {t("common.confirm")}
               </button>
               {dir && (
                 <button
@@ -260,7 +267,7 @@ const InstallDirSelector: React.FC<InstallDirSelectorProps> = ({
                   onClick={resetDefault}
                   style={{ opacity: 0.7 }}
                 >
-                  恢复默认
+                  {t("nodeDrawer.installDir.resetDefault")}
                 </button>
               )}
             </div>
@@ -278,6 +285,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   onClose,
   onVersionChange,
 }) => {
+  const { t } = useTranslation();
   const [remoteVersions, setRemoteVersions] = useState<RemoteNodeVersion[]>(
     [],
   );
@@ -327,14 +335,14 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       setMirror(url);
       const res = await tauriAPI.setNodeMirror(url);
       if (res.success) {
-        messageApi.success("镜像源已切换");
+        messageApi.success(t("nodeDrawer.mirrorSwitched"));
         setHasFetched(false);
       } else {
         setMirror(prev);
-        messageApi.error(res.error || "设置镜像失败");
+        messageApi.error(res.error || t("nodeDrawer.mirrorFailed"));
       }
     },
-    [mirror, messageApi],
+    [mirror, messageApi, t],
   );
 
   const handleSetupPath = useCallback(async () => {
@@ -348,11 +356,11 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
         messageApi.error(res.error || "设置失败");
       }
     } catch {
-      messageApi.error("设置 PATH 失败");
+      messageApi.error(t("nodeDrawer.pathSetupFailed"));
     } finally {
       setPathSetupBusy(false);
     }
-  }, [messageApi]);
+  }, [messageApi, t]);
 
   const handleInstallDirChange = useCallback(
     async (dir: string) => {
@@ -360,7 +368,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       setInstallDir(dir);
       const res = await tauriAPI.setNodeInstallDir(dir);
       if (res.success) {
-        messageApi.success("安装目录已更新");
+        messageApi.success(t("nodeDrawer.installDirUpdated"));
         const dirRes = await tauriAPI.getNodeInstallDir();
         if (dirRes.success && dirRes.data) {
           setInstallDirDisplay(dirRes.data.dir);
@@ -368,10 +376,10 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
         setHasFetched(false);
       } else {
         setInstallDir(prev);
-        messageApi.error(res.error || "设置安装目录失败");
+        messageApi.error(res.error || t("nodeDrawer.installDirFailed"));
       }
     },
-    [installDir, messageApi],
+    [installDir, messageApi, t],
   );
 
   const cancelledRef = useRef(false);
@@ -388,7 +396,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       if (remoteResult.success && remoteResult.data) {
         setRemoteVersions(remoteResult.data);
       } else {
-        messageApi.error(remoteResult.error || "获取远程版本列表失败");
+        messageApi.error(remoteResult.error || t("nodeDrawer.fetchFailed"));
       }
       if (nvmResult.success && nvmResult.data) {
         setNvmInfo(nvmResult.data);
@@ -396,11 +404,11 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       setHasFetched(true);
     } catch {
       if (!cancelledRef.current)
-        messageApi.error("获取版本数据失败，请检查网络连接");
+        messageApi.error(t("nodeDrawer.networkError"));
     } finally {
       if (!cancelledRef.current) setLoading(false);
     }
-  }, [messageApi]);
+  }, [messageApi, t]);
 
   useEffect(() => {
     if (open && !hasFetched) {
@@ -507,20 +515,20 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
 
   const handleInstall = useCallback(
     (version: string) =>
-      handleVersionAction(version, "install", tauriAPI.installNodeVersion, "安装失败"),
-    [handleVersionAction],
+      handleVersionAction(version, "install", tauriAPI.installNodeVersion, t("nodeDrawer.installFailed")),
+    [handleVersionAction, t],
   );
 
   const handleSwitch = useCallback(
     (version: string) =>
-      handleVersionAction(version, "switch", tauriAPI.switchNodeVersion, "切换失败"),
-    [handleVersionAction],
+      handleVersionAction(version, "switch", tauriAPI.switchNodeVersion, t("nodeDrawer.switchFailed")),
+    [handleVersionAction, t],
   );
 
   const handleUninstall = useCallback(
     (version: string) =>
-      handleVersionAction(version, "uninstall", tauriAPI.uninstallNodeVersion, "卸载失败"),
-    [handleVersionAction],
+      handleVersionAction(version, "uninstall", tauriAPI.uninstallNodeVersion, t("nodeDrawer.uninstallFailed")),
+    [handleVersionAction, t],
   );
 
   const handleRefresh = () => {
@@ -530,9 +538,9 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   };
 
   const filterButtons: { key: FilterMode; label: string }[] = [
-    { key: "all", label: "全部" },
-    { key: "lts", label: "LTS" },
-    { key: "installed", label: "已安装" },
+    { key: "all", label: t("nodeDrawer.filterAll") },
+    { key: "lts", label: t("nodeDrawer.filterLts") },
+    { key: "installed", label: t("nodeDrawer.filterInstalled") },
   ];
 
   const isBusy = busy !== null;
@@ -555,10 +563,10 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
             <div className="nd-title-icon">
               <NodeIcon />
             </div>
-            <span className="nd-title-text">Node.js 版本</span>
+            <span className="nd-title-text">{t("nodeDrawer.title")}</span>
           </div>
           <div className="nd-header-actions">
-            <Tooltip title="刷新">
+            <Tooltip title={t("common.refresh")}>
               <button
                 className="nd-icon-btn"
                 onClick={handleRefresh}
@@ -588,11 +596,11 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
               <span
                 className={`nd-manager-dot ${nvmInfo.isInstalled ? "active" : ""}`}
               />
-              <span>{MANAGER_LABELS[nvmInfo.manager]}</span>
+              <span>{t(MANAGER_KEYS[nvmInfo.manager])}</span>
             </div>
             {nvmInfo.currentVersion && (
               <div className="nd-current-ver">
-                <span className="nd-current-label">当前</span>
+                <span className="nd-current-label">{t("common.current")}</span>
                 <span className="nd-current-num">
                   v{nvmInfo.currentVersion}
                 </span>
@@ -600,7 +608,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
             )}
             {remoteVersions.length > 0 && (
               <span className="nd-total-count">
-                {remoteVersions.length} 个版本
+                {t("common.versions", { count: remoteVersions.length })}
               </span>
             )}
           </div>
@@ -621,7 +629,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
           <div className="nd-path-banner">
             <div className="nd-path-banner-text">
               <ApiOutlined />
-              <span>node / npm 未加入系统 PATH，终端中无法直接使用</span>
+              <span>{t("nodeDrawer.pathBanner")}</span>
             </div>
             <button
               className="nd-path-btn"
@@ -629,7 +637,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
               disabled={pathSetupBusy}
             >
               {pathSetupBusy ? <LoadingOutlined /> : <CheckCircleOutlined />}
-              <span>加入 PATH</span>
+              <span>{t("nodeDrawer.addToPath")}</span>
             </button>
           </div>
         )}
@@ -638,7 +646,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       {/* ── Toolbar ── */}
       <div className="nd-toolbar">
         <Input
-          placeholder="搜索版本号或 LTS 名称..."
+          placeholder={t("nodeDrawer.searchPlaceholder")}
           prefix={<SearchOutlined style={{ color: "var(--text-muted)" }} />}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -663,19 +671,19 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
         {loading && !hasFetched ? (
           <div className="nd-loading">
             <Spin indicator={<LoadingOutlined style={{ fontSize: 28 }} />} />
-            <span className="nd-loading-text">正在获取版本列表...</span>
+            <span className="nd-loading-text">{t("nodeDrawer.loading")}</span>
           </div>
         ) : groups.length === 0 ? (
           <div className="nd-empty">
             <CloudDownloadOutlined className="nd-empty-icon" />
             <span className="nd-empty-text">
               {search || filter !== "all"
-                ? "没有匹配的版本"
-                : "暂无版本数据"}
+                ? t("nodeDrawer.noMatch")
+                : t("nodeDrawer.noData")}
             </span>
             {!search && filter === "all" && (
               <button className="nd-retry-btn" onClick={handleRefresh}>
-                重新加载
+                {t("nodeDrawer.reload")}
               </button>
             )}
           </div>
@@ -702,7 +710,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
                       <span className="nd-lts-badge">{group.ltsName}</span>
                     )}
                     {group.hasCurrent && (
-                      <span className="nd-current-tag">当前</span>
+                      <span className="nd-current-tag">{t("common.current")}</span>
                     )}
                   </div>
                   <div className="nd-group-right">
@@ -710,7 +718,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
                       {group.versions[0]?.version}
                     </span>
                     <span className="nd-group-count">
-                      {group.count} 个版本
+                      {t("common.versions", { count: group.count })}
                     </span>
                   </div>
                 </div>
@@ -759,6 +767,7 @@ const VersionRow: React.FC<VersionRowProps> = ({
   onSwitch,
   onUninstall,
 }) => {
+  const { t } = useTranslation();
   const ver = v.version.replace(/^v/, "");
   const isThisBusy = busy?.version === v.version;
 
@@ -774,7 +783,7 @@ const VersionRow: React.FC<VersionRowProps> = ({
           <span className="nd-version-lts">{v.lts}</span>
         )}
         {v.security && (
-          <Tooltip title="安全更新">
+          <Tooltip title={t("nodeDrawer.securityUpdate")}>
             <SafetyCertificateFilled className="nd-security-icon" />
           </Tooltip>
         )}
@@ -784,7 +793,7 @@ const VersionRow: React.FC<VersionRowProps> = ({
         {v.isCurrent ? (
           <span className="nd-current-badge">
             <CheckCircleFilled />
-            当前使用
+            {t("nodeDrawer.currentUse")}
           </span>
         ) : v.isInstalled ? (
           <>
@@ -796,16 +805,16 @@ const VersionRow: React.FC<VersionRowProps> = ({
               {isThisBusy && busy?.type === "switch" ? (
                 <>
                   <LoadingOutlined />
-                  <span>切换中</span>
+                  <span>{t("common.switching")}</span>
                 </>
               ) : (
                 <>
                   <SwapOutlined />
-                  <span>切换</span>
+                  <span>{t("common.switch")}</span>
                 </>
               )}
             </button>
-            <Tooltip title="卸载此版本">
+            <Tooltip title={t("nodeDrawer.uninstallVersion")}>
               <button
                 className={`nd-uninstall-btn ${isThisBusy && busy?.type === "uninstall" ? "uninstalling" : ""}`}
                 onClick={() => onUninstall(ver)}
@@ -828,10 +837,10 @@ const VersionRow: React.FC<VersionRowProps> = ({
             {isThisBusy && busy?.type === "install" ? (
               <>
                 <LoadingOutlined />
-                <span>安装中</span>
+                <span>{t("common.installing")}</span>
               </>
             ) : (
-              <span>安装</span>
+              <span>{t("common.install")}</span>
             )}
           </button>
         )}

@@ -1,6 +1,8 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { ConfigProvider, App as AntdApp, theme as antdTheme } from "antd";
 import zhCN from "antd/locale/zh_CN";
+import enUS from "antd/locale/en_US";
+import { useTranslation } from "react-i18next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "antd/dist/reset.css";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
@@ -25,8 +27,14 @@ function getInitialWindowLabel() {
   }
 }
 
+const ANTD_LOCALES: Record<string, typeof zhCN> = {
+  "zh-CN": zhCN,
+  "en-US": enUS,
+};
+
 const AppContent: React.FC = () => {
   const { isDark } = useTheme();
+  const { i18n } = useTranslation();
   const [nodeDrawerOpen, setNodeDrawerOpen] = useState(false);
   const [nvmRefreshKey, setNvmRefreshKey] = useState(0);
   const [windowLabel] = useState(getInitialWindowLabel);
@@ -34,13 +42,16 @@ const AppContent: React.FC = () => {
     setNvmRefreshKey((k) => k + 1);
   }, []);
 
-  // 只有 macOS 且窗口标签为 about 时，才渲染自定义 About 页面。
-  // 这样可以明确保证新增界面不会改变 Windows / Linux 的主窗口渲染路径。
+  const antdLocale = useMemo(
+    () => ANTD_LOCALES[i18n.language] || zhCN,
+    [i18n.language],
+  );
+
   const isAboutWindow = IS_MACOS && windowLabel === "about";
 
   return (
     <ConfigProvider
-      locale={zhCN}
+      locale={antdLocale}
       theme={{
         algorithm: isDark
           ? antdTheme.darkAlgorithm

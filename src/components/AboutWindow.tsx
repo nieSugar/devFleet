@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import appIcon from "../assets/app-icon.png";
 import "./AboutWindow.css";
@@ -26,7 +27,7 @@ const ABOUT_COPY = {
 
 const FALLBACK_INFO: AboutInfo = {
   name: "devFleet",
-  version: "2.1.6",
+  version: "2.1.7",
 };
 
 async function copyText(text: string) {
@@ -47,6 +48,7 @@ async function copyText(text: string) {
 }
 
 const AboutWindow: React.FC = () => {
+  const { t } = useTranslation();
   const [info] = useState<AboutInfo>(FALLBACK_INFO);
   const [copied, setCopied] = useState(false);
   const appWindow = getCurrentWindow();
@@ -73,8 +75,8 @@ const AboutWindow: React.FC = () => {
     ABOUT_COPY.runtimeLine2,
     `${ABOUT_COPY.supportPrefix}${ABOUT_COPY.supportLinkText}${ABOUT_COPY.supportSuffix}`,
     ABOUT_COPY.copyrightText,
-    `当前应用名: ${info.name}`,
-    `当前版本号: ${info.version}`,
+    `${t("about.appName")}: ${info.name}`,
+    `${t("about.appVersion")}: ${info.version}`,
   ].join("\n");
 
   const handleCopyAndClose = async () => {
@@ -137,10 +139,10 @@ const AboutWindow: React.FC = () => {
 
         <footer className="about-footer">
           <button className="about-action about-action-secondary" onClick={() => appWindow.close()}>
-            关闭(C)
+            {t("about.close")}
           </button>
           <button className="about-action about-action-primary" onClick={handleCopyAndClose}>
-            {copied ? "已复制并关闭" : "复制并关闭"}
+            {copied ? t("about.copiedAndClose") : t("about.copyAndClose")}
           </button>
         </footer>
       </div>

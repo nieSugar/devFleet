@@ -8,11 +8,12 @@ import "@fontsource/jetbrains-mono/500.css";
 
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import "./i18n";
 import "./index.css";
 
 const container = document.getElementById("root");
 if (!container) {
-  throw new Error("找不到根元素！请确保 HTML 中有 id=\"root\" 的元素。");
+  throw new Error("Root element not found. Ensure the HTML has an element with id=\"root\".");
 }
 
 const root = createRoot(container);

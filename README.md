@@ -5,7 +5,7 @@
 **轻量、快速的跨平台开发项目管理工具**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.1.6-green.svg)](https://github.com/nieSugar/devFleet/releases)
+[![Version](https://img.shields.io/badge/version-2.1.7-green.svg)](https://github.com/nieSugar/devFleet/releases)
 [![Tauri](https://img.shields.io/badge/Tauri-2-24C8D8?logo=tauri&logoColor=white)](https://v2.tauri.app)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
 [![Rust](https://img.shields.io/badge/Rust-2021-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org)
@@ -56,7 +56,8 @@
 <td width="50%">
 
 ### 🖥️ 编辑器集成
-- 一键在 VSCode / Cursor / WebStorm 中打开项目
+- 一键在 VSCode / Cursor / WebStorm / Zed / IntelliJ IDEA / Kiro 等编辑器中打开项目
+- 支持 VSCode Insiders
 - 自动检测系统已安装的编辑器
 - 支持设置默认编辑器偏好
 
@@ -78,6 +79,23 @@
 - 应用内检查新版本
 - 下载与安装一键完成
 - 基于 Tauri Updater 插件，签名验证确保安全
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 🌐 国际化
+- 内置中文（zh-CN）和英文（en-US）语言包
+- 基于 i18next + react-i18next，可轻松扩展更多语言
+- 界面语言自由切换
+
+</td>
+<td width="50%">
+
+### ℹ️ 关于
+- 内置关于窗口，展示版本与项目信息
+- 快速获取应用状态与技术详情
 
 </td>
 </tr>
@@ -137,6 +155,7 @@ pnpm tauri build
 | `pnpm lint` | ESLint 代码检查 |
 | `pnpm lint:fix` | ESLint 自动修复 |
 | `pnpm format` | Prettier 代码格式化 |
+| `pnpm icon` | 从 logo.png 生成多平台应用图标 |
 
 ## 🏗️ 技术栈
 
@@ -144,7 +163,8 @@ pnpm tauri build
 |----|------|
 | 框架 | [Tauri 2](https://v2.tauri.app) — 轻量级跨平台桌面框架 |
 | 前端 | [React 19](https://react.dev) + [TypeScript 5.9](https://www.typescriptlang.org/) + [Vite 7](https://vite.dev) |
-| UI | [Ant Design 5](https://ant.design/) + [@ant-design/icons 6](https://ant.design/components/icon) |
+| UI | [Ant Design 5](https://ant.design/) + [@ant-design/icons 6](https://ant.design/components/icon) + [@lobehub/icons](https://github.com/lobehub/lobe-icons) |
+| 国际化 | [i18next](https://www.i18next.com/) + [react-i18next](https://react.i18next.com/) |
 | 字体 | [Plus Jakarta Sans](https://fonts.google.com/specimen/Plus+Jakarta+Sans) + [JetBrains Mono](https://www.jetbrains.com/lp/mono/) |
 | 后端 | [Rust](https://www.rust-lang.org/) (serde · ureq · tokio · chrono · regex-lite · zip · flate2 · tar) |
 | 插件 | Tauri Dialog · Updater · Process |
@@ -176,6 +196,8 @@ src/                              # 前端源码 (React + TypeScript)
 │   ├── NodeVersionSelect.tsx     # Node 版本选择器
 │   ├── UpdateChecker.tsx         # 应用更新检查
 │   ├── UpdateChecker.css
+│   ├── AboutWindow.tsx           # 关于窗口
+│   ├── AboutWindow.css
 │   └── ErrorBoundary.tsx         # 错误边界
 ├── contexts/
 │   └── ThemeContext.tsx           # 主题上下文
@@ -184,15 +206,23 @@ src/                              # 前端源码 (React + TypeScript)
 │   ├── useEditors.ts             # 编辑器检测
 │   ├── useNvmInfo.ts             # NVM 信息
 │   └── useKeyboardShortcuts.ts   # 快捷键绑定
+├── i18n/                         # 国际化
+│   ├── index.ts                  # i18next 初始化配置
+│   └── locales/
+│       ├── zh-CN.json            # 中文语言包
+│       └── en-US.json            # 英文语言包
 ├── lib/
 │   └── tauri.ts                  # Tauri IPC 命令封装
 ├── types/
 │   ├── project.ts                # 类型定义
 │   └── assets.d.ts               # 静态资源类型声明
 └── img/                          # 编辑器 SVG 图标
-    ├── cursor.svg
     ├── vscode.svg
-    └── webstorm.svg
+    ├── vscode-insiders.svg
+    ├── webstorm.svg
+    ├── idea.svg
+    ├── kiro.svg
+    └── zed.svg
 
 src-tauri/                        # 后端源码 (Rust + Tauri)
 ├── src/

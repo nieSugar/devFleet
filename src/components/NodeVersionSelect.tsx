@@ -1,5 +1,6 @@
 import React from "react";
 import { Select, Tag } from "antd";
+import { useTranslation } from "react-i18next";
 import { NvmInfo, Project } from "../types/project";
 
 const tagStyle: React.CSSProperties = {
@@ -28,10 +29,12 @@ const NodeVersionSelect: React.FC<NodeVersionSelectProps> = ({
   nvmInfo,
   onChange,
 }) => {
+  const { t } = useTranslation();
+
   if (!nvmInfo?.isInstalled && !nvmInfo?.availableVersions?.length) {
     return (
       <Tag color="default" style={{ cursor: "not-allowed" }}>
-        无可用 Node 版本
+        {t("nodeVersion.noVersions")}
       </Tag>
     );
   }
@@ -39,7 +42,7 @@ const NodeVersionSelect: React.FC<NodeVersionSelectProps> = ({
   return (
     <Select<string | undefined>
       value={record.nodeVersion || undefined}
-      placeholder="选择版本"
+      placeholder={t("nodeVersion.selectVersion")}
       allowClear
       popupMatchSelectWidth={false}
       onChange={(v) => onChange(record.id, v)}
@@ -49,12 +52,12 @@ const NodeVersionSelect: React.FC<NodeVersionSelectProps> = ({
             <span>{v.version}</span>
             {v.isCurrent && (
               <Tag color="green" bordered={false} style={tagStyle}>
-                系统
+                {t("nodeVersion.system")}
               </Tag>
             )}
             {record.nodeVersion === v.version && (
               <Tag color="blue" bordered={false} style={tagStyle}>
-                项目
+                {t("nodeVersion.project")}
               </Tag>
             )}
           </div>

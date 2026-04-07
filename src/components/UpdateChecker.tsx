@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { getVersion } from "@tauri-apps/api/app";
@@ -19,6 +20,7 @@ interface UpdateInfo {
 }
 
 const UpdateChecker: React.FC = () => {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<Status>("idle");
   const [info, setInfo] = useState<UpdateInfo | null>(null);
   const [progress, setProgress] = useState(0);
@@ -117,10 +119,10 @@ const UpdateChecker: React.FC = () => {
         onClick={handleButtonClick}
         title={
           status === "available"
-            ? `新版本 v${info?.version}`
+            ? t("update.newVersion", { version: info?.version })
             : status === "checking"
-              ? "正在检查..."
-              : "检查更新"
+              ? t("update.checkingTooltip")
+              : t("update.checkUpdate")
         }
       >
         <RefreshIcon />
@@ -131,7 +133,7 @@ const UpdateChecker: React.FC = () => {
         <div className="update-overlay" onClick={closeModal}>
           <div className="update-modal" onClick={(e) => e.stopPropagation()}>
             <div className="update-modal-header">
-              <h3>软件更新</h3>
+              <h3>{t("update.title")}</h3>
               <button
                 className="update-close-btn"
                 onClick={closeModal}
@@ -154,14 +156,14 @@ const UpdateChecker: React.FC = () => {
               {status === "checking" && (
                 <div className="update-status">
                   <div className="update-spinner" />
-                  <p>正在检查更新...</p>
+                  <p>{t("update.checking")}</p>
                 </div>
               )}
 
               {status === "idle" && (
                 <div className="update-status">
                   <div className="update-ok-icon">&#10003;</div>
-                  <p>当前已是最新版本</p>
+                  <p>{t("update.upToDate")}</p>
                   <span className="update-version-tag">
                     v{currentVersion}
                   </span>
@@ -188,7 +190,7 @@ const UpdateChecker: React.FC = () => {
                   </div>
                   {info.body && (
                     <div className="update-notes">
-                      <p className="update-notes-label">更新说明</p>
+                      <p className="update-notes-label">{t("update.releaseNotes")}</p>
                       <div className="update-notes-content">{info.body}</div>
                     </div>
                   )}
@@ -197,7 +199,7 @@ const UpdateChecker: React.FC = () => {
 
               {status === "downloading" && (
                 <div className="update-dl">
-                  <p>正在下载更新 v{info?.version}</p>
+                  <p>{t("update.downloading", { version: info?.version })}</p>
                   <div className="update-bar">
                     <div
                       className="update-bar-fill"
@@ -211,15 +213,15 @@ const UpdateChecker: React.FC = () => {
               {status === "ready" && (
                 <div className="update-status">
                   <div className="update-ok-icon">&#10003;</div>
-                  <p>更新已下载完成</p>
-                  <span className="update-hint">重启应用以完成安装</span>
+                  <p>{t("update.downloaded")}</p>
+                  <span className="update-hint">{t("update.restartHint")}</span>
                 </div>
               )}
 
               {status === "error" && (
                 <div className="update-status update-err">
                   <div className="update-err-icon">!</div>
-                  <p>检查更新失败</p>
+                  <p>{t("update.checkFailed")}</p>
                   <span className="update-err-msg">{error}</span>
                 </div>
               )}
@@ -231,7 +233,7 @@ const UpdateChecker: React.FC = () => {
                   className="update-action-btn primary"
                   onClick={handleDownload}
                 >
-                  下载并安装
+                  {t("update.downloadInstall")}
                 </button>
               )}
               {status === "ready" && (
@@ -239,7 +241,7 @@ const UpdateChecker: React.FC = () => {
                   className="update-action-btn primary"
                   onClick={() => relaunch()}
                 >
-                  立即重启
+                  {t("update.restartNow")}
                 </button>
               )}
               {status === "error" && (
@@ -247,7 +249,7 @@ const UpdateChecker: React.FC = () => {
                   className="update-action-btn"
                   onClick={() => checkForUpdate(true)}
                 >
-                  重试
+                  {t("common.retry")}
                 </button>
               )}
               {status === "idle" && (
@@ -255,7 +257,7 @@ const UpdateChecker: React.FC = () => {
                   className="update-action-btn"
                   onClick={() => checkForUpdate(true)}
                 >
-                  检查更新
+                  {t("update.checkUpdate")}
                 </button>
               )}
             </div>

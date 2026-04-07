@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../contexts/ThemeContext";
 import UpdateChecker from "./UpdateChecker";
 import "./TitleBar.css";
@@ -14,7 +15,12 @@ const IS_MACOS =
 
 const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
   const { theme, toggleTheme } = useTheme();
+  const { t, i18n } = useTranslation();
   const [maximized, setMaximized] = useState(false);
+
+  const toggleLanguage = () => {
+    i18n.changeLanguage(i18n.language === "zh-CN" ? "en-US" : "zh-CN");
+  };
 
   useEffect(() => {
     if (IS_MACOS) return;
@@ -58,7 +64,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
         <button
           className="tb-btn node-btn"
           onClick={onOpenNodeManager}
-          title="Node.js 版本管理"
+          title={t("titleBar.nodeManager")}
         >
           <NodeHexIcon />
         </button>
@@ -66,9 +72,18 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
         <UpdateChecker />
 
         <button
+          className="tb-btn lang-btn"
+          onClick={toggleLanguage}
+          title={t("titleBar.language")}
+        >
+          <LangIcon />
+          <span className="lang-label">{i18n.language === "zh-CN" ? "中" : "En"}</span>
+        </button>
+
+        <button
           className="tb-btn theme-btn"
           onClick={toggleTheme}
-          title={theme === "dark" ? "切换到亮色模式" : "切换到暗色模式"}
+          title={theme === "dark" ? t("titleBar.lightMode") : t("titleBar.darkMode")}
         >
           {theme === "dark" ? <SunIcon /> : <MoonIcon />}
         </button>
@@ -78,7 +93,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
             <button
               className="tb-btn win-btn"
               onClick={() => getCurrentWindow().minimize()}
-              title="最小化"
+              title={t("titleBar.minimize")}
             >
               <svg width="10" height="1" viewBox="0 0 10 1">
                 <rect width="10" height="1" fill="currentColor" />
@@ -88,7 +103,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
             <button
               className="tb-btn win-btn"
               onClick={() => getCurrentWindow().toggleMaximize()}
-              title={maximized ? "还原" : "最大化"}
+              title={maximized ? t("titleBar.restore") : t("titleBar.maximize")}
             >
               {maximized ? (
                 <svg
@@ -119,7 +134,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
             <button
               className="tb-btn win-btn close-btn"
               onClick={() => getCurrentWindow().close()}
-              title="关闭"
+              title={t("titleBar.close")}
             >
               <svg
                 width="10"
@@ -165,6 +180,24 @@ const MoonIcon = () => (
     strokeLinejoin="round"
   >
     <path d="M13.6 9.8A6 6 0 016.2 2.4 6 6 0 1013.6 9.8z" />
+  </svg>
+);
+
+const LangIcon = () => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.3"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="8" cy="8" r="6.5" />
+    <path d="M1.5 8h13" />
+    <path d="M8 1.5c-2 2-2.5 4-2.5 6.5s.5 4.5 2.5 6.5" />
+    <path d="M8 1.5c2 2 2.5 4 2.5 6.5s-.5 4.5-2.5 6.5" />
   </svg>
 );
 

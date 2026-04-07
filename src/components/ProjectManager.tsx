@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Project, ProjectConfig } from "../types/project";
 import { tauriAPI } from "../lib/tauri";
 import { useProjects } from "../hooks/useProjects";
@@ -30,16 +31,17 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
   const { editors, openInEditor, refreshEditors } = useEditors();
   const { nvmInfo, changeNodeVersion, refreshNvmInfo } = useNvmInfo();
   const { modal, message: messageApi } = App.useApp();
+  const { t } = useTranslation();
   const [searchText, setSearchText] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     loadProjects().then((r) => {
       if (!cancelled && r && !r.success)
-        messageApi.error(r.error || "加载项目配置失败");
+        messageApi.error(r.error || t("project.loadFailed"));
     });
     return () => { cancelled = true; };
-  }, [loadProjects, messageApi]);
+  }, [loadProjects, messageApi, t]);
 
   const nvmRefreshKeyRef = useRef(nvmRefreshKey);
   useEffect(() => {
@@ -53,9 +55,9 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
   const handleRefresh = useCallback(() => {
     refreshEditors();
     refreshProjects().then((r) => {
-      if (r && !r.success) messageApi.error(r.error || "刷新失败");
+      if (r && !r.success) messageApi.error(r.error || t("project.refreshFailed"));
     });
-  }, [refreshEditors, refreshProjects, messageApi]);
+  }, [refreshEditors, refreshProjects, messageApi, t]);
 
   useKeyboardShortcuts({
     onAddProject: () => handleAdd(),
@@ -71,33 +73,33 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
     const result = await addProject();
     if (!result) return;
     if (result.success && result.data)
-      showMsg("success", `项目 "${result.data.name}" 添加成功`);
-    else showMsg("error", result.error || "添加项目失败");
+      showMsg("success", t("project.addSuccess", { name: result.data.name }));
+    else showMsg("error", result.error || t("project.addFailed"));
   };
 
   const handleRemove = useCallback((projectId: string, projectName: string) => {
     modal.confirm({
-      title: "确认删除",
-      content: `确定要删除项目「${projectName}」吗？此操作不会删除项目文件。`,
-      okText: "删除",
+      title: t("project.deleteTitle"),
+      content: t("project.deleteContent", { name: projectName }),
+      okText: t("common.delete"),
       okType: "danger",
-      cancelText: "取消",
+      cancelText: t("common.cancel"),
       onOk: async () => {
         try {
           const result = await removeProject(projectId);
-          if (result.success) showMsg("success", "项目删除成功");
-          else showMsg("error", result.error || "删除项目失败");
+          if (result.success) showMsg("success", t("project.deleteSuccess"));
+          else showMsg("error", result.error || t("project.deleteFailed"));
         } catch {
-          showMsg("error", "删除项目时出错");
+          showMsg("error", t("project.deleteError"));
         }
       },
     });
-  }, [modal, removeProject, showMsg]);
+  }, [modal, removeProject, showMsg, t]);
 
   const handleScriptChange = useCallback(async (projectId: string, scriptName: string) => {
     const result = await updateScriptSelection(projectId, scriptName);
-    if (!result.success) showMsg("error", result.error || "保存配置失败");
-  }, [updateScriptSelection, showMsg]);
+    if (!result.success) showMsg("error", result.error || t("project.saveFailed"));
+  }, [updateScriptSelection, showMsg, t]);
 
   const handleNodeVersionChange = useCallback(async (
     projectId: string,
@@ -113,24 +115,24 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
               : p,
           ),
         );
-        showMsg("success", result.data.message || "Node 版本已更新");
+        showMsg("success", result.data.message || t("project.nodeVersionUpdated"));
       } else {
-        showMsg("error", result.error || "设置 Node 版本失败");
+        showMsg("error", result.error || t("project.nodeVersionFailed"));
       }
     } catch {
-      showMsg("error", "设置 Node 版本时出错");
+      showMsg("error", t("project.nodeVersionError"));
     }
-  }, [changeNodeVersion, setProjects, showMsg]);
+  }, [changeNodeVersion, setProjects, showMsg, t]);
 
   const handleRun = useCallback(async (project: Project) => {
     const result = await runScript(project);
     if (result.success) {
       const vi = project.nodeVersion ? ` (Node ${project.nodeVersion})` : "";
-      showMsg("success", `脚本 "${project.selectedScript}"${vi} 启动成功`);
+      showMsg("success", t("project.scriptStarted", { script: project.selectedScript, version: vi }));
     } else {
-      showMsg("error", result.error || "启动脚本失败");
+      showMsg("error", result.error || t("project.scriptFailed"));
     }
-  }, [runScript, showMsg]);
+  }, [runScript, showMsg, t]);
 
   const handleNoteChange = useCallback(async (projectId: string, note: string) => {
     const trimmed = note.trim() || undefined;
@@ -151,9 +153,9 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
         await tauriAPI.saveProjectConfig(config);
       }
     } catch {
-      showMsg("error", "保存备注失败");
+      showMsg("error", t("project.noteSaveFailed"));
     }
-  }, [setProjects, showMsg]);
+  }, [setProjects, showMsg, t]);
 
   const filteredProjects = useMemo(() => {
     if (!searchText.trim()) return projects;
@@ -207,8 +209,8 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
             <div className="add-icon">
               <PlusOutlined />
             </div>
-            <span className="add-label">添加项目</span>
-            <span className="add-shortcut">Ctrl + N</span>
+            <span className="add-label">{t("project.addProject")}</span>
+            <span className="add-shortcut">{t("project.addShortcut")}</span>
           </div>
         </div>
       ) : projects.length === 0 ? (
@@ -216,9 +218,9 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
           <div className="empty-icon">
             <FolderOpenOutlined />
           </div>
-          <div className="empty-title">还没有项目</div>
+          <div className="empty-title">{t("project.emptyTitle")}</div>
           <div className="empty-desc">
-            添加你的第一个项目，开始高效管理开发工作流
+            {t("project.emptyDesc")}
           </div>
           <Button
             type="primary"
@@ -226,14 +228,14 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
             size="large"
             onClick={handleAdd}
           >
-            添加项目
+            {t("project.addProject")}
           </Button>
-          <span className="empty-shortcut">或按 Ctrl + N</span>
+          <span className="empty-shortcut">{t("project.emptyShortcut")}</span>
         </div>
       ) : (
         <div className="empty-state">
-          <div className="empty-title">没有匹配的项目</div>
-          <div className="empty-desc">尝试其他搜索关键词</div>
+          <div className="empty-title">{t("project.noMatch")}</div>
+          <div className="empty-desc">{t("project.noMatchDesc")}</div>
         </div>
       )}
 

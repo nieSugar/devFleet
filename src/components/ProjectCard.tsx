@@ -1,6 +1,7 @@
 import React from "react";
 import { Select, Typography, Tooltip } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
+import { useTranslation } from "react-i18next";
 import { Cursor, Trae, Windsurf, Antigravity } from "@lobehub/icons";
 import { Project, NvmInfo, EditorStatus } from "../types/project";
 import EditorButton from "./EditorButton";
@@ -63,12 +64,13 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
   onOpenEditor,
   showMsg,
 }) => {
+  const { t } = useTranslation();
   const pm = project.packageManager || "npm";
   const accent = PM_COLORS[pm] || PM_COLORS.npm;
 
   const editorAction = async (editor: string) => {
     const r = await onOpenEditor(editor, project.path);
-    if (!r.success) showMsg("error", r.error || "打开编辑器失败");
+    if (!r.success) showMsg("error", r.error || t("project.editorFailed"));
   };
 
   return (
@@ -86,7 +88,7 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
             {pm}
           </span>
         </div>
-        <Tooltip title="删除项目">
+        <Tooltip title={t("project.deleteProject")}>
           <button
             className="card-delete"
             onClick={() => onRemove(project.id, project.name)}
@@ -99,7 +101,7 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
       {/* Path */}
       <div className="card-path">
         <Typography.Text
-          copyable={{ tooltips: ["复制路径", "已复制"] }}
+          copyable={{ tooltips: [t("common.copyPath"), t("common.copied")] }}
           className="card-path-text"
           ellipsis={{ tooltip: project.path }}
         >
@@ -112,7 +114,7 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
         <Typography.Paragraph
           editable={{
             onChange: (v) => onNoteChange(project.id, v),
-            tooltip: "编辑备注",
+            tooltip: t("project.editNote"),
           }}
           className="card-note-text"
           ellipsis={{ rows: 1, tooltip: true }}
@@ -177,7 +179,7 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
           >
             <path d="M1 0.5a.5.5 0 01.77-.42l8 5a.5.5 0 010 .84l-8 5A.5.5 0 011 11.5v-11z" />
           </svg>
-          <span>运行</span>
+          <span>{t("common.run")}</span>
         </button>
       </div>
     </div>

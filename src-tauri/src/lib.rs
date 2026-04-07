@@ -161,11 +161,11 @@ pub fn run() {
         .on_menu_event(handle_macos_menu_event);
 
     builder
-        .setup(|app| {
+        .setup(|_app| {
             #[cfg(target_os = "macos")]
             {
                 // macOS 上保留原生窗口装饰，避免无边框窗口吞掉点击或出现假死。
-                if let Some(window) = app.get_webview_window("main") {
+                if let Some(window) = _app.get_webview_window("main") {
                     window.set_decorations(true)?;
                     window.set_title_bar_style(TitleBarStyle::Transparent)?;
                 }
