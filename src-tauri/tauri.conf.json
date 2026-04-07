@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-utils/schema.json",
-  "productName": "devFleet",
+  "productName": "DevFleet",
   "version": "2.1.7",
   "identifier": "com.niesugar.devfleet",
   "build": {
