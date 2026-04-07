@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useNavigate } from "react-router-dom";
 import { useTheme } from "../contexts/ThemeContext";
 import { getSupportedLanguages } from "../i18n";
 import "./SettingsWindow.css";
@@ -14,19 +14,19 @@ const LANGUAGE_LABELS: Record<string, string> = {
 const SettingsWindow: React.FC = () => {
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
-  const appWindow = getCurrentWindow();
+  const navigate = useNavigate();
   const languages = getSupportedLanguages();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        void appWindow.close();
+        navigate("/");
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [appWindow]);
+  }, [navigate]);
 
   return (
     <section className="settings-screen">
@@ -96,7 +96,7 @@ const SettingsWindow: React.FC = () => {
         <footer className="settings-footer">
           <button
             className="settings-close-button"
-            onClick={() => void appWindow.close()}
+            onClick={() => navigate("/")}
           >
             {t("settings.close")}
           </button>

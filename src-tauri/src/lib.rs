@@ -30,13 +30,13 @@ const ABOUT_WINDOW_LABEL: &str = "about";
 #[cfg(target_os = "macos")]
 const ABOUT_MENU_ID: &str = "open-about-window";
 #[cfg(target_os = "macos")]
-const SETTINGS_WINDOW_LABEL: &str = "settings";
-#[cfg(target_os = "macos")]
 const SETTINGS_MENU_ID: &str = "open-settings-window";
 #[cfg(target_os = "macos")]
 const ADD_PROJECT_MENU_ID: &str = "trigger-add-project";
 #[cfg(target_os = "macos")]
 const ADD_PROJECT_EVENT: &str = "macos://add-project";
+#[cfg(target_os = "macos")]
+const OPEN_SETTINGS_EVENT: &str = "macos://open-settings";
 #[cfg(target_os = "macos")]
 static LOCALE_FILES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../src/i18n/locales");
 #[cfg(target_os = "macos")]
@@ -56,7 +56,6 @@ struct MacStatusBarTranslations {
     about: Option<String>,
     about_window_title: Option<String>,
     settings: Option<String>,
-    settings_window_title: Option<String>,
     file: Option<String>,
     edit: Option<String>,
     view: Option<String>,
@@ -84,7 +83,6 @@ struct ResolvedMacStatusBarTranslations {
     about: String,
     about_window_title: String,
     settings: String,
-    settings_window_title: String,
     file: String,
     edit: String,
     view: String,
@@ -202,12 +200,6 @@ fn resolve_mac_status_bar_translations(app_name: &str) -> ResolvedMacStatusBarTr
             app_name,
         ),
         settings: resolve_text(current.settings, fallback.settings, "设置", app_name),
-        settings_window_title: resolve_text(
-            current.settings_window_title,
-            fallback.settings_window_title,
-            "{{appName}} 设置",
-            app_name,
-        ),
         file: resolve_text(current.file, fallback.file, "文件", app_name),
         edit: resolve_text(current.edit, fallback.edit, "编辑", app_name),
         view: resolve_text(current.view, fallback.view, "视图", app_name),
@@ -292,17 +284,6 @@ fn refresh_about_window_title<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(
 }
 
 #[cfg(target_os = "macos")]
-fn refresh_settings_window_title<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    if let Some(window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
-        let app_name = app_display_name(app);
-        let translations = resolve_mac_status_bar_translations(&app_name);
-        window.set_title(&translations.settings_window_title)?;
-    }
-
-    Ok(())
-}
-
-#[cfg(target_os = "macos")]
 pub(crate) fn sync_macos_app_language<R: Runtime>(
     app: &AppHandle<R>,
     language: Option<&str>,
@@ -311,7 +292,6 @@ pub(crate) fn sync_macos_app_language<R: Runtime>(
     let menu = build_macos_menu(app)?;
     let _ = app.set_menu(menu)?;
     refresh_about_window_title(app)?;
-    refresh_settings_window_title(app)?;
     Ok(())
 }
 
@@ -458,31 +438,6 @@ fn open_about_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 }
 
 #[cfg(target_os = "macos")]
-fn open_settings_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    if let Some(window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
-        let _ = window.unminimize();
-        window.show()?;
-        window.set_focus()?;
-        return Ok(());
-    }
-
-    let app_name = app_display_name(app);
-    let translations = resolve_mac_status_bar_translations(&app_name);
-
-    WebviewWindowBuilder::new(app, SETTINGS_WINDOW_LABEL, WebviewUrl::App("index.html".into()))
-        .title(&translations.settings_window_title)
-        .inner_size(560.0, 420.0)
-        .resizable(false)
-        .maximizable(false)
-        .minimizable(false)
-        .center()
-        .focused(true)
-        .build()?;
-
-    Ok(())
-}
-
-#[cfg(target_os = "macos")]
 // 菜单事件只监听我们自定义的 About 菜单项，避免影响其他内建菜单行为。
 fn handle_macos_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     if event.id() == ABOUT_MENU_ID {
@@ -490,8 +445,14 @@ fn handle_macos_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
             eprintln!("[devfleet] 打开关于窗口失败: {}", e);
         }
     } else if event.id() == SETTINGS_MENU_ID {
-        if let Err(e) = open_settings_window(app) {
-            eprintln!("[devfleet] 打开设置窗口失败: {}", e);
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+
+        if let Err(e) = app.emit_to("main", OPEN_SETTINGS_EVENT, ()) {
+            eprintln!("[devfleet] 派发设置页面跳转事件失败: {}", e);
         }
     } else if event.id() == ADD_PROJECT_MENU_ID {
         // 原生菜单只负责发一个 macOS 专用事件，真正的添加流程仍由前端既有逻辑处理。

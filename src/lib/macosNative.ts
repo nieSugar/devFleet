@@ -2,6 +2,7 @@ type ThemeMode = "light" | "dark";
 type Unlisten = () => void;
 
 const MACOS_ADD_PROJECT_EVENT = "macos://add-project";
+const MACOS_OPEN_SETTINGS_EVENT = "macos://open-settings";
 
 function isMacOSUserAgent() {
   return typeof window !== "undefined" && /mac/i.test(window.navigator.userAgent);
@@ -39,6 +40,18 @@ export async function listenForMacOSAddProject(
 
   const { listen } = await import("@tauri-apps/api/event");
   return listen(MACOS_ADD_PROJECT_EVENT, () => {
+    void handler();
+  });
+}
+
+export async function listenForMacOSOpenSettings(
+  handler: () => void | Promise<void>,
+): Promise<Unlisten> {
+  // 原生菜单的“设置”只会通知主窗口导航，Windows / Linux 完全跳过。
+  if (!(await isMacOSTauriRuntime())) return () => {};
+
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen(MACOS_OPEN_SETTINGS_EVENT, () => {
     void handler();
   });
 }
