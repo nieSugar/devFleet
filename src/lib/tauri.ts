@@ -36,6 +36,9 @@ interface DetectedVersion {
 }
 
 export const tauriAPI = {
+  syncAppLanguage: (language: string): Promise<IpcResponse<MessageResult>> =>
+    invoke("sync_app_language", { language }),
+
   selectFolder: async (): Promise<string | null> => {
     return await open({ directory: true, title: "选择项目文件夹" });
   },

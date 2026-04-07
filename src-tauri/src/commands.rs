@@ -130,6 +130,26 @@ pub fn save_project_config(config: ProjectConfig) -> IpcResponse {
 }
 
 #[tauri::command]
+pub fn sync_app_language(app: tauri::AppHandle, language: String) -> IpcResponse {
+    #[cfg(target_os = "macos")]
+    {
+        // macOS 原生菜单不受前端 i18n 自动驱动，需要在语言切换后手动重建菜单。
+        let language = language.trim();
+        let language = if language.is_empty() {
+            None
+        } else {
+            Some(language)
+        };
+
+        if let Err(error) = crate::sync_macos_app_language(&app, language) {
+            return IpcResponse::err(format!("同步 macOS 菜单语言失败: {}", error));
+        }
+    }
+
+    IpcResponse::ok_msg("语言同步成功")
+}
+
+#[tauri::command]
 pub fn add_project_to_config(project_path: String) -> IpcResponse {
     if !project::is_valid_path(&project_path) {
         return IpcResponse::err("所选文件夹不是有效的项目目录（缺少 package.json）");

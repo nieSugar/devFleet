@@ -64,6 +64,10 @@ tauri-plugin-process = "2"
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+include_dir = "0.7"
+sys-locale = "0.3"
+
 [profile.release]
 # release 编译优化配置（cargo build --release 时生效）
 # panic = "abort": panic 时直接终止进程（不展开栈帧），减小二进制体积

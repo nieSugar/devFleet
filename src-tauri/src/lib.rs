@@ -1,4 +1,12 @@
 #[cfg(target_os = "macos")]
+use include_dir::{include_dir, Dir};
+#[cfg(target_os = "macos")]
+use serde::Deserialize;
+#[cfg(target_os = "macos")]
+use std::sync::{Mutex, OnceLock};
+#[cfg(target_os = "macos")]
+use sys_locale::get_locale;
+#[cfg(target_os = "macos")]
 use tauri::{
     menu::{
         HELP_SUBMENU_ID, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu,
@@ -21,21 +29,263 @@ mod project;
 const ABOUT_WINDOW_LABEL: &str = "about";
 #[cfg(target_os = "macos")]
 const ABOUT_MENU_ID: &str = "open-about-window";
+#[cfg(target_os = "macos")]
+static LOCALE_FILES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../src/i18n/locales");
+#[cfg(target_os = "macos")]
+static APP_LANGUAGE_OVERRIDE: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+#[cfg(target_os = "macos")]
+#[derive(Default, Deserialize)]
+struct LocaleTranslationFile {
+    #[serde(default, rename = "macStatusBar")]
+    mac_status_bar: MacStatusBarTranslations,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MacStatusBarTranslations {
+    about: Option<String>,
+    about_window_title: Option<String>,
+    file: Option<String>,
+    edit: Option<String>,
+    view: Option<String>,
+    window: Option<String>,
+    help: Option<String>,
+    services: Option<String>,
+    hide: Option<String>,
+    hide_others: Option<String>,
+    quit: Option<String>,
+    close_window: Option<String>,
+    undo: Option<String>,
+    redo: Option<String>,
+    cut: Option<String>,
+    copy: Option<String>,
+    paste: Option<String>,
+    select_all: Option<String>,
+    fullscreen: Option<String>,
+    minimize: Option<String>,
+    maximize: Option<String>,
+}
+
+#[cfg(target_os = "macos")]
+struct ResolvedMacStatusBarTranslations {
+    about: String,
+    about_window_title: String,
+    file: String,
+    edit: String,
+    view: String,
+    window: String,
+    help: String,
+    services: String,
+    hide: String,
+    hide_others: String,
+    quit: String,
+    close_window: String,
+    undo: String,
+    redo: String,
+    cut: String,
+    copy: String,
+    paste: String,
+    select_all: String,
+    fullscreen: String,
+    minimize: String,
+    maximize: String,
+}
+
+#[cfg(target_os = "macos")]
+fn embedded_locale_codes() -> Vec<String> {
+    LOCALE_FILES
+        .files()
+        .filter_map(|file| file.path().file_stem()?.to_str().map(str::to_string))
+        .collect()
+}
+
+#[cfg(target_os = "macos")]
+fn app_language_override() -> &'static Mutex<Option<String>> {
+    APP_LANGUAGE_OVERRIDE.get_or_init(|| Mutex::new(None))
+}
+
+#[cfg(target_os = "macos")]
+fn set_app_language_override(language: Option<&str>) {
+    if let Ok(mut guard) = app_language_override().lock() {
+        *guard = language.map(str::to_string);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn get_effective_locale() -> Option<String> {
+    if let Ok(guard) = app_language_override().lock() {
+        if let Some(language) = guard.clone() {
+            return Some(language);
+        }
+    }
+
+    get_locale()
+}
+
+#[cfg(target_os = "macos")]
+fn resolve_locale_code(candidate: &str) -> Option<String> {
+    let supported = embedded_locale_codes();
+
+    if let Some(exact) = supported
+        .iter()
+        .find(|locale| locale.eq_ignore_ascii_case(candidate))
+    {
+        return Some(exact.clone());
+    }
+
+    let normalized = candidate.to_ascii_lowercase();
+    let language = normalized.split('-').next().unwrap_or_default();
+
+    supported
+        .iter()
+        .find(|locale| {
+            let locale_lower = locale.to_ascii_lowercase();
+            locale_lower.starts_with(&format!("{normalized}-"))
+                || normalized.starts_with(&format!("{locale_lower}-"))
+                || (!language.is_empty()
+                    && locale_lower.starts_with(&format!("{language}-")))
+        })
+        .cloned()
+}
+
+#[cfg(target_os = "macos")]
+fn load_mac_status_bar_translations(locale: &str) -> Option<MacStatusBarTranslations> {
+    let resolved = resolve_locale_code(locale)?;
+    let file = LOCALE_FILES.get_file(format!("{resolved}.json"))?;
+    let raw = file.contents_utf8()?;
+    let parsed = serde_json::from_str::<LocaleTranslationFile>(raw).ok()?;
+    Some(parsed.mac_status_bar)
+}
+
+#[cfg(target_os = "macos")]
+fn resolve_text(current: Option<String>, fallback: Option<String>, default: &str, app_name: &str) -> String {
+    current
+        .or(fallback)
+        .unwrap_or_else(|| default.to_string())
+        .replace("{{appName}}", app_name)
+}
+
+#[cfg(target_os = "macos")]
+fn resolve_mac_status_bar_translations(app_name: &str) -> ResolvedMacStatusBarTranslations {
+    let fallback = load_mac_status_bar_translations("zh-CN").unwrap_or_default();
+    let current = get_effective_locale()
+        .and_then(|locale| load_mac_status_bar_translations(&locale))
+        .unwrap_or_default();
+
+    ResolvedMacStatusBarTranslations {
+        about: resolve_text(
+            current.about,
+            fallback.about,
+            "关于 {{appName}}",
+            app_name,
+        ),
+        about_window_title: resolve_text(
+            current.about_window_title,
+            fallback.about_window_title,
+            "关于 {{appName}}",
+            app_name,
+        ),
+        file: resolve_text(current.file, fallback.file, "文件", app_name),
+        edit: resolve_text(current.edit, fallback.edit, "编辑", app_name),
+        view: resolve_text(current.view, fallback.view, "视图", app_name),
+        window: resolve_text(current.window, fallback.window, "窗口", app_name),
+        help: resolve_text(current.help, fallback.help, "帮助", app_name),
+        services: resolve_text(current.services, fallback.services, "服务", app_name),
+        hide: resolve_text(
+            current.hide,
+            fallback.hide,
+            "隐藏 {{appName}}",
+            app_name,
+        ),
+        hide_others: resolve_text(
+            current.hide_others,
+            fallback.hide_others,
+            "隐藏其他",
+            app_name,
+        ),
+        quit: resolve_text(
+            current.quit,
+            fallback.quit,
+            "退出 {{appName}}",
+            app_name,
+        ),
+        close_window: resolve_text(
+            current.close_window,
+            fallback.close_window,
+            "关闭窗口",
+            app_name,
+        ),
+        undo: resolve_text(current.undo, fallback.undo, "撤销", app_name),
+        redo: resolve_text(current.redo, fallback.redo, "重做", app_name),
+        cut: resolve_text(current.cut, fallback.cut, "剪切", app_name),
+        copy: resolve_text(current.copy, fallback.copy, "复制", app_name),
+        paste: resolve_text(current.paste, fallback.paste, "粘贴", app_name),
+        select_all: resolve_text(
+            current.select_all,
+            fallback.select_all,
+            "全选",
+            app_name,
+        ),
+        fullscreen: resolve_text(
+            current.fullscreen,
+            fallback.fullscreen,
+            "进入全屏",
+            app_name,
+        ),
+        minimize: resolve_text(
+            current.minimize,
+            fallback.minimize,
+            "最小化",
+            app_name,
+        ),
+        maximize: resolve_text(current.maximize, fallback.maximize, "缩放", app_name),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn app_display_name<R: Runtime>(app: &AppHandle<R>) -> String {
+    let package = app.package_info();
+    app.config()
+        .product_name
+        .clone()
+        .unwrap_or_else(|| package.name.clone())
+}
+
+#[cfg(target_os = "macos")]
+fn refresh_about_window_title<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    if let Some(window) = app.get_webview_window(ABOUT_WINDOW_LABEL) {
+        let app_name = app_display_name(app);
+        let translations = resolve_mac_status_bar_translations(&app_name);
+        window.set_title(&translations.about_window_title)?;
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn sync_macos_app_language<R: Runtime>(
+    app: &AppHandle<R>,
+    language: Option<&str>,
+) -> tauri::Result<()> {
+    set_app_language_override(language);
+    let menu = build_macos_menu(app)?;
+    let _ = app.set_menu(menu)?;
+    refresh_about_window_title(app)?;
+    Ok(())
+}
 
 #[cfg(target_os = "macos")]
 // 这套菜单和 About 窗口仅用于 macOS。
 // Windows / Linux 仍然保持 Tauri 的原有行为，不会被这次改动影响。
 fn build_macos_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
-    let package = app.package_info();
-    let app_name = app
-        .config()
-        .product_name
-        .clone()
-        .unwrap_or_else(|| package.name.clone());
+    let app_name = app_display_name(app);
+    let translations = resolve_mac_status_bar_translations(&app_name);
     let about_item = MenuItem::with_id(
         app,
         ABOUT_MENU_ID,
-        format!("关于 {}", app_name),
+        &translations.about,
         true,
         None::<&str>,
     )?;
@@ -47,58 +297,68 @@ fn build_macos_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         &[
             &about_item,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::services(app, None)?,
+            &PredefinedMenuItem::services(app, Some(translations.services.as_str()))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::hide(app, None)?,
-            &PredefinedMenuItem::hide_others(app, None)?,
+            &PredefinedMenuItem::hide(app, Some(translations.hide.as_str()))?,
+            &PredefinedMenuItem::hide_others(app, Some(translations.hide_others.as_str()))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, None)?,
+            &PredefinedMenuItem::quit(app, Some(translations.quit.as_str()))?,
         ],
     )?;
 
     let file_menu = Submenu::with_items(
         app,
-        "File",
+        &translations.file,
         true,
-        &[&PredefinedMenuItem::close_window(app, None)?],
+        &[&PredefinedMenuItem::close_window(
+            app,
+            Some(translations.close_window.as_str()),
+        )?],
     )?;
 
     let edit_menu = Submenu::with_items(
         app,
-        "Edit",
+        &translations.edit,
         true,
         &[
-            &PredefinedMenuItem::undo(app, None)?,
-            &PredefinedMenuItem::redo(app, None)?,
+            &PredefinedMenuItem::undo(app, Some(translations.undo.as_str()))?,
+            &PredefinedMenuItem::redo(app, Some(translations.redo.as_str()))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::cut(app, None)?,
-            &PredefinedMenuItem::copy(app, None)?,
-            &PredefinedMenuItem::paste(app, None)?,
-            &PredefinedMenuItem::select_all(app, None)?,
+            &PredefinedMenuItem::cut(app, Some(translations.cut.as_str()))?,
+            &PredefinedMenuItem::copy(app, Some(translations.copy.as_str()))?,
+            &PredefinedMenuItem::paste(app, Some(translations.paste.as_str()))?,
+            &PredefinedMenuItem::select_all(app, Some(translations.select_all.as_str()))?,
         ],
     )?;
 
     let view_menu = Submenu::with_items(
         app,
-        "View",
+        &translations.view,
         true,
-        &[&PredefinedMenuItem::fullscreen(app, None)?],
+        &[&PredefinedMenuItem::fullscreen(
+            app,
+            Some(translations.fullscreen.as_str()),
+        )?],
     )?;
 
     let window_menu = Submenu::with_id_and_items(
         app,
         WINDOW_SUBMENU_ID,
-        "Window",
+        &translations.window,
         true,
         &[
-            &PredefinedMenuItem::minimize(app, None)?,
-            &PredefinedMenuItem::maximize(app, None)?,
+            &PredefinedMenuItem::minimize(app, Some(translations.minimize.as_str()))?,
+            &PredefinedMenuItem::maximize(app, Some(translations.maximize.as_str()))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::close_window(app, None)?,
+            &PredefinedMenuItem::close_window(
+                app,
+                Some(translations.close_window.as_str()),
+            )?,
         ],
     )?;
 
-    let help_menu = Submenu::with_id_and_items(app, HELP_SUBMENU_ID, "Help", true, &[])?;
+    let help_menu =
+        Submenu::with_id_and_items(app, HELP_SUBMENU_ID, &translations.help, true, &[])?;
 
     Menu::with_items(
         app,
@@ -123,8 +383,11 @@ fn open_about_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         return Ok(());
     }
 
+    let app_name = app_display_name(app);
+    let translations = resolve_mac_status_bar_translations(&app_name);
+
     WebviewWindowBuilder::new(app, ABOUT_WINDOW_LABEL, WebviewUrl::App("index.html".into()))
-        .title("关于 devFleet")
+        .title(&translations.about_window_title)
         .inner_size(500.0, 300.0)
         .resizable(false)
         .maximizable(false)
@@ -182,6 +445,7 @@ pub fn run() {
             commands::load_project_config,
             commands::refresh_project_config,
             commands::save_project_config,
+            commands::sync_app_language,
             commands::add_project_to_config,
             commands::remove_project_from_config,
             commands::run_script,

@@ -136,5 +136,28 @@
     "copyAndClose": "コピーして閉じる",
     "appName": "現在のアプリ名",
     "appVersion": "現在のバージョン番号"
+  },
+  "macStatusBar": {
+    "about": "{{appName}} について",
+    "aboutWindowTitle": "{{appName}} について",
+    "file": "ファイル",
+    "edit": "編集",
+    "view": "表示",
+    "window": "ウインドウ",
+    "help": "ヘルプ",
+    "services": "サービス",
+    "hide": "{{appName}} を隠す",
+    "hideOthers": "ほかを隠す",
+    "quit": "{{appName}} を終了",
+    "closeWindow": "ウインドウを閉じる",
+    "undo": "取り消す",
+    "redo": "やり直す",
+    "cut": "切り取り",
+    "copy": "コピー",
+    "paste": "貼り付け",
+    "selectAll": "すべてを選択",
+    "fullscreen": "フルスクリーンにする",
+    "minimize": "しまう",
+    "maximize": "ズーム"
   }
 }

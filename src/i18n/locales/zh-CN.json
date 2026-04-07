@@ -136,5 +136,28 @@
     "copyAndClose": "复制并关闭",
     "appName": "当前应用名",
     "appVersion": "当前版本号"
+  },
+  "macStatusBar": {
+    "about": "关于 {{appName}}",
+    "aboutWindowTitle": "关于 {{appName}}",
+    "file": "文件",
+    "edit": "编辑",
+    "view": "视图",
+    "window": "窗口",
+    "help": "帮助",
+    "services": "服务",
+    "hide": "隐藏 {{appName}}",
+    "hideOthers": "隐藏其他",
+    "quit": "退出 {{appName}}",
+    "closeWindow": "关闭窗口",
+    "undo": "撤销",
+    "redo": "重做",
+    "cut": "剪切",
+    "copy": "复制",
+    "paste": "粘贴",
+    "selectAll": "全选",
+    "fullscreen": "进入全屏",
+    "minimize": "最小化",
+    "maximize": "缩放"
   }
 }

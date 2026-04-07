@@ -1,5 +1,6 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
+import { tauriAPI } from "../lib/tauri";
 
 const STORAGE_KEY = "devfleet-lang";
 const DEFAULT_LANGUAGE = "zh-CN";
@@ -47,6 +48,14 @@ function getInitialLanguage(): string {
   return browserLanguage || DEFAULT_LANGUAGE;
 }
 
+async function syncNativeLanguage(language: string) {
+  try {
+    await tauriAPI.syncAppLanguage(language);
+  } catch {
+    // 浏览器预览或非 Tauri 运行时会走到这里，忽略即可。
+  }
+}
+
 i18n.use(initReactI18next).init({
   resources,
   lng: getInitialLanguage(),
@@ -57,9 +66,11 @@ i18n.use(initReactI18next).init({
 i18n.on("languageChanged", (lng) => {
   localStorage.setItem(STORAGE_KEY, lng);
   document.documentElement.lang = lng;
+  void syncNativeLanguage(lng);
 });
 
 document.documentElement.lang = i18n.language;
+void syncNativeLanguage(i18n.language);
 
 export function getSupportedLanguages() {
   return SUPPORTED_LANGUAGES;

@@ -136,5 +136,28 @@
     "copyAndClose": "Copy & Close",
     "appName": "App name",
     "appVersion": "Version"
+  },
+  "macStatusBar": {
+    "about": "About {{appName}}",
+    "aboutWindowTitle": "About {{appName}}",
+    "file": "File",
+    "edit": "Edit",
+    "view": "View",
+    "window": "Window",
+    "help": "Help",
+    "services": "Services",
+    "hide": "Hide {{appName}}",
+    "hideOthers": "Hide Others",
+    "quit": "Quit {{appName}}",
+    "closeWindow": "Close Window",
+    "undo": "Undo",
+    "redo": "Redo",
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste",
+    "selectAll": "Select All",
+    "fullscreen": "Enter Full Screen",
+    "minimize": "Minimize",
+    "maximize": "Zoom"
   }
 }
