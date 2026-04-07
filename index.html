@@ -3,9 +3,211 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>devFleet</title>
+    <script>
+      (() => {
+        const STORAGE_KEY = "devfleet-theme";
+
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          const resolved =
+            saved === "light" || saved === "dark"
+              ? saved
+              : window.matchMedia("(prefers-color-scheme: light)").matches
+                ? "light"
+                : "dark";
+
+          document.documentElement.setAttribute("data-theme", resolved);
+        } catch {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
+    <style>
+      :root {
+        --boot-bg: #0e1118;
+        --boot-surface: rgba(22, 26, 36, 0.86);
+        --boot-border: rgba(51, 58, 77, 0.9);
+        --boot-text: #e8ecf4;
+        --boot-subtle: #8890a4;
+        --boot-accent: #14b8a6;
+        --boot-accent-rgb: 20, 184, 166;
+      }
+
+      html[data-theme="light"] {
+        --boot-bg: #f5f7fa;
+        --boot-surface: rgba(255, 255, 255, 0.88);
+        --boot-border: rgba(223, 226, 232, 0.92);
+        --boot-text: #181d28;
+        --boot-subtle: #5c6478;
+        --boot-accent: #0d9488;
+        --boot-accent-rgb: 13, 148, 136;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        background: var(--boot-bg);
+      }
+
+      body {
+        overflow: hidden;
+        font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont,
+          "Microsoft YaHei", sans-serif;
+      }
+
+      #root {
+        width: 100%;
+        height: 100%;
+      }
+
+      .boot-splash {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at top left, rgba(var(--boot-accent-rgb), 0.12), transparent 30%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 24%),
+          var(--boot-bg);
+        z-index: 9999;
+        transition:
+          opacity 260ms ease,
+          transform 260ms ease,
+          visibility 260ms ease;
+      }
+
+      .boot-splash.is-hidden {
+        opacity: 0;
+        visibility: hidden;
+        transform: scale(1.015);
+        pointer-events: none;
+      }
+
+      .boot-card {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 18px 20px;
+        border-radius: 18px;
+        border: 1px solid var(--boot-border);
+        background: var(--boot-surface);
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+        backdrop-filter: blur(18px);
+      }
+
+      .boot-mark {
+        position: relative;
+        width: 54px;
+        height: 54px;
+        border-radius: 16px;
+        background: linear-gradient(145deg, rgba(var(--boot-accent-rgb), 0.18), rgba(var(--boot-accent-rgb), 0.04));
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.08),
+          0 10px 24px rgba(var(--boot-accent-rgb), 0.16);
+        overflow: hidden;
+      }
+
+      .boot-mark::before,
+      .boot-mark::after {
+        content: "";
+        position: absolute;
+        border-radius: 999px;
+      }
+
+      .boot-mark::before {
+        inset: 14px;
+        border: 2px solid var(--boot-accent);
+        opacity: 0.88;
+        animation: boot-pulse 1.4s ease-in-out infinite;
+      }
+
+      .boot-mark::after {
+        width: 10px;
+        height: 10px;
+        left: 22px;
+        top: 22px;
+        background: var(--boot-accent);
+        box-shadow: 0 0 18px rgba(var(--boot-accent-rgb), 0.55);
+      }
+
+      .boot-copy {
+        min-width: 150px;
+      }
+
+      .boot-title {
+        margin: 0;
+        color: var(--boot-text);
+        font-size: 18px;
+        line-height: 1.1;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+
+      .boot-subtitle {
+        margin: 6px 0 0;
+        color: var(--boot-subtle);
+        font-size: 12px;
+        line-height: 1.45;
+        font-weight: 600;
+      }
+
+      .boot-progress {
+        margin-top: 12px;
+        width: 150px;
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(var(--boot-accent-rgb), 0.12);
+        overflow: hidden;
+      }
+
+      .boot-progress-bar {
+        width: 44%;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--boot-accent), rgba(var(--boot-accent-rgb), 0.35));
+        animation: boot-slide 1.15s ease-in-out infinite;
+      }
+
+      @keyframes boot-slide {
+        0% {
+          transform: translateX(-120%);
+        }
+        100% {
+          transform: translateX(320%);
+        }
+      }
+
+      @keyframes boot-pulse {
+        0%,
+        100% {
+          transform: scale(0.92);
+          opacity: 0.58;
+        }
+        50% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="boot-splash" class="boot-splash" aria-hidden="true">
+      <div class="boot-card">
+        <div class="boot-mark"></div>
+        <div class="boot-copy">
+          <p class="boot-title">DevFleet</p>
+          <p class="boot-subtitle">正在准备工作区与开发环境...</p>
+          <div class="boot-progress">
+            <div class="boot-progress-bar"></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/renderer.tsx"></script>
   </body>

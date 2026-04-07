@@ -140,9 +140,25 @@
     "appName": "当前应用名",
     "appVersion": "当前版本号"
   },
+  "settings": {
+    "title": "设置",
+    "subtitle": "调整应用的外观与语言偏好。",
+    "appearanceTitle": "外观",
+    "appearanceDesc": "切换应用的日间 / 夜间主题。",
+    "lightTitle": "日间模式",
+    "lightDesc": "浅色背景，更适合明亮环境。",
+    "darkTitle": "夜间模式",
+    "darkDesc": "深色背景，更适合低光环境。",
+    "languageTitle": "语言",
+    "languageDesc": "选择应用和 macOS 原生菜单使用的语言。",
+    "current": "当前使用中",
+    "close": "关闭"
+  },
   "macStatusBar": {
     "about": "关于 {{appName}}",
     "aboutWindowTitle": "关于 {{appName}}",
+    "settings": "设置",
+    "settingsWindowTitle": "{{appName}} 设置",
     "file": "文件",
     "edit": "编辑",
     "view": "视图",

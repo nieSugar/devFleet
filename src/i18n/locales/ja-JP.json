@@ -140,9 +140,25 @@
     "appName": "現在のアプリ名",
     "appVersion": "現在のバージョン番号"
   },
+  "settings": {
+    "title": "設定",
+    "subtitle": "アプリの外観と言語設定を調整します。",
+    "appearanceTitle": "外観",
+    "appearanceDesc": "ライト / ダークテーマを切り替えます。",
+    "lightTitle": "ライトモード",
+    "lightDesc": "明るい環境で見やすい配色です。",
+    "darkTitle": "ダークモード",
+    "darkDesc": "暗い環境で見やすい配色です。",
+    "languageTitle": "言語",
+    "languageDesc": "アプリと macOS ネイティブメニューで使う言語を選択します。",
+    "current": "現在使用中",
+    "close": "閉じる"
+  },
   "macStatusBar": {
     "about": "{{appName}} について",
     "aboutWindowTitle": "{{appName}} について",
+    "settings": "設定",
+    "settingsWindowTitle": "{{appName}} の設定",
     "file": "ファイル",
     "edit": "編集",
     "view": "表示",

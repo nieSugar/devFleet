@@ -14,6 +14,7 @@ import "./App.css";
 
 // About 窗口只在 macOS 菜单中打开，按需加载可以避免 Windows / Linux 主入口主动引入它。
 const AboutWindow = React.lazy(() => import("./components/AboutWindow"));
+const SettingsWindow = React.lazy(() => import("./components/SettingsWindow"));
 
 // 自定义 About 窗口目前只在 macOS 菜单栏中创建。
 // 其他平台即使共用同一套前端代码，也始终走主应用界面，避免影响 Windows / Linux。
@@ -51,6 +52,7 @@ const AppContent: React.FC = () => {
   const antdLocale = useMemo(() => resolveAntdLocale(i18n.language), [i18n.language]);
 
   const isAboutWindow = IS_MACOS && windowLabel === "about";
+  const isSettingsWindow = IS_MACOS && windowLabel === "settings";
 
   return (
     <ConfigProvider
@@ -75,6 +77,10 @@ const AppContent: React.FC = () => {
           {isAboutWindow ? (
             <Suspense fallback={null}>
               <AboutWindow />
+            </Suspense>
+          ) : isSettingsWindow ? (
+            <Suspense fallback={null}>
+              <SettingsWindow />
             </Suspense>
           ) : (
             <div className="app">

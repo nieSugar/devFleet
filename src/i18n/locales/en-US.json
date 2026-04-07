@@ -140,9 +140,25 @@
     "appName": "App name",
     "appVersion": "Version"
   },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Adjust the app appearance and language preferences.",
+    "appearanceTitle": "Appearance",
+    "appearanceDesc": "Switch between light and dark themes.",
+    "lightTitle": "Light Mode",
+    "lightDesc": "A brighter surface for daytime use.",
+    "darkTitle": "Dark Mode",
+    "darkDesc": "A darker surface for low-light environments.",
+    "languageTitle": "Language",
+    "languageDesc": "Choose the language used by the app and macOS native menu.",
+    "current": "Currently selected",
+    "close": "Close"
+  },
   "macStatusBar": {
     "about": "About {{appName}}",
     "aboutWindowTitle": "About {{appName}}",
+    "settings": "Settings",
+    "settingsWindowTitle": "{{appName}} Settings",
     "file": "File",
     "edit": "Edit",
     "view": "View",

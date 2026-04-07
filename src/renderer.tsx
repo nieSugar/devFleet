@@ -16,5 +16,19 @@ if (!container) {
   throw new Error("Root element not found. Ensure the HTML has an element with id=\"root\".");
 }
 
+function hideBootSplash() {
+  const splash = document.getElementById("boot-splash");
+  if (!splash) return;
+
+  splash.classList.add("is-hidden");
+  window.setTimeout(() => {
+    splash.remove();
+  }, 280);
+}
+
 const root = createRoot(container);
 root.render(<App />);
+
+window.requestAnimationFrame(() => {
+  window.setTimeout(hideBootSplash, 120);
+});
