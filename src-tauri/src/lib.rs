@@ -477,11 +477,23 @@ pub fn run() {
         .on_menu_event(handle_macos_menu_event);
 
     builder
-        .setup(|_app| {
+        .setup(|app| {
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+            {
+                // 开机启动由 Tauri 官方插件接管；默认不会自动启用，
+                // 只有用户在设置页打开开关后才会注册到系统自启动。
+                use tauri_plugin_autostart::MacosLauncher;
+
+                app.handle().plugin(tauri_plugin_autostart::init(
+                    MacosLauncher::LaunchAgent,
+                    None::<Vec<&str>>,
+                ))?;
+            }
+
             #[cfg(target_os = "macos")]
             {
                 // macOS 上保留原生窗口装饰，避免无边框窗口吞掉点击或出现假死。
-                if let Some(window) = _app.get_webview_window("main") {
+                if let Some(window) = app.get_webview_window("main") {
                     window.set_decorations(true)?;
                     window.set_title_bar_style(TitleBarStyle::Transparent)?;
                 }

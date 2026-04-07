@@ -64,6 +64,9 @@ tauri-plugin-process = "2"
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
 
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-autostart = "2"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 include_dir = "0.7"
 sys-locale = "0.3"

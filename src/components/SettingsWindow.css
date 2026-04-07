@@ -136,6 +136,36 @@
   gap: 10px;
 }
 
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+}
+
+.settings-toggle-copy {
+  min-width: 0;
+}
+
+.settings-toggle-title {
+  display: block;
+  color: var(--text-primary);
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+
+.settings-toggle-desc {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
 .settings-footer {
   margin-top: auto;
   display: flex;
@@ -172,5 +202,10 @@
 
   .settings-options-grid {
     grid-template-columns: 1fr;
+  }
+
+  .settings-toggle-row {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
