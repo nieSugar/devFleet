@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTranslation } from "react-i18next";
+import { getSupportedLanguages } from "../i18n";
 import { useTheme } from "../contexts/ThemeContext";
 import UpdateChecker from "./UpdateChecker";
 import "./TitleBar.css";
@@ -9,9 +10,14 @@ interface TitleBarProps {
   onOpenNodeManager?: () => void;
 }
 
-const IS_MACOS =
-  typeof window !== "undefined" &&
-  /mac/i.test(window.navigator.userAgent);
+const IS_MACOS = typeof window !== "undefined" && /mac/i.test(window.navigator.userAgent);
+const SUPPORTED_LANGUAGES = getSupportedLanguages();
+
+function getLanguageLabel(locale: string) {
+  if (locale === "zh-CN") return "中";
+  if (locale === "en-US") return "En";
+  return locale.split("-")[0]?.toUpperCase() || locale;
+}
 
 const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
   const { theme, toggleTheme } = useTheme();
@@ -19,7 +25,12 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
   const [maximized, setMaximized] = useState(false);
 
   const toggleLanguage = () => {
-    i18n.changeLanguage(i18n.language === "zh-CN" ? "en-US" : "zh-CN");
+    const currentIndex = SUPPORTED_LANGUAGES.indexOf(i18n.language);
+    const nextLanguage =
+      SUPPORTED_LANGUAGES[
+        (currentIndex + 1 + SUPPORTED_LANGUAGES.length) % SUPPORTED_LANGUAGES.length
+      ] || SUPPORTED_LANGUAGES[0];
+    i18n.changeLanguage(nextLanguage);
   };
 
   useEffect(() => {
@@ -56,7 +67,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
   }, []);
 
   return (
-    <header 
+    <header
       className="titlebar"
       {...(!IS_MACOS ? { "data-tauri-drag-region": true } : {})}
     >
@@ -77,7 +88,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
           title={t("titleBar.language")}
         >
           <LangIcon />
-          <span className="lang-label">{i18n.language === "zh-CN" ? "中" : "En"}</span>
+          <span className="lang-label">{getLanguageLabel(i18n.language)}</span>
         </button>
 
         <button

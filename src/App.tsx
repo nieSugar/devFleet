@@ -15,9 +15,7 @@ import "./App.css";
 
 // 自定义 About 窗口目前只在 macOS 菜单栏中创建。
 // 其他平台即使共用同一套前端代码，也始终走主应用界面，避免影响 Windows / Linux。
-const IS_MACOS =
-  typeof window !== "undefined" &&
-  /mac/i.test(window.navigator.userAgent);
+const IS_MACOS = typeof window !== "undefined" && /mac/i.test(window.navigator.userAgent);
 
 function getInitialWindowLabel() {
   try {
@@ -32,6 +30,12 @@ const ANTD_LOCALES: Record<string, typeof zhCN> = {
   "en-US": enUS,
 };
 
+function resolveAntdLocale(language: string) {
+  if (ANTD_LOCALES[language]) return ANTD_LOCALES[language];
+  if (language.startsWith("zh")) return zhCN;
+  return enUS;
+}
+
 const AppContent: React.FC = () => {
   const { isDark } = useTheme();
   const { i18n } = useTranslation();
@@ -42,10 +46,7 @@ const AppContent: React.FC = () => {
     setNvmRefreshKey((k) => k + 1);
   }, []);
 
-  const antdLocale = useMemo(
-    () => ANTD_LOCALES[i18n.language] || zhCN,
-    [i18n.language],
-  );
+  const antdLocale = useMemo(() => resolveAntdLocale(i18n.language), [i18n.language]);
 
   const isAboutWindow = IS_MACOS && windowLabel === "about";
 
@@ -53,9 +54,7 @@ const AppContent: React.FC = () => {
     <ConfigProvider
       locale={antdLocale}
       theme={{
-        algorithm: isDark
-          ? antdTheme.darkAlgorithm
-          : antdTheme.defaultAlgorithm,
+        algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
         token: {
           colorPrimary: "#0d9488",
           borderRadius: 8,

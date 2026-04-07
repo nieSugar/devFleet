@@ -1,0 +1,15 @@
+{
+  "sourceLocale": "zh-CN",
+  "sourceLanguage": "auto",
+  "apiBaseUrl": "https://api-free.deepl.com",
+  "targets": [
+    {
+      "locale": "en-US",
+      "targetLanguage": "EN-US"
+    },
+    {
+      "locale": "ja-JP",
+      "targetLanguage": "JA"
+    }
+  ]
+}
