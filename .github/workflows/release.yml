@@ -108,15 +108,48 @@ jobs:
           prerelease: ${{ github.event.inputs.prerelease }}
           args: ${{ matrix.args }}
 
-      - name: Create portable zip (Windows)
+      - name: Create portable package (Windows)
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
           $conf = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
           $version = $conf.version
           $exe = "src-tauri/target/release/devFleet.exe"
-          $zip = "devFleet_${version}_x64_portable.zip"
-          Compress-Archive -Path $exe -DestinationPath $zip
+          $portableDir = "devFleet_${version}_windows_x64_portable"
+          $zip = "${portableDir}.zip"
+
+          if (Test-Path $portableDir) {
+            Remove-Item $portableDir -Recurse -Force
+          }
+
+          if (Test-Path $zip) {
+            Remove-Item $zip -Force
+          }
+
+          New-Item -ItemType Directory -Path $portableDir | Out-Null
+          Copy-Item $exe -Destination (Join-Path $portableDir "devFleet.exe")
+
+          if (Test-Path "LICENSE") {
+            Copy-Item "LICENSE" -Destination (Join-Path $portableDir "LICENSE")
+          }
+
+          @"
+          devFleet Windows Portable
+
+          这是免安装版本，解压后直接运行 devFleet.exe 即可。
+
+          使用说明：
+          1. 解压整个 zip 包到任意目录。
+          2. 双击 devFleet.exe 启动。
+          3. 如首次运行缺少 WebView2 Runtime，请先安装系统组件后再启动。
+
+          说明：
+          - 此版本不会写入安装目录。
+          - 如需开始菜单、卸载入口或自动安装流程，请使用 NSIS 安装版。
+          "@ | Set-Content -Path (Join-Path $portableDir "README.txt") -Encoding UTF8
+
+          # 压缩目录而不是单个 exe，这样用户解压后就是标准的“免安装绿色版”结构。
+          Compress-Archive -Path $portableDir -DestinationPath $zip
           echo "PORTABLE_ZIP=$zip" >> $env:GITHUB_ENV
           echo "APP_VERSION=$version" >> $env:GITHUB_ENV
 

@@ -89,7 +89,7 @@
 
 | 平台 | 安装包 |
 |------|--------|
-| Windows | `.msi` / `.exe` (NSIS) |
+| Windows | `.msi` / `.exe` (NSIS 安装版)，`.zip` (Portable 免安装版，解压即用) |
 | macOS (Apple Silicon) | `.dmg` (aarch64) |
 | macOS (Intel) | `.dmg` (x86_64) |
 | Linux | `.deb` / `.AppImage` |
