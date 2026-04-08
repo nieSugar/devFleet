@@ -15,6 +15,14 @@ const FALLBACK_INFO: AboutInfo = {
 };
 const BUILD_DATE = new Date(__APP_BUILD_DATE__);
 
+function getAboutWindowHandle() {
+  try {
+    return getCurrentWindow();
+  } catch {
+    return null;
+  }
+}
+
 function formatBuildDate(language: string) {
   return new Intl.DateTimeFormat(language, {
     year: "numeric",
@@ -44,7 +52,7 @@ const AboutWindow: React.FC = () => {
   const { t, i18n } = useTranslation();
   const [info, setInfo] = useState<AboutInfo>(FALLBACK_INFO);
   const [copied, setCopied] = useState(false);
-  const appWindow = getCurrentWindow();
+  const appWindow = getAboutWindowHandle();
 
   useEffect(() => {
     let cancelled = false;
@@ -70,7 +78,7 @@ const AboutWindow: React.FC = () => {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && appWindow) {
         void appWindow.close();
       }
     };
@@ -129,7 +137,10 @@ const AboutWindow: React.FC = () => {
         </div>
 
         <footer className="about-footer">
-          <button className="about-action about-action-secondary" onClick={() => appWindow.close()}>
+          <button
+            className="about-action about-action-secondary"
+            onClick={() => appWindow && appWindow.close()}
+          >
             {t("about.close")}
           </button>
           <button className="about-action about-action-primary" onClick={handleCopy}>

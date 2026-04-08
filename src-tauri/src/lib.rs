@@ -1,5 +1,7 @@
 #[cfg(target_os = "macos")]
 use include_dir::{include_dir, Dir};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+use std::collections::HashSet;
 #[cfg(target_os = "macos")]
 use serde::Deserialize;
 #[cfg(target_os = "macos")]
@@ -27,6 +29,8 @@ mod project;
 
 #[cfg(target_os = "macos")]
 const ABOUT_WINDOW_LABEL: &str = "about";
+#[cfg(target_os = "macos")]
+const ABOUT_WINDOW_KIND_INIT_SCRIPT: &str = "window.__DEVFLEET_WINDOW_KIND__ = 'about';";
 #[cfg(target_os = "macos")]
 const ABOUT_MENU_ID: &str = "open-about-window";
 #[cfg(target_os = "macos")]
@@ -452,6 +456,9 @@ fn open_about_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let translations = resolve_mac_status_bar_translations(&app_name);
 
     WebviewWindowBuilder::new(app, ABOUT_WINDOW_LABEL, WebviewUrl::App("index.html".into()))
+        // About 窗口显式注入自己的 window kind，避免前端在打包后的首屏阶段
+        // 因为 Tauri API 注入时机差异而误判成主窗口路由。
+        .initialization_script(ABOUT_WINDOW_KIND_INIT_SCRIPT)
         .title(&translations.about_window_title)
         .inner_size(500.0, 300.0)
         .resizable(false)
@@ -497,6 +504,72 @@ fn handle_macos_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     }
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn normalize_unix_gui_environment() {
+    let Some(home) = dirs::home_dir() else {
+        return;
+    };
+
+    // Finder / 桌面环境启动的 GUI 应用通常拿不到用户 shell 中追加的 PATH。
+    // 这里补回常见的用户级工具目录，让打包后的应用也能找到 nvmd、volta、pnpm 等命令。
+    if std::env::var_os("NVM_DIR").is_none() {
+        let nvm_dir = home.join(".nvm");
+        if nvm_dir.is_dir() {
+            std::env::set_var("NVM_DIR", &nvm_dir);
+        }
+    }
+
+    let mut preferred_paths = vec![
+        home.join(".nvmd").join("bin"),
+        home.join(".volta").join("bin"),
+        home.join(".bun").join("bin"),
+        home.join(".cargo").join("bin"),
+        home.join(".local").join("bin"),
+        home.join("bin"),
+    ];
+
+    #[cfg(target_os = "macos")]
+    {
+        preferred_paths.extend([
+            std::path::PathBuf::from("/opt/homebrew/bin"),
+            std::path::PathBuf::from("/opt/homebrew/sbin"),
+            std::path::PathBuf::from("/usr/local/bin"),
+            std::path::PathBuf::from("/usr/local/sbin"),
+            home.join("Library/Application Support/JetBrains/Toolbox/scripts"),
+        ]);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        preferred_paths.extend([
+            std::path::PathBuf::from("/usr/local/bin"),
+            std::path::PathBuf::from("/usr/local/sbin"),
+        ]);
+    }
+
+    let existing_paths: Vec<std::path::PathBuf> = std::env::var_os("PATH")
+        .map(|path| std::env::split_paths(&path).collect())
+        .unwrap_or_default();
+
+    let mut merged_paths = Vec::new();
+    let mut seen = HashSet::new();
+
+    for path in preferred_paths.into_iter().chain(existing_paths.into_iter()) {
+        if !path.is_dir() {
+            continue;
+        }
+
+        let key = path.to_string_lossy().to_string();
+        if seen.insert(key) {
+            merged_paths.push(path);
+        }
+    }
+
+    if let Ok(joined) = std::env::join_paths(merged_paths) {
+        std::env::set_var("PATH", joined);
+    }
+}
+
 /// 应用主入口，构建并启动 Tauri 应用
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -513,6 +586,12 @@ pub fn run() {
 
     builder
         .setup(|app| {
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            {
+                // 仅在 Unix GUI 环境下补 PATH，避免 Windows 被这套用户目录规则影响。
+                normalize_unix_gui_environment();
+            }
+
             #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             {
                 // 开机启动由 Tauri 官方插件接管；默认不会自动启用，

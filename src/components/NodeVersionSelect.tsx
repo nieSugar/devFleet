@@ -1,5 +1,5 @@
 import React from "react";
-import { Select, Tag } from "antd";
+import { Select, Tag, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 import { NvmInfo, Project } from "../types/project";
 
@@ -30,8 +30,20 @@ const NodeVersionSelect: React.FC<NodeVersionSelectProps> = ({
   onChange,
 }) => {
   const { t } = useTranslation();
+  const availableVersions = nvmInfo?.availableVersions || [];
+  const hasVersionOptions = availableVersions.length > 0;
 
-  if (!nvmInfo?.isInstalled && !nvmInfo?.availableVersions?.length) {
+  if (!hasVersionOptions) {
+    if (record.nodeVersion) {
+      return (
+        <Tooltip title={t("nodeVersion.project")}>
+          <Tag color="blue">
+            Node {record.nodeVersion}
+          </Tag>
+        </Tooltip>
+      );
+    }
+
     return (
       <Tag color="default" style={{ cursor: "not-allowed" }}>
         {t("nodeVersion.noVersions")}
@@ -46,7 +58,7 @@ const NodeVersionSelect: React.FC<NodeVersionSelectProps> = ({
       allowClear
       popupMatchSelectWidth={false}
       onChange={(v) => onChange(record.id, v)}
-      options={(nvmInfo.availableVersions || []).map((v) => ({
+      options={availableVersions.map((v) => ({
         label: (
           <div style={labelStyle}>
             <span>{v.version}</span>
