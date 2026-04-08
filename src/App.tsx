@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import {
   StyleProvider,
   legacyLogicalPropertiesTransformer,
-} from "@ant-design/cssinjs/es";
+} from "@ant-design/cssinjs";
 import { ConfigProvider, App as AntdApp, theme as antdTheme } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import enUS from "antd/locale/en_US";
@@ -36,7 +36,9 @@ const AppContent: React.FC = () => {
     <StyleProvider
       // Tauri 打包后运行在系统 WebView 中；某些旧版 WebKit 对 :where 选择器
       // 和 CSS 逻辑属性支持不完整，Ant Design 官方建议在这类环境开启兼容降级。
+      // 同时显式把 style 标签注入到 head，避免 macOS 生产包里样式插入位置不稳定。
       hashPriority="high"
+      container={typeof document === "undefined" ? undefined : document.head}
       transformers={ANTD_COMPAT_TRANSFORMERS}
     >
       <ConfigProvider
