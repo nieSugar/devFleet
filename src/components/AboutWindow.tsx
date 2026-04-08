@@ -11,7 +11,7 @@ type AboutInfo = {
 };
 
 const FALLBACK_INFO: AboutInfo = {
-  version: "2.1.7",
+  version: "2.1.8",
 };
 const BUILD_DATE = new Date(__APP_BUILD_DATE__);
 
