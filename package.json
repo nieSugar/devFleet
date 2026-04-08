@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "vite",
     "sync:version": "tsx scripts/sync-app-version.ts",
-    "build": "pnpm sync:version && tsc && vite build",
+    "sync:antd-css": "tsx scripts/generate-antd-static-css.tsx",
+    "build": "pnpm sync:version && pnpm sync:antd-css && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "pnpm sync:version && tauri dev",
@@ -16,7 +17,7 @@
     "i18n:translate:dry": "tsx scripts/translate-locales.ts --dry-run",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"scripts/**/*.{ts,tsx}\"",
     "icon": "tauri icon ./logo.png"
   },
   "author": {

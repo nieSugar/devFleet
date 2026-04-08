@@ -1,24 +1,25 @@
 import React, { useMemo, useState } from "react";
-import {
-  StyleProvider,
-  legacyLogicalPropertiesTransformer,
-} from "@ant-design/cssinjs";
-import { ConfigProvider, App as AntdApp, theme as antdTheme } from "antd";
+import { StyleProvider } from "@ant-design/cssinjs";
+import { ConfigProvider, App as AntdApp } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import enUS from "antd/locale/en_US";
 import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
 import "antd/dist/reset.css";
+import "./generated/antd-static.css";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { createAppRouter } from "./routes/createAppRouter";
+import {
+  DEVFLEET_ANTD_COMPAT_TRANSFORMERS,
+  getDevFleetAntdThemeConfig,
+} from "./theme/antdTheme";
 import "./App.css";
 
 const ANTD_LOCALES: Record<string, typeof zhCN> = {
   "zh-CN": zhCN,
   "en-US": enUS,
 };
-const ANTD_COMPAT_TRANSFORMERS = [legacyLogicalPropertiesTransformer];
 
 function resolveAntdLocale(language: string) {
   if (ANTD_LOCALES[language]) return ANTD_LOCALES[language];
@@ -39,24 +40,11 @@ const AppContent: React.FC = () => {
       // 同时显式把 style 标签注入到 head，避免 macOS 生产包里样式插入位置不稳定。
       hashPriority="high"
       container={typeof document === "undefined" ? undefined : document.head}
-      transformers={ANTD_COMPAT_TRANSFORMERS}
+      transformers={DEVFLEET_ANTD_COMPAT_TRANSFORMERS}
     >
       <ConfigProvider
         locale={antdLocale}
-        theme={{
-          algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
-          token: {
-            colorPrimary: "#0d9488",
-            borderRadius: 8,
-            fontFamily:
-              "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', sans-serif",
-            colorBgContainer: isDark ? "#161a24" : "#ffffff",
-            colorBgElevated: isDark ? "#1c2130" : "#ffffff",
-            colorBgLayout: isDark ? "#0e1118" : "#f5f7fa",
-            colorBorder: isDark ? "#262c3a" : "#dfe2e8",
-            colorBorderSecondary: isDark ? "#1a1f2c" : "#eceff4",
-          },
-        }}
+        theme={getDevFleetAntdThemeConfig(isDark)}
       >
         <AntdApp>
           <ErrorBoundary>
