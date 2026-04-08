@@ -3,10 +3,6 @@ name: Release macOS
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Release version (leave empty to use Cargo.toml version)'
-        required: false
-        type: string
       prerelease:
         description: 'Mark as pre-release'
         required: false
@@ -19,7 +15,68 @@ on:
         default: ''
 
 jobs:
+  prepare-release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.prepare.outputs.release_id }}
+      release_tag: ${{ steps.prepare.outputs.release_tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 'lts/*'
+
+      - name: Prepare release and clear existing assets
+        id: prepare
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_NOTES: ${{ github.event.inputs.release_notes || '' }}
+          PRERELEASE: ${{ github.event.inputs.prerelease || false }}
+        shell: bash
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          RELEASE_TAG="v${PACKAGE_VERSION}"
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            RELEASE_ID="$(gh release view "$RELEASE_TAG" --json id --jq '.id')"
+          else
+            NOTES="$RELEASE_NOTES"
+            if [ -z "$NOTES" ]; then
+              NOTES='See the assets to download and install.'
+            fi
+
+            CREATE_ARGS=(
+              "$RELEASE_TAG"
+              "--target" "$GITHUB_SHA"
+              "--title" "devFleet $RELEASE_TAG"
+              "--notes" "$NOTES"
+              "--draft"
+            )
+
+            if [ "$PRERELEASE" = "true" ]; then
+              CREATE_ARGS+=("--prerelease")
+            fi
+
+            gh release create "${CREATE_ARGS[@]}"
+            RELEASE_ID="$(gh release view "$RELEASE_TAG" --json id --jq '.id')"
+          fi
+
+          gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | while IFS= read -r asset; do
+            if [ -n "$asset" ]; then
+              gh release delete-asset "$RELEASE_TAG" "$asset" --yes
+            fi
+          done || true
+
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
   publish-tauri-macos:
+    needs: prepare-release
     permissions:
       contents: write
     strategy:
@@ -55,29 +112,24 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
-      - name: Override version (if provided)
-        if: github.event.inputs.version != ''
-        shell: bash
-        run: |
-          VERSION="${{ github.event.inputs.version }}"
-          # Update tauri.conf.json
-          cd src-tauri
-          node -e "
-            const fs = require('fs');
-            const conf = JSON.parse(fs.readFileSync('tauri.conf.json', 'utf8'));
-            conf.version = '${VERSION}';
-            fs.writeFileSync('tauri.conf.json', JSON.stringify(conf, null, 2) + '\n');
-          "
-          # Update Cargo.toml
-          node -e "
-            const fs = require('fs');
-            let cargo = fs.readFileSync('Cargo.toml', 'utf8');
-            cargo = cargo.replace(/^version = \".*\"/m, 'version = \"${VERSION}\"');
-            fs.writeFileSync('Cargo.toml', cargo);
-          "
-
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Sync desktop app version
+        run: pnpm sync:version
+
+      - name: Show release version
+        shell: bash
+        run: |
+          node -e "
+            const pkg = require('./package.json');
+            const cargo = require('fs').readFileSync('./src-tauri/Cargo.toml', 'utf8');
+            const tauri = require('./src-tauri/tauri.conf.json');
+            const cargoVersion = (cargo.match(/^version = \"(.*)\"$/m) || [])[1];
+            console.log('package.json:', pkg.version);
+            console.log('Cargo.toml:', cargoVersion);
+            console.log('tauri.conf.json:', tauri.version);
+          "
 
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
@@ -91,9 +143,6 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          tagName: v__VERSION__
-          releaseName: 'devFleet v__VERSION__'
-          releaseBody: ${{ github.event.inputs.release_notes || 'See the assets to download and install.' }}
-          releaseDraft: true
-          prerelease: ${{ github.event.inputs.prerelease }}
+          releaseId: ${{ needs.prepare-release.outputs.release_id }}
+          tagName: ${{ needs.prepare-release.outputs.release_tag }}
           args: ${{ matrix.args }}
