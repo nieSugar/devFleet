@@ -130,7 +130,10 @@ pub fn save_project_config(config: ProjectConfig) -> IpcResponse {
 }
 
 #[tauri::command]
-pub fn sync_app_language(_app: tauri::AppHandle, _language: String) -> IpcResponse {
+pub fn sync_app_language(app: tauri::AppHandle, language: String) -> IpcResponse {
+    #[cfg(not(target_os = "macos"))]
+    let _ = (&app, &language);
+
     #[cfg(target_os = "macos")]
     {
         // macOS 原生菜单不受前端 i18n 自动驱动，需要在语言切换后手动重建菜单。
