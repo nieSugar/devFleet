@@ -17,6 +17,10 @@ on:
         type: string
         default: ''
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   prepare-release:
     permissions:
@@ -29,10 +33,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+          run_install: false
+
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 'lts/*'
+          node-version: 22
 
       - name: Prepare release and clear existing assets
         id: prepare
@@ -55,7 +65,7 @@ jobs:
           fi
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            RELEASE_ID="$(gh release view "$RELEASE_TAG" --json id --jq '.id')"
+            RELEASE_ID="$(gh release view "$RELEASE_TAG" --json databaseId --jq '.databaseId')"
           else
             NOTES="$RELEASE_NOTES"
             if [ -z "$NOTES" ]; then
@@ -75,7 +85,7 @@ jobs:
             fi
 
             gh release create "${CREATE_ARGS[@]}"
-            RELEASE_ID="$(gh release view "$RELEASE_TAG" --json id --jq '.id')"
+            RELEASE_ID="$(gh release view "$RELEASE_TAG" --json databaseId --jq '.databaseId')"
           fi
 
           gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | while IFS= read -r asset; do
@@ -109,16 +119,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: 'lts/*'
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 10.14.0
           run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
 
       - name: Resolve pnpm store path
         id: pnpm-cache

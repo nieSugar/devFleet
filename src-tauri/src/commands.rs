@@ -130,10 +130,9 @@ pub fn save_project_config(config: ProjectConfig) -> IpcResponse {
 }
 
 #[tauri::command]
-pub fn sync_app_language(_app: tauri::AppHandle, _language: String) -> IpcResponse {
+pub fn sync_app_language(app: tauri::AppHandle, language: String) -> IpcResponse {
     #[cfg(target_os = "macos")]
     {
-        // macOS 原生菜单不受前端 i18n 自动驱动，需要在语言切换后手动重建菜单。
         let language = language.trim();
         let language = if language.is_empty() {
             None
@@ -145,6 +144,8 @@ pub fn sync_app_language(_app: tauri::AppHandle, _language: String) -> IpcRespon
             return IpcResponse::err(format!("同步 macOS 菜单语言失败: {}", error));
         }
     }
+
+    let _ = (&app, &language);
 
     IpcResponse::ok_msg("语言同步成功")
 }
