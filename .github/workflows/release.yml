@@ -33,6 +33,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+          run_install: false
+
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
@@ -59,7 +65,7 @@ jobs:
           fi
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            RELEASE_ID="$(gh release view "$RELEASE_TAG" --json id --jq '.id')"
+            RELEASE_ID="$(gh release view "$RELEASE_TAG" --json databaseId --jq '.databaseId')"
           else
             NOTES="$RELEASE_NOTES"
             if [ -z "$NOTES" ]; then
@@ -79,7 +85,7 @@ jobs:
             fi
 
             gh release create "${CREATE_ARGS[@]}"
-            RELEASE_ID="$(gh release view "$RELEASE_TAG" --json id --jq '.id')"
+            RELEASE_ID="$(gh release view "$RELEASE_TAG" --json databaseId --jq '.databaseId')"
           fi
 
           gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | while IFS= read -r asset; do
