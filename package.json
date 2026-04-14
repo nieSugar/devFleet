@@ -1,7 +1,7 @@
 {
   "name": "devfleet",
   "private": true,
-  "version": "2.1.9",
+  "version": "2.1.10",
   "description": "用于快速启动项目与编辑器",
   "type": "module",
   "scripts": {
