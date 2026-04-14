@@ -6,7 +6,6 @@ import enUS from "antd/locale/en_US";
 import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
 import "antd/dist/reset.css";
-import "./generated/antd-static.css";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { createAppRouter } from "./routes/createAppRouter";
@@ -32,6 +31,23 @@ const AppContent: React.FC = () => {
   const { i18n } = useTranslation();
   const [router] = useState(createAppRouter);
   const antdLocale = useMemo(() => resolveAntdLocale(i18n.language), [i18n.language]);
+  const antdTheme = useMemo(() => getDevFleetAntdThemeConfig(isDark), [isDark]);
+  const appTree = (
+    <ConfigProvider
+      locale={antdLocale}
+      theme={antdTheme}
+    >
+      <AntdApp>
+        <ErrorBoundary>
+          <RouterProvider router={router} />
+        </ErrorBoundary>
+      </AntdApp>
+    </ConfigProvider>
+  );
+
+  if (import.meta.env.DEV) {
+    return appTree;
+  }
 
   return (
     <StyleProvider
@@ -42,16 +58,7 @@ const AppContent: React.FC = () => {
       container={typeof document === "undefined" ? undefined : document.head}
       transformers={DEVFLEET_ANTD_COMPAT_TRANSFORMERS}
     >
-      <ConfigProvider
-        locale={antdLocale}
-        theme={getDevFleetAntdThemeConfig(isDark)}
-      >
-        <AntdApp>
-          <ErrorBoundary>
-            <RouterProvider router={router} />
-          </ErrorBoundary>
-        </AntdApp>
-      </ConfigProvider>
+      {appTree}
     </StyleProvider>
   );
 };

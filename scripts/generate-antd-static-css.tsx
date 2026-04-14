@@ -23,6 +23,7 @@ type AntdRuntime = Pick<
   | "Spin"
   | "Switch"
   | "Tag"
+  | "Tooltip"
   | "Typography"
 >;
 
@@ -30,8 +31,18 @@ function StaticAntdStyleFixture(
   React: ReactRuntime,
   antd: AntdRuntime,
 ) {
-  const { Button, Drawer, Input, Result, Select, Spin, Switch, Tag, Typography } =
-    antd;
+  const {
+    Button,
+    Drawer,
+    Input,
+    Result,
+    Select,
+    Spin,
+    Switch,
+    Tag,
+    Tooltip,
+    Typography,
+  } = antd;
 
   return React.createElement(
     React.Fragment,
@@ -44,14 +55,23 @@ function StaticAntdStyleFixture(
         { style: { display: "flex", gap: 12, marginBottom: 12 } },
         React.createElement(Button, { type: "primary" }, "Primary"),
         React.createElement(Button, null, "Default"),
+        React.createElement(Button, { type: "primary", ghost: true }, "Ghost"),
+        React.createElement(Button, { icon: React.createElement("span", null, "+") }, ""),
         React.createElement(Button, { danger: true }, "Danger"),
         React.createElement(Switch, { checked: true }),
         React.createElement(Tag, { color: "processing" }, "Tag"),
+        React.createElement(Tag, { color: "blue" }, "Project"),
+        React.createElement(Tag, { color: "green" }, "System"),
+        React.createElement(Tag, { color: "default" }, "Empty"),
       ),
       React.createElement(
         "div",
         { style: { display: "grid", gap: 12 } },
-        React.createElement(Input, { placeholder: "Search projects..." }),
+        React.createElement(Input, {
+          placeholder: "Search projects...",
+          allowClear: true,
+          prefix: React.createElement("span", null, "S"),
+        }),
         React.createElement(Input.Search, {
           placeholder: "Search node version...",
           allowClear: true,
@@ -64,12 +84,46 @@ function StaticAntdStyleFixture(
             { label: "build", value: "build" },
           ],
         }),
+        React.createElement(Select, {
+          style: { width: 220 },
+          placeholder: "Select version",
+          allowClear: true,
+          options: [
+            { label: "Node 22.17.1", value: "22.17.1" },
+            { label: "Node 20.18.0", value: "20.18.0" },
+          ],
+        }),
         React.createElement(
           Typography.Paragraph,
           null,
           "/Users/example/project",
         ),
+        React.createElement(
+          Typography.Text,
+          {
+            copyable: true,
+            ellipsis: { tooltip: "/Users/example/project" },
+          },
+          "/Users/example/project",
+        ),
+        React.createElement(
+          Typography.Paragraph,
+          {
+            editable: {
+              onChange: () => undefined,
+            },
+            ellipsis: { rows: 1, tooltip: true },
+          },
+          "Editable project note",
+        ),
         React.createElement(Spin, { spinning: true }),
+        React.createElement(
+          Tooltip,
+          { title: "Refresh projects" },
+          React.createElement(Button, {
+            icon: React.createElement("span", null, "R"),
+          }),
+        ),
       ),
       React.createElement(
         Drawer,
@@ -134,6 +188,12 @@ async function collectStyles() {
       antd,
       zhCN,
       DEVFLEET_LIGHT_ANTD_THEME,
+    ),
+    renderThemeSnapshot(
+      React,
+      antd,
+      zhCN,
+      DEVFLEET_DARK_ANTD_THEME,
     ),
     renderThemeSnapshot(
       React,
