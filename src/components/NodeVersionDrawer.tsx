@@ -302,6 +302,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   const [installDirDisplay, setInstallDirDisplay] = useState("");
   const [nodeInPath, setNodeInPath] = useState(true);
   const [nodeAvailable, setNodeAvailable] = useState(true);
+  const [powerShellPolicyReady, setPowerShellPolicyReady] = useState(true);
   const [pathSetupBusy, setPathSetupBusy] = useState(false);
 
   const checkPathStatus = useCallback(() => {
@@ -309,6 +310,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       if (res.success && res.data) {
         setNodeInPath(res.data.inPath);
         setNodeAvailable(res.data.nodeAvailable);
+        setPowerShellPolicyReady(res.data.powerShellPolicyReady);
       }
     });
   }, []);
@@ -352,6 +354,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       if (res.success && res.data) {
         messageApi.success(res.data.message);
         setNodeInPath(true);
+        setPowerShellPolicyReady(true);
       } else {
         messageApi.error(res.error || "设置失败");
       }
@@ -625,7 +628,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
           )}
         </div>
 
-        {nvmInfo?.manager === "builtin" && nvmInfo.currentVersion && !nodeInPath && !nodeAvailable && (
+        {nvmInfo?.manager === "builtin" && nvmInfo.currentVersion && ((!nodeInPath && !nodeAvailable) || !powerShellPolicyReady) && (
           <div className="nd-path-banner">
             <div className="nd-path-banner-text">
               <ApiOutlined />

@@ -81,8 +81,8 @@
     "fetchFailed": "Failed to fetch remote version list",
     "networkError": "Failed to fetch version data, check your network",
     "pathSetupFailed": "Failed to set up PATH",
-    "pathBanner": "node / npm not in system PATH, cannot be used in terminal",
-    "addToPath": "Add to PATH",
+    "pathBanner": "node / npm is not in system PATH, or PowerShell policy blocks npm",
+    "addToPath": "Fix",
     "manager": {
       "builtin": "Built-in",
       "nvmd": "nvmd",
@@ -163,6 +163,13 @@
     "startupUpdateFailed": "Failed to update launch-on-startup",
     "current": "Currently selected",
     "close": "Close"
+  },
+  "closeBehavior": {
+    "title": "Close DevFleet?",
+    "description": "You can minimize the window to the taskbar and keep it running, or quit the app.",
+    "remember": "Remember my choice",
+    "minimize": "Minimize to taskbar",
+    "quit": "Quit app"
   },
   "macStatusBar": {
     "about": "About {{appName}}",

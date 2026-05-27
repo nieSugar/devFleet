@@ -1,22 +1,63 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { Button, Checkbox, Modal } from "antd";
 import { Outlet, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import TitleBar from "../components/TitleBar";
 import NodeVersionDrawer from "../components/NodeVersionDrawer";
 import { listenForMacOSOpenSettings } from "../lib/macosNative";
 import "../App.css";
 
+type CloseBehavior = "minimize" | "quit";
+
+const CLOSE_BEHAVIOR_KEY = "devfleet.closeBehavior";
+
+function loadCloseBehavior(): CloseBehavior | null {
+  const value = window.localStorage.getItem(CLOSE_BEHAVIOR_KEY);
+  return value === "minimize" || value === "quit" ? value : null;
+}
+
+function saveCloseBehavior(behavior: CloseBehavior) {
+  window.localStorage.setItem(CLOSE_BEHAVIOR_KEY, behavior);
+}
+
 const AppShell: React.FC = () => {
+  const { t } = useTranslation();
   const [nodeDrawerOpen, setNodeDrawerOpen] = useState(false);
   const [nvmRefreshKey, setNvmRefreshKey] = useState(0);
+  const [closePromptOpen, setClosePromptOpen] = useState(false);
+  const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
+  const allowCloseOnceRef = useRef(false);
   const navigate = useNavigate();
 
   const handleVersionChange = useCallback(() => {
     setNvmRefreshKey((k) => k + 1);
   }, []);
 
+  const applyCloseBehavior = useCallback(
+    async (behavior: CloseBehavior) => {
+      if (rememberCloseChoice) {
+        saveCloseBehavior(behavior);
+      }
+
+      setClosePromptOpen(false);
+      const appWindow = getCurrentWindow();
+
+      if (behavior === "minimize") {
+        await appWindow.minimize();
+        return;
+      }
+
+      allowCloseOnceRef.current = true;
+      await appWindow.close();
+    },
+    [rememberCloseChoice],
+  );
+
   useEffect(() => {
     let cancelled = false;
     let settingsUnlisten: (() => void) | undefined;
+    let closeUnlisten: (() => void) | undefined;
 
     // macOS 原生菜单的“设置”会切回主窗口并导航到 /settings。
     void listenForMacOSOpenSettings(() => {
@@ -26,9 +67,33 @@ const AppShell: React.FC = () => {
       else settingsUnlisten = cleanup;
     });
 
+    void getCurrentWindow().onCloseRequested(async (event) => {
+      if (allowCloseOnceRef.current) {
+        return;
+      }
+
+      const savedBehavior = loadCloseBehavior();
+      if (savedBehavior === "quit") {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (savedBehavior === "minimize") {
+        await getCurrentWindow().minimize();
+        return;
+      }
+
+      setClosePromptOpen(true);
+    }).then((cleanup) => {
+      if (cancelled) cleanup();
+      else closeUnlisten = cleanup;
+    });
+
     return () => {
       cancelled = true;
       settingsUnlisten?.();
+      closeUnlisten?.();
     };
   }, [navigate]);
 
@@ -43,6 +108,31 @@ const AppShell: React.FC = () => {
         onClose={() => setNodeDrawerOpen(false)}
         onVersionChange={handleVersionChange}
       />
+      <Modal
+        open={closePromptOpen}
+        title={t("closeBehavior.title")}
+        onCancel={() => setClosePromptOpen(false)}
+        footer={[
+          <Button key="quit" onClick={() => void applyCloseBehavior("quit")}>
+            {t("closeBehavior.quit")}
+          </Button>,
+          <Button
+            key="minimize"
+            type="primary"
+            onClick={() => void applyCloseBehavior("minimize")}
+          >
+            {t("closeBehavior.minimize")}
+          </Button>,
+        ]}
+      >
+        <p>{t("closeBehavior.description")}</p>
+        <Checkbox
+          checked={rememberCloseChoice}
+          onChange={(event) => setRememberCloseChoice(event.target.checked)}
+        >
+          {t("closeBehavior.remember")}
+        </Checkbox>
+      </Modal>
     </div>
   );
 };

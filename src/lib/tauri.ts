@@ -126,6 +126,6 @@ export const tauriAPI = {
   setupNodeGlobalPath: (): Promise<IpcResponse<{ message: string }>> =>
     invoke("setup_node_global_path"),
 
-  checkNodeInPath: (): Promise<IpcResponse<{ inPath: boolean; binPath: string | null; nodeAvailable: boolean }>> =>
+  checkNodeInPath: (): Promise<IpcResponse<{ inPath: boolean; binPath: string | null; nodeAvailable: boolean; powerShellPolicyReady: boolean }>> =>
     invoke("check_node_in_path"),
 };

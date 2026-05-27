@@ -81,8 +81,8 @@
     "fetchFailed": "获取远程版本列表失败",
     "networkError": "获取版本数据失败，请检查网络连接",
     "pathSetupFailed": "设置 PATH 失败",
-    "pathBanner": "node / npm 未加入系统 PATH，终端中无法直接使用",
-    "addToPath": "加入 PATH",
+    "pathBanner": "node / npm 未加入系统 PATH，或 PowerShell 策略阻止 npm",
+    "addToPath": "一键修复",
     "manager": {
       "builtin": "内建管理",
       "nvmd": "nvmd",
@@ -163,6 +163,13 @@
     "startupUpdateFailed": "更新开机启动设置失败",
     "current": "当前使用中",
     "close": "关闭"
+  },
+  "closeBehavior": {
+    "title": "关闭 DevFleet？",
+    "description": "你可以让窗口最小化到任务栏继续运行，也可以直接退出应用。",
+    "remember": "记住我的选择",
+    "minimize": "最小化到任务栏",
+    "quit": "退出应用"
   },
   "macStatusBar": {
     "about": "关于 {{appName}}",

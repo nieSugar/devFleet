@@ -81,8 +81,8 @@
     "fetchFailed": "リモートバージョンの一覧の取得に失敗しました",
     "networkError": "バージョンデータの取得に失敗しました。ネットワーク接続を確認してください。",
     "pathSetupFailed": "PATH の設定に失敗しました",
-    "pathBanner": "node / npm がシステムの PATH に追加されていないため、ターミナルから直接使用できません",
-    "addToPath": "PATH に追加",
+    "pathBanner": "node / npm がシステム PATH にないか、PowerShell ポリシーにより npm がブロックされています",
+    "addToPath": "修復",
     "manager": {
       "builtin": "組み込み管理",
       "nvmd": "大丈夫です",
@@ -163,6 +163,13 @@
     "startupUpdateFailed": "ログイン時起動の更新に失敗しました",
     "current": "現在使用中",
     "close": "閉じる"
+  },
+  "closeBehavior": {
+    "title": "DevFleet を閉じますか？",
+    "description": "ウインドウをタスクバーに最小化して実行を続けるか、アプリを終了できます。",
+    "remember": "この選択を記憶する",
+    "minimize": "タスクバーに最小化",
+    "quit": "アプリを終了"
   },
   "macStatusBar": {
     "about": "{{appName}} について",

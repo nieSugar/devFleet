@@ -327,27 +327,43 @@ fn create_dir_link(link: &Path, target: &Path) {
     }
 }
 
-/// 将 current bin 目录添加到用户 PATH 环境变量
+/// 将 current bin 目录添加到用户 PATH 环境变量，并在 Windows 上修复 npm.ps1 需要的 PowerShell 策略
 pub fn add_to_system_path() -> Result<String, String> {
     let bin_path = get_current_bin_path()
         .ok_or_else(|| "当前没有已选中的 Node 版本，请先切换一个版本".to_string())?;
     let bin_str = bin_path.to_string_lossy().to_string();
 
+    let mut messages = Vec::new();
+
     if is_in_system_path(&bin_str) {
-        return Ok(format!("{} 已在系统 PATH 中", bin_str));
+        messages.push(format!("{} 已在系统 PATH 中", bin_str));
+    } else {
+        add_to_user_path(&bin_str)?;
+        messages.push(format!("已将 {} 添加到用户 PATH", bin_str));
     }
 
-    add_to_user_path(&bin_str)?;
+    match ensure_powershell_execution_policy()? {
+        Some(policy) => messages.push(format!("已将 PowerShell 执行策略设置为 {}", policy)),
+        None => {
+            if cfg!(target_os = "windows") {
+                messages.push("PowerShell 执行策略已可运行 npm".to_string());
+            }
+        }
+    }
 
     Ok(format!(
-        "已将 {} 添加到用户 PATH。请重新打开终端使其生效。",
-        bin_str
+        "{}。请重新打开终端使其生效。",
+        messages.join("；")
     ))
 }
 
 /// 检查指定路径是否已在当前 PATH 中
 pub fn is_path_configured(dir: &str) -> bool {
     is_in_system_path(dir)
+}
+
+pub fn is_powershell_execution_policy_configured() -> bool {
+    is_powershell_execution_policy_ready()
 }
 
 fn is_in_system_path(dir: &str) -> bool {
@@ -366,6 +382,91 @@ fn is_in_system_path(dir: &str) -> bool {
         }
     }
     false
+}
+
+#[cfg(target_os = "windows")]
+fn is_powershell_execution_policy_ready() -> bool {
+    let Ok(policy) = read_effective_powershell_execution_policy() else {
+        return false;
+    };
+    is_allowed_powershell_execution_policy(&policy)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_powershell_execution_policy_ready() -> bool {
+    true
+}
+
+#[cfg(target_os = "windows")]
+fn ensure_powershell_execution_policy() -> Result<Option<String>, String> {
+    let before = read_effective_powershell_execution_policy()?;
+    if is_allowed_powershell_execution_policy(&before) {
+        return Ok(None);
+    }
+
+    let result = std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force",
+        ])
+        .output()
+        .map_err(|e| format!("设置 PowerShell 执行策略失败: {}", e))?;
+
+    if !result.status.success() {
+        let err = String::from_utf8_lossy(&result.stderr).trim().to_string();
+        return Err(format!(
+            "设置 PowerShell 执行策略失败: {}",
+            if err.is_empty() { "未知错误" } else { &err }
+        ));
+    }
+
+    let after = read_effective_powershell_execution_policy()?;
+    if !is_allowed_powershell_execution_policy(&after) {
+        return Err(format!(
+            "PowerShell 执行策略仍为 {}，可能被组策略限制，请联系管理员",
+            after
+        ));
+    }
+
+    Ok(Some(after))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn ensure_powershell_execution_policy() -> Result<Option<String>, String> {
+    Ok(None)
+}
+
+#[cfg(target_os = "windows")]
+fn read_effective_powershell_execution_policy() -> Result<String, String> {
+    let output = std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Get-ExecutionPolicy",
+        ])
+        .output()
+        .map_err(|e| format!("读取 PowerShell 执行策略失败: {}", e))?;
+
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(format!(
+            "读取 PowerShell 执行策略失败: {}",
+            if err.is_empty() { "未知错误" } else { &err }
+        ));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn is_allowed_powershell_execution_policy(policy: &str) -> bool {
+    matches!(
+        policy.trim().to_ascii_lowercase().as_str(),
+        "remotesigned" | "unrestricted" | "bypass"
+    )
 }
 
 #[cfg(target_os = "windows")]

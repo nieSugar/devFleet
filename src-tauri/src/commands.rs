@@ -498,6 +498,7 @@ pub fn check_node_in_path() -> IpcResponse {
         "inPath": in_path,
         "binPath": bin_path.map(|p| p.to_string_lossy().to_string()),
         "nodeAvailable": node_available,
+        "powerShellPolicyReady": crate::node_manager::is_powershell_execution_policy_configured(),
     }))
 }
 
