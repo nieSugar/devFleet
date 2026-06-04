@@ -497,7 +497,7 @@ pub async fn setup_node_global_path() -> IpcResponse {
 #[tauri::command]
 pub fn check_node_in_path() -> IpcResponse {
     let bin_path = crate::node_manager::get_current_bin_path();
-    let in_path = bin_path.as_ref().map_or(false, |p| {
+    let in_path = bin_path.as_ref().is_some_and(|p| {
         let s = p.to_string_lossy();
         crate::node_manager::is_path_configured(&s)
     });

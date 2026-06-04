@@ -227,11 +227,9 @@ pub fn install_version(version: &str) -> Result<String, String> {
     }
 
     let source = inner.unwrap_or(tmp_dir.clone());
-    fs::rename(&source, &dest)
-        .or_else(|_| {
-            copy_dir_recursive(&source, &dest).map_err(|e| format!("移动安装目录失败: {}", e))
-        })
-        .map_err(|e| format!("{}", e))?;
+    fs::rename(&source, &dest).or_else(|_| {
+        copy_dir_recursive(&source, &dest).map_err(|e| format!("移动安装目录失败: {}", e))
+    })?;
 
     if tmp_dir.exists() {
         let _ = fs::remove_dir_all(&tmp_dir);

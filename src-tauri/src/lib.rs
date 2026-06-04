@@ -617,10 +617,7 @@ fn normalize_unix_gui_environment() {
     let mut merged_paths = Vec::new();
     let mut seen = HashSet::new();
 
-    for path in preferred_paths
-        .into_iter()
-        .chain(existing_paths.into_iter())
-    {
+    for path in preferred_paths.into_iter().chain(existing_paths) {
         if !path.is_dir() {
             continue;
         }

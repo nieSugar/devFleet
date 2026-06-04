@@ -36,7 +36,7 @@ fn new_cmd() -> Command {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         cmd.creation_flags(CREATE_NO_WINDOW);
-        return cmd;
+        cmd
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -314,8 +314,8 @@ fn expand_env_path(template: &str) -> Option<PathBuf> {
 #[cfg(target_os = "windows")]
 fn parse_exe_from_command(cmd: &str) -> Option<PathBuf> {
     let trimmed = cmd.trim();
-    let path_str = if trimmed.starts_with('"') {
-        trimmed[1..].find('"').map(|end| &trimmed[1..1 + end])
+    let path_str = if let Some(stripped) = trimmed.strip_prefix('"') {
+        stripped.find('"').map(|end| &stripped[..end])
     } else {
         trimmed.split_whitespace().next()
     }?;
@@ -1668,32 +1668,27 @@ pub fn uninstall_node_version(
 // trait 类似 TS 的 interface，定义一组方法签名
 // 区别：Rust 的 trait 可以为已有类型添加方法（扩展方法），TS 的 interface 不行
 // 这里为标准库的 Command 类型添加了 shell_spawn 方法
+#[cfg(target_os = "windows")]
 trait CommandShellSpawn {
     fn shell_spawn(&mut self) -> std::io::Result<std::process::Child>;
 }
 
 // impl Trait for Type：为已有类型实现 trait（类似 JS 的原型扩展，但更安全）
+#[cfg(target_os = "windows")]
 impl CommandShellSpawn for Command {
     /// Windows 上通过 cmd /C 间接执行命令
     /// 原因：某些通过 PATH 注册的命令（如 code、cursor），直接 spawn 找不到
     /// 必须通过 cmd.exe 的 PATH 解析才能找到
     fn shell_spawn(&mut self) -> std::io::Result<std::process::Child> {
-        #[cfg(target_os = "windows")]
-        {
-            let prog = format!("{:?}", self.get_program());
-            let args: Vec<String> = self
-                .get_args()
-                .map(|a| a.to_string_lossy().to_string())
-                .collect();
-            new_cmd()
-                .arg("/C")
-                .arg(prog.trim_matches('"'))
-                .args(args)
-                .spawn()
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            self.spawn()
-        }
+        let prog = format!("{:?}", self.get_program());
+        let args: Vec<String> = self
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+        new_cmd()
+            .arg("/C")
+            .arg(prog.trim_matches('"'))
+            .args(args)
+            .spawn()
     }
 }
