@@ -161,14 +161,24 @@
     "startupEnabledMessage": "Launch on startup enabled",
     "startupDisabledMessage": "Launch on startup disabled",
     "startupUpdateFailed": "Failed to update launch-on-startup",
+    "shellMenuTitle": "System Context Menu",
+    "shellMenuDesc": "Right-click a project folder in Windows Explorer to add it to DevFleet and open the app.",
+    "shellMenuToggleTitle": "Add \"Open with DevFleet\"",
+    "shellMenuChecking": "Checking current context menu state...",
+    "shellMenuOn": "Enabled. Right-click a project folder or folder background to open it with DevFleet.",
+    "shellMenuOff": "Disabled. DevFleet is hidden from the Explorer context menu.",
+    "shellMenuUnsupported": "This feature is not supported on the current system.",
+    "shellMenuEnabledMessage": "System context menu enabled",
+    "shellMenuDisabledMessage": "System context menu disabled",
+    "shellMenuUpdateFailed": "Failed to update system context menu",
     "current": "Currently selected",
     "close": "Close"
   },
   "closeBehavior": {
     "title": "Close DevFleet?",
-    "description": "You can minimize the window to the taskbar and keep it running, or quit the app.",
+    "description": "You can hide the window to the system tray and keep it running, or quit the app.",
     "remember": "Remember my choice",
-    "minimize": "Minimize to taskbar",
+    "minimize": "Hide to system tray",
     "quit": "Quit app"
   },
   "macStatusBar": {

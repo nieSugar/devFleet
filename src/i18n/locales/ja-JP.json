@@ -161,6 +161,16 @@
     "startupEnabledMessage": "ログイン時起動を有効にしました",
     "startupDisabledMessage": "ログイン時起動を無効にしました",
     "startupUpdateFailed": "ログイン時起動の更新に失敗しました",
+    "shellMenuTitle": "システムコンテキストメニュー",
+    "shellMenuDesc": "Windows Explorer でプロジェクトフォルダーを右クリックして、DevFleet に追加しアプリを開きます。",
+    "shellMenuToggleTitle": "「Open with DevFleet」を追加",
+    "shellMenuChecking": "現在のコンテキストメニュー状態を確認しています...",
+    "shellMenuOn": "有効です。プロジェクトフォルダーまたはフォルダーの背景を右クリックして DevFleet で開けます。",
+    "shellMenuOff": "無効です。Explorer のコンテキストメニューには表示されません。",
+    "shellMenuUnsupported": "現在のシステムではこの機能を利用できません。",
+    "shellMenuEnabledMessage": "システムコンテキストメニューを有効にしました",
+    "shellMenuDisabledMessage": "システムコンテキストメニューを無効にしました",
+    "shellMenuUpdateFailed": "システムコンテキストメニューの更新に失敗しました",
     "current": "現在使用中",
     "close": "閉じる"
   },
@@ -168,7 +178,7 @@
     "title": "DevFleet を閉じますか？",
     "description": "ウインドウをタスクバーに最小化して実行を続けるか、アプリを終了できます。",
     "remember": "この選択を記憶する",
-    "minimize": "タスクバーに最小化",
+    "minimize": "システムトレイに隠す",
     "quit": "アプリを終了"
   },
   "macStatusBar": {

@@ -99,7 +99,10 @@ impl<'de> serde::Deserialize<'de> for EditorInfo {
                 f.write_str("a boolean or { name, installed } object")
             }
             fn visit_bool<E: de::Error>(self, v: bool) -> Result<EditorInfo, E> {
-                Ok(EditorInfo { name: String::new(), installed: v })
+                Ok(EditorInfo {
+                    name: String::new(),
+                    installed: v,
+                })
             }
             fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<EditorInfo, M::Error> {
                 let mut name = None;
@@ -108,7 +111,9 @@ impl<'de> serde::Deserialize<'de> for EditorInfo {
                     match key.as_str() {
                         "name" => name = Some(map.next_value()?),
                         "installed" => installed = Some(map.next_value()?),
-                        _ => { let _ = map.next_value::<serde::de::IgnoredAny>()?; }
+                        _ => {
+                            let _ = map.next_value::<serde::de::IgnoredAny>()?;
+                        }
                     }
                 }
                 Ok(EditorInfo {

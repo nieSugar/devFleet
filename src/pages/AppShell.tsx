@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { exit as exitApp } from "@tauri-apps/plugin-process";
 import { Button, Checkbox, Modal } from "antd";
 import { Outlet, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -27,7 +28,6 @@ const AppShell: React.FC = () => {
   const [nvmRefreshKey, setNvmRefreshKey] = useState(0);
   const [closePromptOpen, setClosePromptOpen] = useState(false);
   const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
-  const allowCloseOnceRef = useRef(false);
   const navigate = useNavigate();
 
   const handleVersionChange = useCallback(() => {
@@ -41,15 +41,12 @@ const AppShell: React.FC = () => {
       }
 
       setClosePromptOpen(false);
-      const appWindow = getCurrentWindow();
-
       if (behavior === "minimize") {
-        await appWindow.minimize();
+        await getCurrentWindow().hide();
         return;
       }
 
-      allowCloseOnceRef.current = true;
-      await appWindow.close();
+      await exitApp(0);
     },
     [rememberCloseChoice],
   );
@@ -68,19 +65,17 @@ const AppShell: React.FC = () => {
     });
 
     void getCurrentWindow().onCloseRequested(async (event) => {
-      if (allowCloseOnceRef.current) {
-        return;
-      }
-
       const savedBehavior = loadCloseBehavior();
       if (savedBehavior === "quit") {
+        event.preventDefault();
+        await exitApp(0);
         return;
       }
 
       event.preventDefault();
 
       if (savedBehavior === "minimize") {
-        await getCurrentWindow().minimize();
+        await getCurrentWindow().hide();
         return;
       }
 

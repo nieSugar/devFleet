@@ -35,6 +35,11 @@ interface DetectedVersion {
   version: string | null;
 }
 
+interface ShellContextMenuState {
+  supported: boolean;
+  enabled: boolean;
+}
+
 export const tauriAPI = {
   syncAppLanguage: (language: string): Promise<IpcResponse<MessageResult>> =>
     invoke("sync_app_language", { language }),
@@ -75,6 +80,14 @@ export const tauriAPI = {
     projectId: string
   ): Promise<IpcResponse<MessageResult>> =>
     invoke("remove_project_from_config", { projectId }),
+
+  getShellContextMenuState: (): Promise<IpcResponse<ShellContextMenuState>> =>
+    invoke("get_shell_context_menu_state"),
+
+  setShellContextMenuEnabled: (
+    enabled: boolean
+  ): Promise<IpcResponse<ShellContextMenuState>> =>
+    invoke("set_shell_context_menu_enabled", { enabled }),
 
   getNvmInfo: (): Promise<IpcResponse<NvmInfo>> =>
     invoke("get_nvm_info"),

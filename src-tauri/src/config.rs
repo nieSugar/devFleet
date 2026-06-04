@@ -209,9 +209,7 @@ pub fn save_node_install_dir(dir: Option<&str>) {
     let _guard = config_lock().lock().unwrap_or_else(|e| e.into_inner());
     let mut cfg = load_unlocked();
     let settings = cfg.settings.get_or_insert(default_settings());
-    settings.node_install_dir = dir
-        .map(|d| d.trim().to_string())
-        .filter(|d| !d.is_empty());
+    settings.node_install_dir = dir.map(|d| d.trim().to_string()).filter(|d| !d.is_empty());
     save_unlocked(&cfg);
 }
 
@@ -229,10 +227,12 @@ pub fn save_builtin_current_version(version: Option<impl Into<String>>) {
     let _guard = config_lock().lock().unwrap_or_else(|e| e.into_inner());
     let mut cfg = load_unlocked();
     let settings = cfg.settings.get_or_insert(default_settings());
-    settings.builtin_current_version = version.map(|v| {
-        let s: String = v.into();
-        s.trim().trim_start_matches('v').to_string()
-    }).filter(|v| !v.is_empty());
+    settings.builtin_current_version = version
+        .map(|v| {
+            let s: String = v.into();
+            s.trim().trim_start_matches('v').to_string()
+        })
+        .filter(|v| !v.is_empty());
     save_unlocked(&cfg);
 }
 

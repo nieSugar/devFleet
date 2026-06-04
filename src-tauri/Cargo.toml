@@ -28,7 +28,7 @@ tauri-build = { version = "2", features = [] }
 # version = "2" 表示 >=2.0.0, <3.0.0（语义化版本的 ^2 简写）
 
 # Tauri 核心框架
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 # Tauri 文件对话框插件（选择文件夹功能）
 tauri-plugin-dialog = "2"
 

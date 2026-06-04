@@ -7,6 +7,7 @@ use crate::config;
 use crate::detector;
 use crate::models::{IpcResponse, NodeVersionManager, PackageManager, ProjectConfig};
 use crate::project;
+use crate::shell_context;
 use std::process::Command;
 use std::sync::{mpsc, OnceLock};
 
@@ -168,6 +169,19 @@ pub fn remove_project_from_config(project_id: String) -> IpcResponse {
         IpcResponse::ok_msg("项目删除成功")
     } else {
         IpcResponse::err("删除项目失败")
+    }
+}
+
+#[tauri::command]
+pub fn get_shell_context_menu_state() -> IpcResponse {
+    IpcResponse::ok(shell_context::get_state())
+}
+
+#[tauri::command]
+pub fn set_shell_context_menu_enabled(enabled: bool) -> IpcResponse {
+    match shell_context::set_enabled(enabled) {
+        Ok(state) => IpcResponse::ok(state),
+        Err(e) => IpcResponse::err(e),
     }
 }
 
@@ -470,11 +484,9 @@ pub fn get_node_install_dir() -> IpcResponse {
 /// 将 builtin 管理器的 current 目录添加到系统 PATH
 #[tauri::command]
 pub async fn setup_node_global_path() -> IpcResponse {
-    tokio::task::spawn_blocking(|| {
-        match crate::node_manager::add_to_system_path() {
-            Ok(msg) => IpcResponse::ok(serde_json::json!({ "message": msg })),
-            Err(e) => IpcResponse::err(e),
-        }
+    tokio::task::spawn_blocking(|| match crate::node_manager::add_to_system_path() {
+        Ok(msg) => IpcResponse::ok(serde_json::json!({ "message": msg })),
+        Err(e) => IpcResponse::err(e),
     })
     .await
     .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))

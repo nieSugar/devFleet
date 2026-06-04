@@ -1,7 +1,9 @@
 // 这个文件负责「检测」：包管理器、编辑器、Node 版本管理器
 // 核心思路：通过检查 lock 文件是否存在、CLI 命令是否可用来判断用户安装了什么
 
-use crate::models::{EditorInfo, NodeVersion, NodeVersionManager, NvmInfo, PackageManager, RemoteNodeVersion};
+use crate::models::{
+    EditorInfo, NodeVersion, NodeVersionManager, NvmInfo, PackageManager, RemoteNodeVersion,
+};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -136,12 +138,20 @@ const EDITORS: &[EditorSpec] = &[
         url_schemes: &["vscode-insiders"],
         win_app_path_keys: &["Code - Insiders.exe"],
         mac_apps: &["Visual Studio Code - Insiders"],
-        linux_desktop_names: &["code-insiders", "code-insiders-url-handler", "visual-studio-code-insiders"],
+        linux_desktop_names: &[
+            "code-insiders",
+            "code-insiders-url-handler",
+            "visual-studio-code-insiders",
+        ],
         win_paths: &[
             r"%LOCALAPPDATA%\Programs\Microsoft VS Code Insiders\Code - Insiders.exe",
             r"%ProgramFiles%\Microsoft VS Code Insiders\Code - Insiders.exe",
         ],
-        linux_paths: &["/usr/bin/code-insiders", "/usr/share/code-insiders/code-insiders", "/snap/bin/code-insiders"],
+        linux_paths: &[
+            "/usr/bin/code-insiders",
+            "/usr/share/code-insiders/code-insiders",
+            "/snap/bin/code-insiders",
+        ],
         cli_cmds: &["code-insiders"],
         win_jetbrains: None,
     },
@@ -199,9 +209,7 @@ const EDITORS: &[EditorSpec] = &[
         win_app_path_keys: &["webstorm64.exe", "webstorm.exe"],
         mac_apps: &["WebStorm"],
         linux_desktop_names: &["webstorm", "jetbrains-webstorm"],
-        win_paths: &[
-            r"%LOCALAPPDATA%\JetBrains\Toolbox\scripts\webstorm.cmd",
-        ],
+        win_paths: &[r"%LOCALAPPDATA%\JetBrains\Toolbox\scripts\webstorm.cmd"],
         linux_paths: &["/usr/bin/webstorm", "/snap/bin/webstorm"],
         cli_cmds: &["webstorm", "webstorm64"],
         // 直装版通过 HKLM\SOFTWARE\JetBrains\WebStorm\{ver}\InstallLocation 定位
@@ -215,12 +223,12 @@ const EDITORS: &[EditorSpec] = &[
         win_app_path_keys: &["idea64.exe", "idea.exe"],
         mac_apps: &["IntelliJ IDEA", "IntelliJ IDEA CE"],
         linux_desktop_names: &[
-            "idea", "jetbrains-idea",
-            "intellij-idea-ultimate", "intellij-idea-community",
+            "idea",
+            "jetbrains-idea",
+            "intellij-idea-ultimate",
+            "intellij-idea-community",
         ],
-        win_paths: &[
-            r"%LOCALAPPDATA%\JetBrains\Toolbox\scripts\idea.cmd",
-        ],
+        win_paths: &[r"%LOCALAPPDATA%\JetBrains\Toolbox\scripts\idea.cmd"],
         linux_paths: &[
             "/usr/bin/idea",
             "/snap/bin/intellij-idea-ultimate",
@@ -251,9 +259,7 @@ const EDITORS: &[EditorSpec] = &[
         win_app_path_keys: &["Kiro.exe"],
         mac_apps: &["Kiro"],
         linux_desktop_names: &["kiro", "kiro-url-handler"],
-        win_paths: &[
-            r"%LOCALAPPDATA%\Programs\Kiro\Kiro.exe",
-        ],
+        win_paths: &[r"%LOCALAPPDATA%\Programs\Kiro\Kiro.exe"],
         linux_paths: &["/usr/bin/kiro", "~/.local/bin/kiro"],
         cli_cmds: &["kiro"],
         win_jetbrains: None,
@@ -265,9 +271,7 @@ const EDITORS: &[EditorSpec] = &[
         win_app_path_keys: &["Antigravity.exe"],
         mac_apps: &["Antigravity"],
         linux_desktop_names: &["antigravity", "google-antigravity"],
-        win_paths: &[
-            r"%ProgramFiles%\Google\Antigravity\Antigravity.exe",
-        ],
+        win_paths: &[r"%ProgramFiles%\Google\Antigravity\Antigravity.exe"],
         linux_paths: &["/usr/bin/antigravity"],
         cli_cmds: &["antigravity", "agy"],
         win_jetbrains: None,
@@ -289,7 +293,12 @@ fn expand_env_path(template: &str) -> Option<PathBuf> {
         };
         let var_name = &result[start + 1..start + 1 + end];
         let value = std::env::var(var_name).ok()?;
-        result = format!("{}{}{}", &result[..start], value, &result[start + 2 + end..]);
+        result = format!(
+            "{}{}{}",
+            &result[..start],
+            value,
+            &result[start + 2 + end..]
+        );
     }
     if result.starts_with('~') {
         let home = std::env::var(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).ok()?;
@@ -311,7 +320,11 @@ fn parse_exe_from_command(cmd: &str) -> Option<PathBuf> {
         trimmed.split_whitespace().next()
     }?;
     let p = PathBuf::from(path_str);
-    if p.exists() { Some(p) } else { None }
+    if p.exists() {
+        Some(p)
+    } else {
+        None
+    }
 }
 
 /// Windows: 通过注册表检测编辑器，返回 exe 路径
@@ -322,8 +335,8 @@ fn find_exe_via_registry(spec: &EditorSpec) -> Option<PathBuf> {
     use winreg::RegKey;
 
     for scheme in spec.url_schemes {
-        if let Ok(key) = RegKey::predef(HKEY_CLASSES_ROOT)
-            .open_subkey(format!(r"{}\shell\open\command", scheme))
+        if let Ok(key) =
+            RegKey::predef(HKEY_CLASSES_ROOT).open_subkey(format!(r"{}\shell\open\command", scheme))
         {
             if let Ok(cmd_str) = key.get_value::<String, _>("") {
                 if let Some(exe) = parse_exe_from_command(&cmd_str) {
@@ -374,7 +387,9 @@ fn find_jetbrains_exe(product_name: &str, exe_name: &str) -> Option<PathBuf> {
         for ver in &versions {
             if let Ok(ver_key) = key.open_subkey(ver) {
                 if let Ok(location) = ver_key.get_value::<String, _>("InstallLocation") {
-                    let exe = PathBuf::from(location.trim_matches('"')).join("bin").join(exe_name);
+                    let exe = PathBuf::from(location.trim_matches('"'))
+                        .join("bin")
+                        .join(exe_name);
                     if exe.exists() {
                         return Some(exe);
                     }
@@ -420,7 +435,9 @@ fn find_exe_via_desktop_file(spec: &EditorSpec) -> Option<PathBuf> {
             }
         }
         if let Some(ref h) = home {
-            let p = Path::new(h).join(".local/share/applications").join(&filename);
+            let p = Path::new(h)
+                .join(".local/share/applications")
+                .join(&filename);
             if let Some(exe) = parse_desktop_exec(&p) {
                 return Some(exe);
             }
@@ -455,9 +472,11 @@ fn is_editor_found_fast(spec: &EditorSpec) -> bool {
         if find_exe_via_registry(spec).is_some() {
             return true;
         }
-        if spec.win_paths.iter().any(|p| {
-            expand_env_path(p).map(|ep| ep.exists()).unwrap_or(false)
-        }) {
+        if spec
+            .win_paths
+            .iter()
+            .any(|p| expand_env_path(p).map(|ep| ep.exists()).unwrap_or(false))
+        {
             return true;
         }
         // 直装版 JetBrains：枚举 SOFTWARE\JetBrains\{product}\* 注册表
@@ -483,9 +502,10 @@ fn is_editor_found_fast(spec: &EditorSpec) -> bool {
     #[cfg(target_os = "linux")]
     {
         return find_exe_via_desktop_file(spec).is_some()
-            || spec.linux_paths.iter().any(|p| {
-                expand_env_path(p).map(|ep| ep.exists()).unwrap_or(false)
-            });
+            || spec
+                .linux_paths
+                .iter()
+                .any(|p| expand_env_path(p).map(|ep| ep.exists()).unwrap_or(false));
     }
 
     #[allow(unreachable_code)]
@@ -576,10 +596,13 @@ pub fn detect_editors() -> HashMap<String, EditorInfo> {
 
     for spec in EDITORS {
         if is_editor_found_fast(spec) {
-            result.insert(spec.id.to_string(), EditorInfo {
-                name: spec.name.to_string(),
-                installed: true,
-            });
+            result.insert(
+                spec.id.to_string(),
+                EditorInfo {
+                    name: spec.name.to_string(),
+                    installed: true,
+                },
+            );
         } else {
             need_cli.push(spec);
         }
@@ -593,7 +616,11 @@ pub fn detect_editors() -> HashMap<String, EditorInfo> {
         if !spotlight_apps.is_empty() {
             let mut still_need_cli = Vec::new();
             for spec in need_cli {
-                if spec.mac_apps.iter().any(|app| spotlight_apps.contains(*app)) {
+                if spec
+                    .mac_apps
+                    .iter()
+                    .any(|app| spotlight_apps.contains(*app))
+                {
                     result.insert(
                         spec.id.to_string(),
                         EditorInfo {
@@ -625,7 +652,13 @@ pub fn detect_editors() -> HashMap<String, EditorInfo> {
 
         for h in handles {
             if let Ok((id, name, found)) = h.join() {
-                result.insert(id, EditorInfo { name, installed: found });
+                result.insert(
+                    id,
+                    EditorInfo {
+                        name,
+                        installed: found,
+                    },
+                );
             }
         }
     }

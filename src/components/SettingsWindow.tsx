@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useTheme } from "../contexts/ThemeContext";
 import { getSupportedLanguages } from "../i18n";
 import { getAutostartState, setAutostartEnabled } from "../lib/autostart";
+import { tauriAPI } from "../lib/tauri";
 import "./SettingsWindow.css";
 
 const LANGUAGE_LABELS: Record<string, string> = {
@@ -23,6 +24,10 @@ const SettingsWindow: React.FC = () => {
   const [autostartSupported, setAutostartSupported] = useState(false);
   const [autostartLoading, setAutostartLoading] = useState(true);
   const [autostartSaving, setAutostartSaving] = useState(false);
+  const [shellMenuEnabled, setShellMenuEnabled] = useState(false);
+  const [shellMenuSupported, setShellMenuSupported] = useState(false);
+  const [shellMenuLoading, setShellMenuLoading] = useState(true);
+  const [shellMenuSaving, setShellMenuSaving] = useState(false);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -65,6 +70,40 @@ const SettingsWindow: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    void tauriAPI.getShellContextMenuState()
+      .then((result) => {
+        if (cancelled) return;
+
+        if (result.success && result.data) {
+          setShellMenuSupported(result.data.supported);
+          setShellMenuEnabled(result.data.enabled);
+        } else {
+          setShellMenuSupported(false);
+          setShellMenuEnabled(false);
+        }
+      })
+      .catch((error) => {
+        console.warn("[settings] failed to load shell context menu state", error);
+
+        if (cancelled) return;
+
+        setShellMenuSupported(false);
+        setShellMenuEnabled(false);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setShellMenuLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleAutostartChange = async (checked: boolean) => {
     const previous = autostartEnabled;
 
@@ -92,6 +131,40 @@ const SettingsWindow: React.FC = () => {
     : autostartEnabled
       ? t("settings.startupOn")
       : t("settings.startupOff");
+
+  const handleShellMenuChange = async (checked: boolean) => {
+    const previous = shellMenuEnabled;
+
+    setShellMenuEnabled(checked);
+    setShellMenuSaving(true);
+
+    try {
+      const result = await tauriAPI.setShellContextMenuEnabled(checked);
+      if (!result.success || !result.data) {
+        throw new Error(result.error || "Failed to update shell context menu");
+      }
+
+      setShellMenuSupported(result.data.supported);
+      setShellMenuEnabled(result.data.enabled);
+      message.success(
+        result.data.enabled
+          ? t("settings.shellMenuEnabledMessage")
+          : t("settings.shellMenuDisabledMessage"),
+      );
+    } catch (error) {
+      console.warn("[settings] failed to update shell context menu", error);
+      setShellMenuEnabled(previous);
+      message.error(t("settings.shellMenuUpdateFailed"));
+    } finally {
+      setShellMenuSaving(false);
+    }
+  };
+
+  const shellMenuStatusText = !shellMenuSupported
+    ? t("settings.shellMenuUnsupported")
+    : shellMenuEnabled
+      ? t("settings.shellMenuOn")
+      : t("settings.shellMenuOff");
 
   return (
     <section className="settings-screen">
@@ -177,6 +250,29 @@ const SettingsWindow: React.FC = () => {
               disabled={!autostartSupported || autostartLoading || autostartSaving}
               loading={autostartLoading || autostartSaving}
               onChange={(checked) => void handleAutostartChange(checked)}
+            />
+          </div>
+        </section>
+
+        <section className="settings-section">
+          <div className="settings-section-head">
+            <h2 className="settings-section-title">{t("settings.shellMenuTitle")}</h2>
+            <p className="settings-section-desc">{t("settings.shellMenuDesc")}</p>
+          </div>
+
+          <div className="settings-toggle-row">
+            <div className="settings-toggle-copy">
+              <span className="settings-toggle-title">{t("settings.shellMenuToggleTitle")}</span>
+              <span className="settings-toggle-desc">
+                {shellMenuLoading ? t("settings.shellMenuChecking") : shellMenuStatusText}
+              </span>
+            </div>
+
+            <Switch
+              checked={shellMenuEnabled}
+              disabled={!shellMenuSupported || shellMenuLoading || shellMenuSaving}
+              loading={shellMenuLoading || shellMenuSaving}
+              onChange={(checked) => void handleShellMenuChange(checked)}
             />
           </div>
         </section>

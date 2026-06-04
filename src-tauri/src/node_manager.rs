@@ -45,7 +45,9 @@ fn default_install_dir() -> PathBuf {
 
 /// 构造 Node 二进制的下载 URL
 fn build_download_url(version: &str, mirror: Option<&str>) -> (String, String) {
-    let base = mirror.unwrap_or(DEFAULT_NODE_DIST_BASE).trim_end_matches('/');
+    let base = mirror
+        .unwrap_or(DEFAULT_NODE_DIST_BASE)
+        .trim_end_matches('/');
     let ver = version.trim().trim_start_matches('v');
 
     let (os, arch, ext) = platform_triple();
@@ -187,7 +189,11 @@ pub fn install_version(version: &str) -> Result<String, String> {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(0);
 
-    let mut body = Vec::with_capacity(if content_length > 0 { content_length } else { 32 * 1024 * 1024 });
+    let mut body = Vec::with_capacity(if content_length > 0 {
+        content_length
+    } else {
+        32 * 1024 * 1024
+    });
     resp.into_reader()
         .take(512 * 1024 * 1024) // 512MB 上限
         .read_to_end(&mut body)
@@ -201,8 +207,7 @@ pub fn install_version(version: &str) -> Result<String, String> {
     if tmp_dir.exists() {
         let _ = fs::remove_dir_all(&tmp_dir);
     }
-    fs::create_dir_all(&tmp_dir)
-        .map_err(|e| format!("创建临时目录失败: {}", e))?;
+    fs::create_dir_all(&tmp_dir).map_err(|e| format!("创建临时目录失败: {}", e))?;
 
     let extract_result = if cfg!(target_os = "windows") {
         extract_zip(&body, &tmp_dir)
@@ -222,9 +227,11 @@ pub fn install_version(version: &str) -> Result<String, String> {
     }
 
     let source = inner.unwrap_or(tmp_dir.clone());
-    fs::rename(&source, &dest).or_else(|_| {
-        copy_dir_recursive(&source, &dest).map_err(|e| format!("移动安装目录失败: {}", e))
-    }).map_err(|e| format!("{}", e))?;
+    fs::rename(&source, &dest)
+        .or_else(|_| {
+            copy_dir_recursive(&source, &dest).map_err(|e| format!("移动安装目录失败: {}", e))
+        })
+        .map_err(|e| format!("{}", e))?;
 
     if tmp_dir.exists() {
         let _ = fs::remove_dir_all(&tmp_dir);
@@ -313,7 +320,9 @@ fn create_dir_link(link: &Path, target: &Path) {
     {
         let _ = std::process::Command::new("cmd")
             .args([
-                "/C", "mklink", "/J",
+                "/C",
+                "mklink",
+                "/J",
                 &link.to_string_lossy(),
                 &target.to_string_lossy(),
             ])
@@ -351,10 +360,7 @@ pub fn add_to_system_path() -> Result<String, String> {
         }
     }
 
-    Ok(format!(
-        "{}。请重新打开终端使其生效。",
-        messages.join("；")
-    ))
+    Ok(format!("{}。请重新打开终端使其生效。", messages.join("；")))
 }
 
 /// 检查指定路径是否已在当前 PATH 中
@@ -368,7 +374,11 @@ pub fn is_powershell_execution_policy_configured() -> bool {
 
 fn is_in_system_path(dir: &str) -> bool {
     if let Ok(path_var) = std::env::var("PATH") {
-        let sep = if cfg!(target_os = "windows") { ';' } else { ':' };
+        let sep = if cfg!(target_os = "windows") {
+            ';'
+        } else {
+            ':'
+        };
         let target = dir.trim_end_matches(['/', '\\']);
         for entry in path_var.split(sep) {
             let entry = entry.trim_end_matches(['/', '\\']);
@@ -474,7 +484,8 @@ fn add_to_user_path(dir: &str) -> Result<(), String> {
     // 通过 PowerShell 读取和修改用户级 PATH（不影响系统级，不需要管理员权限）
     let read_cmd = std::process::Command::new("powershell")
         .args([
-            "-NoProfile", "-Command",
+            "-NoProfile",
+            "-Command",
             "[Environment]::GetEnvironmentVariable('Path', 'User')",
         ])
         .output()
@@ -612,17 +623,14 @@ fn extract_zip(data: &[u8], dest: &Path) -> Result<(), String> {
         );
 
         if file.is_dir() {
-            fs::create_dir_all(&out_path)
-                .map_err(|e| format!("创建目录失败: {}", e))?;
+            fs::create_dir_all(&out_path).map_err(|e| format!("创建目录失败: {}", e))?;
         } else {
             if let Some(parent) = out_path.parent() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| format!("创建父目录失败: {}", e))?;
+                fs::create_dir_all(parent).map_err(|e| format!("创建父目录失败: {}", e))?;
             }
-            let mut out_file = fs::File::create(&out_path)
-                .map_err(|e| format!("创建文件失败: {}", e))?;
-            io::copy(&mut file, &mut out_file)
-                .map_err(|e| format!("写入文件失败: {}", e))?;
+            let mut out_file =
+                fs::File::create(&out_path).map_err(|e| format!("创建文件失败: {}", e))?;
+            io::copy(&mut file, &mut out_file).map_err(|e| format!("写入文件失败: {}", e))?;
         }
     }
     Ok(())

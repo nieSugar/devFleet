@@ -1,9 +1,9 @@
 #[cfg(target_os = "macos")]
 use include_dir::{include_dir, Dir};
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-use std::collections::HashSet;
 #[cfg(target_os = "macos")]
 use serde::Deserialize;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+use std::collections::HashSet;
 #[cfg(target_os = "macos")]
 use std::sync::{Mutex, OnceLock};
 #[cfg(target_os = "macos")]
@@ -11,11 +11,12 @@ use sys_locale::get_locale;
 #[cfg(target_os = "macos")]
 use tauri::{
     menu::{
-        HELP_SUBMENU_ID, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu,
-        WINDOW_SUBMENU_ID,
+        Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID,
     },
     AppHandle, Emitter, Manager, Runtime, TitleBarStyle, WebviewUrl, WebviewWindowBuilder,
 };
+#[cfg(target_os = "windows")]
+use tauri::{Manager, Runtime};
 
 // mod 声明：告诉 Rust 编译器"把这些同目录下的 .rs 文件纳入编译"
 // 每个 mod 对应 src/ 下的一个同名文件，比如 mod commands → commands.rs
@@ -26,6 +27,86 @@ mod detector;
 mod models;
 mod node_manager;
 mod project;
+mod shell_context;
+
+#[cfg(target_os = "windows")]
+const TRAY_SHOW_MENU_ID: &str = "tray-show-main-window";
+#[cfg(target_os = "windows")]
+const TRAY_QUIT_MENU_ID: &str = "tray-quit-app";
+
+#[cfg(target_os = "windows")]
+fn show_main_window<R: Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn setup_windows_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
+    let show_item =
+        tauri::menu::MenuItem::with_id(app, TRAY_SHOW_MENU_ID, "显示 DevFleet", true, None::<&str>)?;
+    let quit_item =
+        tauri::menu::MenuItem::with_id(app, TRAY_QUIT_MENU_ID, "退出 DevFleet", true, None::<&str>)?;
+    let menu = tauri::menu::Menu::with_items(app, &[&show_item, &quit_item])?;
+
+    let mut tray = tauri::tray::TrayIconBuilder::with_id("main-tray")
+        .tooltip("DevFleet")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            TRAY_SHOW_MENU_ID => show_main_window(app),
+            TRAY_QUIT_MENU_ID => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let tauri::tray::TrayIconEvent::Click {
+                button: tauri::tray::MouseButton::Left,
+                button_state: tauri::tray::MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main_window(tray.app_handle());
+            }
+        });
+
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+
+    tray.build(app)?;
+    Ok(())
+}
+
+fn add_startup_project_from_args() {
+    let Some(path) = std::env::args_os().skip(1).find_map(|arg| {
+        let path = std::path::PathBuf::from(arg);
+        if path.is_dir() {
+            Some(path)
+        } else {
+            None
+        }
+    }) else {
+        return;
+    };
+
+    let path = path.to_string_lossy().to_string();
+    match project::add_to_config(&path) {
+        Ok(project) => {
+            eprintln!(
+                "[devfleet] added project from shell context menu: {}",
+                project.path
+            );
+        }
+        Err(true) => {
+            eprintln!("[devfleet] shell context project already exists: {}", path);
+        }
+        Err(false) => {
+            eprintln!("[devfleet] ignored invalid shell context project: {}", path);
+        }
+    }
+}
 
 #[cfg(target_os = "macos")]
 const ABOUT_WINDOW_LABEL: &str = "about";
@@ -166,8 +247,7 @@ fn resolve_locale_code(candidate: &str) -> Option<String> {
             let locale_lower = locale.to_ascii_lowercase();
             locale_lower.starts_with(&format!("{normalized}-"))
                 || normalized.starts_with(&format!("{locale_lower}-"))
-                || (!language.is_empty()
-                    && locale_lower.starts_with(&format!("{language}-")))
+                || (!language.is_empty() && locale_lower.starts_with(&format!("{language}-")))
         })
         .cloned()
 }
@@ -182,7 +262,12 @@ fn load_mac_status_bar_translations(locale: &str) -> Option<MacStatusBarTranslat
 }
 
 #[cfg(target_os = "macos")]
-fn resolve_text(current: Option<String>, fallback: Option<String>, default: &str, app_name: &str) -> String {
+fn resolve_text(
+    current: Option<String>,
+    fallback: Option<String>,
+    default: &str,
+    app_name: &str,
+) -> String {
     current
         .or(fallback)
         .unwrap_or_else(|| default.to_string())
@@ -197,12 +282,7 @@ fn resolve_mac_status_bar_translations(app_name: &str) -> ResolvedMacStatusBarTr
         .unwrap_or_default();
 
     ResolvedMacStatusBarTranslations {
-        about: resolve_text(
-            current.about,
-            fallback.about,
-            "关于 {{appName}}",
-            app_name,
-        ),
+        about: resolve_text(current.about, fallback.about, "关于 {{appName}}", app_name),
         about_window_title: resolve_text(
             current.about_window_title,
             fallback.about_window_title,
@@ -222,24 +302,14 @@ fn resolve_mac_status_bar_translations(app_name: &str) -> ResolvedMacStatusBarTr
             app_name,
         ),
         services: resolve_text(current.services, fallback.services, "服务", app_name),
-        hide: resolve_text(
-            current.hide,
-            fallback.hide,
-            "隐藏 {{appName}}",
-            app_name,
-        ),
+        hide: resolve_text(current.hide, fallback.hide, "隐藏 {{appName}}", app_name),
         hide_others: resolve_text(
             current.hide_others,
             fallback.hide_others,
             "隐藏其他",
             app_name,
         ),
-        quit: resolve_text(
-            current.quit,
-            fallback.quit,
-            "退出 {{appName}}",
-            app_name,
-        ),
+        quit: resolve_text(current.quit, fallback.quit, "退出 {{appName}}", app_name),
         add_project: resolve_text(
             current.add_project,
             fallback.add_project,
@@ -257,24 +327,14 @@ fn resolve_mac_status_bar_translations(app_name: &str) -> ResolvedMacStatusBarTr
         cut: resolve_text(current.cut, fallback.cut, "剪切", app_name),
         copy: resolve_text(current.copy, fallback.copy, "复制", app_name),
         paste: resolve_text(current.paste, fallback.paste, "粘贴", app_name),
-        select_all: resolve_text(
-            current.select_all,
-            fallback.select_all,
-            "全选",
-            app_name,
-        ),
+        select_all: resolve_text(current.select_all, fallback.select_all, "全选", app_name),
         fullscreen: resolve_text(
             current.fullscreen,
             fallback.fullscreen,
             "进入全屏",
             app_name,
         ),
-        minimize: resolve_text(
-            current.minimize,
-            fallback.minimize,
-            "最小化",
-            app_name,
-        ),
+        minimize: resolve_text(current.minimize, fallback.minimize, "最小化", app_name),
         maximize: resolve_text(current.maximize, fallback.maximize, "缩放", app_name),
     }
 }
@@ -317,13 +377,8 @@ pub(crate) fn sync_macos_app_language<R: Runtime>(
 fn build_macos_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let app_name = app_display_name(app);
     let translations = resolve_mac_status_bar_translations(&app_name);
-    let about_item = MenuItem::with_id(
-        app,
-        ABOUT_MENU_ID,
-        &translations.about,
-        true,
-        None::<&str>,
-    )?;
+    let about_item =
+        MenuItem::with_id(app, ABOUT_MENU_ID, &translations.about, true, None::<&str>)?;
     let settings_item = MenuItem::with_id(
         app,
         SETTINGS_MENU_ID,
@@ -363,10 +418,7 @@ fn build_macos_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         &[
             &add_project_item,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::close_window(
-                app,
-                Some(translations.close_window.as_str()),
-            )?,
+            &PredefinedMenuItem::close_window(app, Some(translations.close_window.as_str()))?,
         ],
     )?;
 
@@ -404,10 +456,7 @@ fn build_macos_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             &PredefinedMenuItem::minimize(app, Some(translations.minimize.as_str()))?,
             &PredefinedMenuItem::maximize(app, Some(translations.maximize.as_str()))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::close_window(
-                app,
-                Some(translations.close_window.as_str()),
-            )?,
+            &PredefinedMenuItem::close_window(app, Some(translations.close_window.as_str()))?,
         ],
     )?;
 
@@ -455,18 +504,22 @@ fn open_about_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let app_name = app_display_name(app);
     let translations = resolve_mac_status_bar_translations(&app_name);
 
-    WebviewWindowBuilder::new(app, ABOUT_WINDOW_LABEL, WebviewUrl::App("index.html".into()))
-        // About 窗口显式注入自己的 window kind，避免前端在打包后的首屏阶段
-        // 因为 Tauri API 注入时机差异而误判成主窗口路由。
-        .initialization_script(ABOUT_WINDOW_KIND_INIT_SCRIPT)
-        .title(&translations.about_window_title)
-        .inner_size(500.0, 300.0)
-        .resizable(false)
-        .maximizable(false)
-        .minimizable(false)
-        .center()
-        .focused(true)
-        .build()?;
+    WebviewWindowBuilder::new(
+        app,
+        ABOUT_WINDOW_LABEL,
+        WebviewUrl::App("index.html".into()),
+    )
+    // About 窗口显式注入自己的 window kind，避免前端在打包后的首屏阶段
+    // 因为 Tauri API 注入时机差异而误判成主窗口路由。
+    .initialization_script(ABOUT_WINDOW_KIND_INIT_SCRIPT)
+    .title(&translations.about_window_title)
+    .inner_size(500.0, 300.0)
+    .resizable(false)
+    .maximizable(false)
+    .minimizable(false)
+    .center()
+    .focused(true)
+    .build()?;
 
     Ok(())
 }
@@ -554,7 +607,10 @@ fn normalize_unix_gui_environment() {
     let mut merged_paths = Vec::new();
     let mut seen = HashSet::new();
 
-    for path in preferred_paths.into_iter().chain(existing_paths.into_iter()) {
+    for path in preferred_paths
+        .into_iter()
+        .chain(existing_paths.into_iter())
+    {
         if !path.is_dir() {
             continue;
         }
@@ -586,6 +642,13 @@ pub fn run() {
 
     builder
         .setup(|app| {
+            add_startup_project_from_args();
+
+            #[cfg(target_os = "windows")]
+            {
+                setup_windows_tray(app.handle())?;
+            }
+
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             {
                 // 仅在 Unix GUI 环境下补 PATH，避免 Windows 被这套用户目录规则影响。
@@ -627,6 +690,8 @@ pub fn run() {
             commands::sync_app_language,
             commands::add_project_to_config,
             commands::remove_project_from_config,
+            commands::get_shell_context_menu_state,
+            commands::set_shell_context_menu_enabled,
             commands::run_script,
             commands::detect_editors,
             commands::open_in_editor,
