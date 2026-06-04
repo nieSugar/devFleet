@@ -45,10 +45,20 @@ fn show_main_window<R: Runtime>(app: &tauri::AppHandle<R>) {
 
 #[cfg(target_os = "windows")]
 fn setup_windows_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
-    let show_item =
-        tauri::menu::MenuItem::with_id(app, TRAY_SHOW_MENU_ID, "显示 DevFleet", true, None::<&str>)?;
-    let quit_item =
-        tauri::menu::MenuItem::with_id(app, TRAY_QUIT_MENU_ID, "退出 DevFleet", true, None::<&str>)?;
+    let show_item = tauri::menu::MenuItem::with_id(
+        app,
+        TRAY_SHOW_MENU_ID,
+        "显示 DevFleet",
+        true,
+        None::<&str>,
+    )?;
+    let quit_item = tauri::menu::MenuItem::with_id(
+        app,
+        TRAY_QUIT_MENU_ID,
+        "退出 DevFleet",
+        true,
+        None::<&str>,
+    )?;
     let menu = tauri::menu::Menu::with_items(app, &[&show_item, &quit_item])?;
 
     let mut tray = tauri::tray::TrayIconBuilder::with_id("main-tray")
