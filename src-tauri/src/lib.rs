@@ -90,14 +90,26 @@ fn setup_windows_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
 }
 
 fn add_startup_project_from_args() {
-    let Some(path) = std::env::args_os().skip(1).find_map(|arg| {
-        let path = std::path::PathBuf::from(arg);
-        if path.is_dir() {
-            Some(path)
-        } else {
-            None
-        }
-    }) else {
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    let path = if let Some(index) = args
+        .iter()
+        .position(|arg| arg.as_os_str() == std::ffi::OsStr::new("--add-project"))
+    {
+        args.get(index + 1)
+            .map(|arg| std::path::PathBuf::from(arg.as_os_str()))
+            .filter(|path| path.is_dir())
+    } else {
+        args.into_iter().find_map(|arg| {
+            let path = std::path::PathBuf::from(arg);
+            if path.is_dir() {
+                Some(path)
+            } else {
+                None
+            }
+        })
+    };
+
+    let Some(path) = path else {
         return;
     };
 
@@ -653,6 +665,12 @@ pub fn run() {
 
             #[cfg(target_os = "windows")]
             {
+                if let Err(e) = shell_context::refresh_existing_registration() {
+                    eprintln!(
+                        "[devfleet] failed to refresh Windows shell context menu: {}",
+                        e
+                    );
+                }
                 setup_windows_tray(app.handle())?;
             }
 

@@ -21,11 +21,15 @@ const DIRECTORY_SHELL_PATH: &str = r"Software\Classes\Directory\shell";
 #[cfg(target_os = "windows")]
 const BACKGROUND_SHELL_PATH: &str = r"Software\Classes\Directory\Background\shell";
 #[cfg(target_os = "windows")]
-const MENU_TITLE: &str = "Open with DevFleet";
+const MENU_TITLE: &str = "Add to DevFleet";
 
 #[cfg(target_os = "windows")]
 fn command_value(exe_path: &Path, placeholder: &str) -> String {
-    format!("\"{}\" \"{}\"", exe_path.display(), placeholder)
+    format!(
+        "\"{}\" --add-project \"{}\"",
+        exe_path.display(),
+        placeholder
+    )
 }
 
 #[cfg(target_os = "windows")]
@@ -80,7 +84,7 @@ fn has_menu_key(parent_path: &str) -> bool {
 pub fn get_state() -> ShellContextMenuState {
     ShellContextMenuState {
         supported: true,
-        enabled: has_menu_key(DIRECTORY_SHELL_PATH) && has_menu_key(BACKGROUND_SHELL_PATH),
+        enabled: has_menu_key(DIRECTORY_SHELL_PATH),
     }
 }
 
@@ -98,7 +102,7 @@ pub fn set_enabled(enabled: bool) -> Result<ShellContextMenuState, String> {
         let exe_path =
             std::env::current_exe().map_err(|e| format!("failed to resolve current exe: {e}"))?;
         set_menu_key(DIRECTORY_SHELL_PATH, "%1", &exe_path)?;
-        set_menu_key(BACKGROUND_SHELL_PATH, "%V", &exe_path)?;
+        delete_menu_key(BACKGROUND_SHELL_PATH)?;
     } else {
         delete_menu_key(DIRECTORY_SHELL_PATH)?;
         delete_menu_key(BACKGROUND_SHELL_PATH)?;
@@ -107,7 +111,21 @@ pub fn set_enabled(enabled: bool) -> Result<ShellContextMenuState, String> {
     Ok(get_state())
 }
 
+#[cfg(target_os = "windows")]
+pub fn refresh_existing_registration() -> Result<(), String> {
+    if has_menu_key(DIRECTORY_SHELL_PATH) || has_menu_key(BACKGROUND_SHELL_PATH) {
+        set_enabled(true)?;
+    }
+
+    Ok(())
+}
+
 #[cfg(not(target_os = "windows"))]
 pub fn set_enabled(_enabled: bool) -> Result<ShellContextMenuState, String> {
     Err("shell context menu is only supported on Windows".to_string())
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn refresh_existing_registration() -> Result<(), String> {
+    Ok(())
 }
