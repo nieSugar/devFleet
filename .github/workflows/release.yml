@@ -192,6 +192,8 @@ jobs:
         with:
           releaseId: ${{ needs.prepare-release.outputs.release_id }}
           tagName: ${{ needs.prepare-release.outputs.release_tag }}
+          releaseName: devFleet ${{ needs.prepare-release.outputs.release_tag }}
+          releaseDraft: true
           args: ${{ matrix.args }}
 
       - name: Create portable package (Windows)

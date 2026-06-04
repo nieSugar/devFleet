@@ -49,7 +49,7 @@ jobs:
           RELEASE_TAG="v${PACKAGE_VERSION}"
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            RELEASE_ID="$(gh release view "$RELEASE_TAG" --json id --jq '.id')"
+            RELEASE_ID="$(gh release view "$RELEASE_TAG" --json databaseId --jq '.databaseId')"
           else
             NOTES="$RELEASE_NOTES"
             if [ -z "$NOTES" ]; then
@@ -69,7 +69,7 @@ jobs:
             fi
 
             gh release create "${CREATE_ARGS[@]}"
-            RELEASE_ID="$(gh release view "$RELEASE_TAG" --json id --jq '.id')"
+            RELEASE_ID="$(gh release view "$RELEASE_TAG" --json databaseId --jq '.databaseId')"
           fi
 
           gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | while IFS= read -r asset; do
@@ -166,4 +166,6 @@ jobs:
         with:
           releaseId: ${{ needs.prepare-release.outputs.release_id }}
           tagName: ${{ needs.prepare-release.outputs.release_tag }}
+          releaseName: devFleet ${{ needs.prepare-release.outputs.release_tag }}
+          releaseDraft: true
           args: ${{ matrix.args }}
