@@ -1,21 +1,38 @@
 # 日志文件
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 lerna-debug.log*
+.codex-*.log
 
 # 构建目录
-dist
+dist/
+dist-ssr/
 out/
+build/
+release/
+.tmp/
+temp/
+.turbo/
 
 ~
 doc
 
-.vscode
+# 编辑器与本地工具配置
+.vscode/
+.idea/
+.cursor/mcp.json
+.kiro/settings/mcp.json
+.codegraph/
 
-.idea
+# 系统文件
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 
 # 诊断报告 (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
@@ -25,7 +42,6 @@ pids
 *.pid
 *.seed
 *.pid.lock
-.DS_Store
 
 # jscoverage/JSCover 生成的检测库目录
 lib-cov
@@ -46,6 +62,7 @@ build/Release
 # 依赖目录
 node_modules/
 jspm_packages/
+.pnpm-store/
 
 # TypeScript v1 声明文件
 typings/
@@ -58,6 +75,7 @@ typings/
 
 # 可选的 eslint 缓存
 .eslintcache
+.stylelintcache
 
 # 可选的 REPL 历史记录
 .node_repl_history
@@ -70,10 +88,17 @@ typings/
 
 # dotenv 环境变量文件
 .env
-.env.test
+.env.*
+!.env.example
+!.env.*.example
+
+# 测试产物
+playwright-report/
+test-results/
+blob-report/
 
 # parcel-bundler 缓存 (https://parceljs.org/)
-.cache
+.cache/
 
 # next.js 构建输出
 .next
@@ -98,9 +123,11 @@ typings/
 
 # Vite
 .vite/
+vite.svg
 
 # Tauri
 src-tauri/target/
 src-tauri/gen/
 src-tauri/icons/android/
 src-tauri/icons/ios/
+src-tauri/.tauri/
