@@ -38,6 +38,7 @@ interface DetectedVersion {
 interface ShellContextMenuState {
   supported: boolean;
   enabled: boolean;
+  mode?: "managed" | "packaged" | "unsupported";
 }
 
 export const tauriAPI = {

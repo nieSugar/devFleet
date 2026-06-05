@@ -26,6 +26,9 @@ const SettingsWindow: React.FC = () => {
   const [autostartSaving, setAutostartSaving] = useState(false);
   const [shellMenuEnabled, setShellMenuEnabled] = useState(false);
   const [shellMenuSupported, setShellMenuSupported] = useState(false);
+  const [shellMenuMode, setShellMenuMode] = useState<
+    "managed" | "packaged" | "unsupported"
+  >("unsupported");
   const [shellMenuLoading, setShellMenuLoading] = useState(true);
   const [shellMenuSaving, setShellMenuSaving] = useState(false);
 
@@ -80,9 +83,14 @@ const SettingsWindow: React.FC = () => {
         if (result.success && result.data) {
           setShellMenuSupported(result.data.supported);
           setShellMenuEnabled(result.data.enabled);
+          setShellMenuMode(
+            result.data.mode ??
+              (result.data.supported ? "managed" : "unsupported"),
+          );
         } else {
           setShellMenuSupported(false);
           setShellMenuEnabled(false);
+          setShellMenuMode("unsupported");
         }
       })
       .catch((error) => {
@@ -92,6 +100,7 @@ const SettingsWindow: React.FC = () => {
 
         setShellMenuSupported(false);
         setShellMenuEnabled(false);
+        setShellMenuMode("unsupported");
       })
       .finally(() => {
         if (!cancelled) {
@@ -146,6 +155,10 @@ const SettingsWindow: React.FC = () => {
 
       setShellMenuSupported(result.data.supported);
       setShellMenuEnabled(result.data.enabled);
+      setShellMenuMode(
+        result.data.mode ??
+          (result.data.supported ? "managed" : "unsupported"),
+      );
       message.success(
         result.data.enabled
           ? t("settings.shellMenuEnabledMessage")
@@ -160,8 +173,12 @@ const SettingsWindow: React.FC = () => {
     }
   };
 
+  const shellMenuManaged = shellMenuMode === "managed";
+
   const shellMenuStatusText = !shellMenuSupported
     ? t("settings.shellMenuUnsupported")
+    : !shellMenuManaged
+      ? t("settings.shellMenuPackaged")
     : shellMenuEnabled
       ? t("settings.shellMenuOn")
       : t("settings.shellMenuOff");
@@ -270,7 +287,12 @@ const SettingsWindow: React.FC = () => {
 
             <Switch
               checked={shellMenuEnabled}
-              disabled={!shellMenuSupported || shellMenuLoading || shellMenuSaving}
+              disabled={
+                !shellMenuSupported ||
+                !shellMenuManaged ||
+                shellMenuLoading ||
+                shellMenuSaving
+              }
               loading={shellMenuLoading || shellMenuSaving}
               onChange={(checked) => void handleShellMenuChange(checked)}
             />

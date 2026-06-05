@@ -1,0 +1,13 @@
+{
+  "bundle": {
+    "fileAssociations": [
+      {
+        "ext": ["devfleet-folder"],
+        "name": "Folder",
+        "role": "Viewer",
+        "rank": "Alternate",
+        "contentTypes": ["public.folder"]
+      }
+    ]
+  }
+}

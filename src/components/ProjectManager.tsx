@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Project, ProjectConfig } from "../types/project";
 import { tauriAPI } from "../lib/tauri";
 import { listenForMacOSAddProject } from "../lib/macosNative";
+import { listenForProjectsChanged } from "../lib/projectEvents";
 import { useProjects } from "../hooks/useProjects";
 import { useEditors } from "../hooks/useEditors";
 import { useNvmInfo } from "../hooks/useNvmInfo";
@@ -93,6 +94,27 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey }) => {
       unlisten?.();
     };
   }, [handleAdd]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    void listenForProjectsChanged(() => {
+      if (cancelled) return;
+      loadProjects().then((r) => {
+        if (!cancelled && !r.success)
+          messageApi.error(r.error || t("project.loadFailed"));
+      });
+    }).then((cleanup) => {
+      if (cancelled) cleanup();
+      else unlisten = cleanup;
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [loadProjects, messageApi, t]);
 
   const handleRemove = useCallback((projectId: string, projectName: string) => {
     modal.confirm({

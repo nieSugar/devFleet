@@ -1,21 +1,29 @@
 #[cfg(target_os = "macos")]
 use include_dir::{include_dir, Dir};
-#[cfg(target_os = "macos")]
-use serde::Deserialize;
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+use serde::{Deserialize, Serialize};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::collections::HashSet;
 #[cfg(target_os = "macos")]
 use std::sync::{Mutex, OnceLock};
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+use std::{
+    io::{Read, Write},
+    net::{Shutdown, SocketAddr, TcpListener, TcpStream},
+    time::Duration,
+};
 #[cfg(target_os = "macos")]
 use sys_locale::get_locale;
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+use tauri::Emitter;
 #[cfg(target_os = "macos")]
 use tauri::{
     menu::{
         Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID,
     },
-    AppHandle, Emitter, Manager, Runtime, TitleBarStyle, WebviewUrl, WebviewWindowBuilder,
+    AppHandle, TitleBarStyle, WebviewUrl, WebviewWindowBuilder,
 };
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 use tauri::{Manager, Runtime};
 
 // mod 声明：告诉 Rust 编译器"把这些同目录下的 .rs 文件纳入编译"
@@ -33,8 +41,39 @@ mod shell_context;
 const TRAY_SHOW_MENU_ID: &str = "tray-show-main-window";
 #[cfg(target_os = "windows")]
 const TRAY_QUIT_MENU_ID: &str = "tray-quit-app";
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+const PROJECTS_CHANGED_EVENT: &str = "projects://changed";
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+const COMMAND_MAGIC: &str = "DEVFLEET_COMMAND_V1";
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+const COMMAND_PORT_BASE: u16 = 49152;
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+const COMMAND_PORT_SPAN: u16 = 16384;
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+const COMMAND_APP_ID: &str = "com.niesugar.devfleet";
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+enum AppCommand {
+    AddProject { path: String },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ProjectAddOutcome {
+    Added,
+    Existing,
+    Ignored,
+}
+
+impl ProjectAddOutcome {
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    fn changed(self) -> bool {
+        matches!(self, Self::Added)
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 fn show_main_window<R: Runtime>(app: &tauri::AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
@@ -89,44 +128,225 @@ fn setup_windows_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
     Ok(())
 }
 
-fn add_startup_project_from_args() {
-    let args: Vec<_> = std::env::args_os().skip(1).collect();
-    let path = if let Some(index) = args
-        .iter()
-        .position(|arg| arg.as_os_str() == std::ffi::OsStr::new("--add-project"))
-    {
-        args.get(index + 1)
-            .map(|arg| std::path::PathBuf::from(arg.as_os_str()))
-            .filter(|path| path.is_dir())
-    } else {
-        args.into_iter().find_map(|arg| {
-            let path = std::path::PathBuf::from(arg);
-            if path.is_dir() {
-                Some(path)
-            } else {
-                None
-            }
-        })
-    };
-
-    let Some(path) = path else {
-        return;
-    };
+fn add_project_path_to_config(path: std::path::PathBuf, source: &str) -> ProjectAddOutcome {
+    if !path.is_dir() {
+        return ProjectAddOutcome::Ignored;
+    }
 
     let path = path.to_string_lossy().to_string();
     match project::add_to_config(&path) {
         Ok(project) => {
-            eprintln!(
-                "[devfleet] added project from shell context menu: {}",
-                project.path
-            );
+            eprintln!("[devfleet] added project from {source}: {}", project.path);
+            ProjectAddOutcome::Added
         }
         Err(true) => {
-            eprintln!("[devfleet] shell context project already exists: {}", path);
+            eprintln!("[devfleet] {source} project already exists: {}", path);
+            ProjectAddOutcome::Existing
         }
         Err(false) => {
-            eprintln!("[devfleet] ignored invalid shell context project: {}", path);
+            eprintln!("[devfleet] ignored invalid {source} project: {}", path);
+            ProjectAddOutcome::Ignored
         }
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+fn emit_projects_changed<R: Runtime>(app: &tauri::AppHandle<R>) {
+    let _ = app.emit(PROJECTS_CHANGED_EVENT, ());
+}
+
+fn startup_project_path_from_args_with<I, F>(args: I, is_dir: F) -> Option<std::path::PathBuf>
+where
+    I: IntoIterator<Item = std::ffi::OsString>,
+    F: Fn(&std::path::Path) -> bool,
+{
+    let args: Vec<_> = args.into_iter().collect();
+    if let Some(index) = args
+        .iter()
+        .position(|arg| arg.as_os_str() == std::ffi::OsStr::new("--add-project"))
+    {
+        return args
+            .get(index + 1)
+            .map(|arg| std::path::PathBuf::from(arg.as_os_str()))
+            .filter(|path| is_dir(path));
+    }
+
+    args.into_iter().find_map(|arg| {
+        let path = std::path::PathBuf::from(arg);
+        if is_dir(&path) {
+            Some(path)
+        } else {
+            None
+        }
+    })
+}
+
+fn startup_project_path_from_args() -> Option<std::path::PathBuf> {
+    startup_project_path_from_args_with(std::env::args_os().skip(1), |path| path.is_dir())
+}
+
+fn add_startup_project_from_args() {
+    if let Some(path) = startup_project_path_from_args() {
+        add_project_path_to_config(path, "shell context menu");
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+fn forward_startup_project_to_running_instance() -> bool {
+    let Some(path) = startup_project_path_from_args() else {
+        return false;
+    };
+
+    let Ok(mut stream) =
+        TcpStream::connect_timeout(&command_server_addr(), Duration::from_millis(200))
+    else {
+        return false;
+    };
+
+    let command = AppCommand::AddProject {
+        path: path.to_string_lossy().to_string(),
+    };
+    let Ok(body) = serde_json::to_string(&command) else {
+        return false;
+    };
+
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
+
+    if writeln!(stream, "{COMMAND_MAGIC}").is_err()
+        || stream.write_all(body.as_bytes()).is_err()
+        || stream.shutdown(Shutdown::Write).is_err()
+    {
+        return false;
+    }
+
+    let mut response = String::new();
+    stream.read_to_string(&mut response).is_ok() && command_response_is_success(&response)
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+fn command_server_addr() -> SocketAddr {
+    let user = std::env::var("USERNAME")
+        .or_else(|_| std::env::var("USER"))
+        .unwrap_or_default();
+    SocketAddr::from(([127, 0, 0, 1], command_server_port_for_user(&user)))
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+fn command_server_port_for_user(user: &str) -> u16 {
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+
+    for byte in COMMAND_APP_ID
+        .bytes()
+        .chain(std::iter::once(0xff))
+        .chain(user.bytes())
+    {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+
+    COMMAND_PORT_BASE + (hash % u64::from(COMMAND_PORT_SPAN)) as u16
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+fn command_ack(success: bool) -> String {
+    let status = if success { "OK" } else { "ERR" };
+    format!("{COMMAND_MAGIC} {status}\n")
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+fn command_response_is_success(response: &str) -> bool {
+    response.trim() == command_ack(true).trim()
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+fn handle_app_command<R: Runtime>(app: &tauri::AppHandle<R>, command: AppCommand) {
+    match command {
+        AppCommand::AddProject { path } => {
+            let path = std::path::PathBuf::from(path);
+            let outcome = add_project_path_to_config(path, "running instance command");
+            if outcome.changed() {
+                emit_projects_changed(app);
+            }
+            show_main_window(app);
+        }
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+fn handle_command_stream<R: Runtime>(app: &tauri::AppHandle<R>, mut stream: TcpStream) {
+    let mut request = String::new();
+    let result = (|| -> Result<(), String> {
+        stream
+            .read_to_string(&mut request)
+            .map_err(|e| format!("failed to read command: {e}"))?;
+
+        let Some((magic, body)) = request.split_once('\n') else {
+            return Err("missing command magic".to_string());
+        };
+        if magic.trim_end() != COMMAND_MAGIC {
+            return Err("invalid command magic".to_string());
+        }
+
+        let command: AppCommand =
+            serde_json::from_str(body).map_err(|e| format!("invalid command payload: {e}"))?;
+        handle_app_command(app, command);
+        Ok(())
+    })();
+
+    match result {
+        Ok(()) => {
+            let _ = stream.write_all(command_ack(true).as_bytes());
+        }
+        Err(e) => {
+            eprintln!("[devfleet] ignored local command: {e}");
+            let _ = stream.write_all(command_ack(false).as_bytes());
+        }
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+fn start_command_server<R: Runtime>(app: tauri::AppHandle<R>) {
+    std::thread::spawn(move || {
+        let listener = match TcpListener::bind(command_server_addr()) {
+            Ok(listener) => listener,
+            Err(e) => {
+                eprintln!("[devfleet] local command server unavailable: {e}");
+                return;
+            }
+        };
+
+        for stream in listener.incoming() {
+            match stream {
+                Ok(stream) => handle_command_stream(&app, stream),
+                Err(e) => eprintln!("[devfleet] failed to accept local command: {e}"),
+            }
+        }
+    });
+}
+
+#[cfg(target_os = "macos")]
+fn handle_macos_opened_urls<R: Runtime>(app: &tauri::AppHandle<R>, urls: Vec<tauri::Url>) {
+    let mut handled = false;
+
+    for url in urls {
+        if url.scheme() != "file" {
+            continue;
+        }
+
+        if let Ok(path) = url.to_file_path() {
+            if path.is_dir() {
+                let outcome = add_project_path_to_config(path, "macOS open event");
+                if outcome.changed() {
+                    emit_projects_changed(app);
+                }
+                handled = true;
+            }
+        }
+    }
+
+    if handled {
+        show_main_window(app);
     }
 }
 
@@ -647,6 +867,11 @@ fn normalize_unix_gui_environment() {
 
 /// 应用主入口，构建并启动 Tauri 应用
 pub fn run() {
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    if forward_startup_project_to_running_instance() {
+        return;
+    }
+
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -663,14 +888,18 @@ pub fn run() {
         .setup(|app| {
             add_startup_project_from_args();
 
-            #[cfg(target_os = "windows")]
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+            start_command_server(app.handle().clone());
+
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             {
                 if let Err(e) = shell_context::refresh_existing_registration() {
-                    eprintln!(
-                        "[devfleet] failed to refresh Windows shell context menu: {}",
-                        e
-                    );
+                    eprintln!("[devfleet] failed to refresh shell context menu: {}", e);
                 }
+            }
+
+            #[cfg(target_os = "windows")]
+            {
                 setup_windows_tray(app.handle())?;
             }
 
@@ -736,11 +965,112 @@ pub fn run() {
         ])
         // generate_context!() 宏在编译时读取 tauri.conf.json，生成应用上下文
         // run() 启动事件循环（类似前端的 app.mount()）
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         // unwrap_or_else：如果启动失败，执行闭包（打印错误并退出）
         // 这比直接 .unwrap()（直接 panic）更优雅，能输出有意义的错误信息
         .unwrap_or_else(|e| {
             eprintln!("[devfleet] Tauri 应用启动失败: {}", e);
             std::process::exit(1);
+        })
+        .run(|_app, _event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = _event {
+                handle_macos_opened_urls(_app, urls);
+            }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{ffi::OsString, path::PathBuf};
+
+    fn os(value: &str) -> OsString {
+        OsString::from(value)
+    }
+
+    #[test]
+    fn startup_project_path_prefers_add_project_argument() {
+        let explicit = PathBuf::from("explicit-project");
+        let fallback = PathBuf::from("fallback-project");
+        let result = startup_project_path_from_args_with(
+            vec![
+                fallback.clone().into_os_string(),
+                os("--add-project"),
+                explicit.clone().into_os_string(),
+            ],
+            |path| path == explicit.as_path() || path == fallback.as_path(),
+        );
+
+        assert_eq!(result, Some(explicit));
+    }
+
+    #[test]
+    fn startup_project_path_uses_first_directory_without_flag() {
+        let folder = PathBuf::from("folder-project");
+        let result = startup_project_path_from_args_with(
+            vec![
+                os("--verbose"),
+                os("not-a-directory"),
+                folder.clone().into_os_string(),
+            ],
+            |path| path == folder.as_path(),
+        );
+
+        assert_eq!(result, Some(folder));
+    }
+
+    #[test]
+    fn startup_project_path_does_not_fallback_when_flag_target_is_invalid() {
+        let fallback = PathBuf::from("fallback-project");
+        let result = startup_project_path_from_args_with(
+            vec![
+                os("--add-project"),
+                os("missing-project"),
+                fallback.into_os_string(),
+            ],
+            |path| path.ends_with("fallback-project"),
+        );
+
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn command_server_port_is_stable_and_private() {
+        let port = command_server_port_for_user("alice");
+
+        assert_eq!(port, command_server_port_for_user("alice"));
+        assert!(u32::from(port) >= u32::from(COMMAND_PORT_BASE));
+        assert!(u32::from(port) < u32::from(COMMAND_PORT_BASE) + u32::from(COMMAND_PORT_SPAN));
+    }
+
+    #[test]
+    fn command_server_port_changes_with_user() {
+        assert_ne!(
+            command_server_port_for_user("alice"),
+            command_server_port_for_user("bob")
+        );
+    }
+
+    #[test]
+    fn app_command_add_project_serializes_with_kebab_case_type() {
+        let path = r"C:\Users\gs\Projects\demo".to_string();
+        let command = AppCommand::AddProject { path: path.clone() };
+        let json = serde_json::to_value(command).expect("command should serialize");
+
+        assert_eq!(json["type"], "add-project");
+        assert_eq!(json["path"], path);
+    }
+
+    #[test]
+    fn command_ack_includes_magic_and_status() {
+        assert_eq!(command_ack(true), format!("{COMMAND_MAGIC} OK\n"));
+        assert_eq!(command_ack(false), format!("{COMMAND_MAGIC} ERR\n"));
+        assert!(command_response_is_success(&format!(
+            "{COMMAND_MAGIC} OK\r\n"
+        )));
+        assert!(!command_response_is_success(&format!(
+            "{COMMAND_MAGIC} ERR\n"
+        )));
+    }
 }
