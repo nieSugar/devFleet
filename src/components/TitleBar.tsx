@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { getSupportedLanguages } from "../i18n";
 import { useTheme } from "../contexts/ThemeContext";
 import UpdateChecker from "./UpdateChecker";
@@ -22,6 +23,7 @@ function getLanguageLabel(locale: string) {
 const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
   const { theme, toggleTheme } = useTheme();
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const [maximized, setMaximized] = useState(false);
 
   const toggleLanguage = () => {
@@ -97,6 +99,15 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
           title={theme === "dark" ? t("titleBar.lightMode") : t("titleBar.darkMode")}
         >
           {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+        </button>
+
+        <button
+          className="tb-btn settings-btn"
+          onClick={() => navigate("/settings")}
+          title={t("settings.title")}
+          aria-label={t("settings.title")}
+        >
+          <SettingsIcon />
         </button>
 
         {!IS_MACOS && (
@@ -227,6 +238,23 @@ const NodeHexIcon = () => (
     <path d="M8 5V11" />
     <path d="M8 11L5 9.5" />
     <path d="M8 11L11 9.5" />
+  </svg>
+);
+
+const SettingsIcon = () => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.3"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="8" cy="8" r="2.2" />
+    <path d="M8 1.5v1.7M8 12.8v1.7M2.3 4.1l1.5.9M12.2 11l1.5.9M2.3 11.9l1.5-.9M12.2 5l1.5-.9" />
+    <path d="M4.9 2.5l.8 1.5M10.3 12l.8 1.5M4.9 13.5l.8-1.5M10.3 4l.8-1.5" />
   </svg>
 );
 

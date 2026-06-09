@@ -101,6 +101,19 @@
   background: var(--bg-active);
 }
 
+.settings-btn {
+  width: 38px;
+  height: 100%;
+  margin-right: 2px;
+}
+.settings-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.settings-btn:active {
+  background: var(--bg-active);
+}
+
 /* ── Window Controls ── */
 .tb-win-controls {
   display: flex;
