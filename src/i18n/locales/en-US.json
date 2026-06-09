@@ -18,7 +18,7 @@
     "copied": "Copied"
   },
   "titleBar": {
-    "nodeManager": "Node.js Version Manager",
+    "nodeManager": "Node.js Manager",
     "lightMode": "Switch to light mode",
     "darkMode": "Switch to dark mode",
     "minimize": "Minimize",
@@ -59,7 +59,7 @@
     "nodeVersionError": "Error setting Node version"
   },
   "nodeDrawer": {
-    "title": "Node.js Versions",
+    "title": "Node.js Manager",
     "searchPlaceholder": "Search version or LTS name...",
     "filterAll": "All",
     "filterLts": "LTS",
@@ -83,6 +83,37 @@
     "pathSetupFailed": "Failed to set up PATH",
     "pathBanner": "node / npm is not in system PATH, or PowerShell policy blocks npm",
     "addToPath": "Fix",
+    "tabs": {
+      "versions": "Versions",
+      "processes": "Processes"
+    },
+    "processes": {
+      "count": "{{count}} Node processes",
+      "autoRefresh": "Auto-refreshes every 5s",
+      "searchPlaceholder": "Search port, project, path, command, or PID...",
+      "loading": "Scanning Node processes...",
+      "noProcesses": "No Node processes found",
+      "noPortProcesses": "No Node processes with listening ports",
+      "noMatch": "No matching Node processes",
+      "loadFailed": "Failed to read Node processes",
+      "portOnly": "Ports only",
+      "pid": "PID {{pid}}",
+      "ppid": "PPID {{pid}}",
+      "noPorts": "No listening port",
+      "morePorts": "+{{count}} ports",
+      "executable": "Executable",
+      "launchCommand": "Launch command",
+      "nodeCommand": "Node command",
+      "unknownExecutable": "Unknown executable",
+      "unknownProject": "Unmatched project",
+      "killTooltip": "Terminate this Node process",
+      "killTitle": "Terminate Node process {{pid}}?",
+      "killContent": "This will stop the selected Node process and any running dev server behind it.",
+      "killConfirm": "Terminate",
+      "killSuccess": "Node process terminated",
+      "killFailed": "Failed to terminate Node process",
+      "rememberKillChoice": "Remember this choice and terminate directly next time"
+    },
     "manager": {
       "builtin": "Built-in",
       "nvmd": "nvmd",

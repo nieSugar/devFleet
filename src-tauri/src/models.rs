@@ -205,6 +205,43 @@ pub struct NvmInfo {
     pub available_versions: Vec<NodeVersion>,
 }
 
+// ── 系统 Node 进程 ──
+
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeProcessPort {
+    pub protocol: String,
+    pub local_address: String,
+    pub local_port: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeProcessInfo {
+    pub pid: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_pid: Option<u32>,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executable: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_line: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launch_command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
+    #[serde(default)]
+    pub ports: Vec<NodeProcessPort>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub matched_project_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub matched_project_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub matched_project_path: Option<String>,
+}
+
 // ── 远程 Node 版本（nodejs.org dist API） ──
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

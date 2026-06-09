@@ -28,13 +28,40 @@ export interface ProcessInfo {
   startTime: Date;
 }
 
+export interface NodeProcessPort {
+  protocol: string;
+  localAddress: string;
+  localPort: number;
+  state?: string;
+}
+
+export interface NodeProcessInfo {
+  pid: number;
+  parentPid?: number;
+  name: string;
+  executable?: string;
+  commandLine?: string;
+  launchCommand?: string;
+  startedAt?: string;
+  ports?: NodeProcessPort[];
+  matchedProjectId?: string;
+  matchedProjectName?: string;
+  matchedProjectPath?: string;
+}
+
 export interface IpcResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
 }
 
-export type NodeVersionManager = 'builtin' | 'nvm' | 'nvm-windows' | 'nvmd' | 'nvs' | 'none';
+export type NodeVersionManager =
+  | "builtin"
+  | "nvm"
+  | "nvm-windows"
+  | "nvmd"
+  | "nvs"
+  | "none";
 
 export interface NodeVersion {
   version: string;

@@ -311,6 +311,33 @@ pub fn run_script(
     }))
 }
 
+// ── Node 进程管理命令 ──
+
+#[tauri::command]
+pub async fn list_node_processes() -> IpcResponse {
+    tokio::task::spawn_blocking(|| {
+        let cfg = config::load();
+        match crate::node_processes::list_node_processes(&cfg.projects) {
+            Ok(processes) => IpcResponse::ok(processes),
+            Err(e) => IpcResponse::err(e),
+        }
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
+}
+
+#[tauri::command]
+pub async fn kill_node_process(pid: u32) -> IpcResponse {
+    tokio::task::spawn_blocking(
+        move || match crate::node_processes::kill_node_process(pid) {
+            Ok(()) => IpcResponse::ok_msg(format!("已结束 Node 进程 {}", pid)),
+            Err(e) => IpcResponse::err(e),
+        },
+    )
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
+}
+
 // ── 编辑器命令 ──
 
 /// 检测系统中安装了哪些代码编辑器（带缓存，force=true 时强制重新检测）

@@ -34,6 +34,7 @@ mod config;
 mod detector;
 mod models;
 mod node_manager;
+mod node_processes;
 mod project;
 mod shell_context;
 
@@ -947,6 +948,8 @@ pub fn run() {
             commands::get_shell_context_menu_state,
             commands::set_shell_context_menu_enabled,
             commands::run_script,
+            commands::list_node_processes,
+            commands::kill_node_process,
             commands::detect_editors,
             commands::open_in_editor,
             commands::get_nvm_info,

@@ -18,7 +18,7 @@
     "copied": "コピーしました"
   },
   "titleBar": {
-    "nodeManager": "Node.js のバージョン管理",
+    "nodeManager": "Node.js 管理",
     "lightMode": "ライトモードに切り替える",
     "darkMode": "ダークモードに切り替える",
     "minimize": "最小化",
@@ -59,7 +59,7 @@
     "nodeVersionError": "Nodeのバージョンを設定する際にエラーが発生しました"
   },
   "nodeDrawer": {
-    "title": "Node.js のバージョン",
+    "title": "Node.js 管理",
     "searchPlaceholder": "バージョン番号またはLTSの名称を検索...",
     "filterAll": "すべて",
     "filterLts": "長期サポート",
@@ -83,6 +83,37 @@
     "pathSetupFailed": "PATH の設定に失敗しました",
     "pathBanner": "node / npm がシステム PATH にないか、PowerShell ポリシーにより npm がブロックされています",
     "addToPath": "修復",
+    "tabs": {
+      "versions": "バージョン",
+      "processes": "プロセス"
+    },
+    "processes": {
+      "count": "{{count}} 個の Node プロセス",
+      "autoRefresh": "5 秒ごとに自動更新",
+      "searchPlaceholder": "ポート、プロジェクト、パス、コマンド、PID を検索...",
+      "loading": "Node プロセスをスキャン中...",
+      "noProcesses": "Node プロセスは見つかりません",
+      "noPortProcesses": "待受ポートのある Node プロセスはありません",
+      "noMatch": "一致する Node プロセスはありません",
+      "loadFailed": "Node プロセスの取得に失敗しました",
+      "portOnly": "ポートありのみ",
+      "pid": "PID {{pid}}",
+      "ppid": "PPID {{pid}}",
+      "noPorts": "待受ポートなし",
+      "morePorts": "+{{count}} ポート",
+      "executable": "実行ファイル",
+      "launchCommand": "起動コマンド",
+      "nodeCommand": "Node コマンド",
+      "unknownExecutable": "不明な実行ファイル",
+      "unknownProject": "未一致のプロジェクト",
+      "killTooltip": "この Node プロセスを終了",
+      "killTitle": "Node プロセス {{pid}} を終了しますか？",
+      "killContent": "選択した Node プロセスを終了します。実行中の開発サービスも停止します。",
+      "killConfirm": "終了",
+      "killSuccess": "Node プロセスを終了しました",
+      "killFailed": "Node プロセスの終了に失敗しました",
+      "rememberKillChoice": "この選択を記憶し、次回から確認せずに終了する"
+    },
     "manager": {
       "builtin": "組み込み管理",
       "nvmd": "大丈夫です",

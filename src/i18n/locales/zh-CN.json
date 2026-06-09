@@ -18,7 +18,7 @@
     "copied": "已复制"
   },
   "titleBar": {
-    "nodeManager": "Node.js 版本管理",
+    "nodeManager": "Node.js 管理",
     "lightMode": "切换到亮色模式",
     "darkMode": "切换到暗色模式",
     "minimize": "最小化",
@@ -59,7 +59,7 @@
     "nodeVersionError": "设置 Node 版本时出错"
   },
   "nodeDrawer": {
-    "title": "Node.js 版本",
+    "title": "Node.js 管理",
     "searchPlaceholder": "搜索版本号或 LTS 名称...",
     "filterAll": "全部",
     "filterLts": "LTS",
@@ -83,6 +83,37 @@
     "pathSetupFailed": "设置 PATH 失败",
     "pathBanner": "node / npm 未加入系统 PATH，或 PowerShell 策略阻止 npm",
     "addToPath": "一键修复",
+    "tabs": {
+      "versions": "版本",
+      "processes": "进程"
+    },
+    "processes": {
+      "count": "{{count}} 个 Node 进程",
+      "autoRefresh": "每 5 秒自动刷新",
+      "searchPlaceholder": "搜索端口、项目、路径、命令或 PID...",
+      "loading": "正在扫描 Node 进程...",
+      "noProcesses": "当前没有发现 Node 进程",
+      "noPortProcesses": "当前没有占用端口的 Node 进程",
+      "noMatch": "没有匹配的 Node 进程",
+      "loadFailed": "读取 Node 进程失败",
+      "portOnly": "只看占用端口",
+      "pid": "PID {{pid}}",
+      "ppid": "PPID {{pid}}",
+      "noPorts": "未监听端口",
+      "morePorts": "+{{count}} 个端口",
+      "executable": "可执行文件",
+      "launchCommand": "启动命令",
+      "nodeCommand": "Node 命令",
+      "unknownExecutable": "未知可执行文件",
+      "unknownProject": "未匹配项目",
+      "killTooltip": "结束此 Node 进程",
+      "killTitle": "结束 Node 进程 {{pid}}？",
+      "killContent": "这会终止对应的 Node 进程，正在运行的开发服务会停止。",
+      "killConfirm": "结束进程",
+      "killSuccess": "Node 进程已结束",
+      "killFailed": "结束 Node 进程失败",
+      "rememberKillChoice": "记住此选项，以后直接结束进程"
+    },
     "manager": {
       "builtin": "内建管理",
       "nvmd": "nvmd",

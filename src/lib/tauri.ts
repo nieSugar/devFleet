@@ -1,6 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { IpcResponse, Project, ProjectConfig, NvmInfo, RemoteNodeVersion, EditorStatus } from "../types/project";
+import type {
+  IpcResponse,
+  Project,
+  ProjectConfig,
+  NvmInfo,
+  RemoteNodeVersion,
+  EditorStatus,
+  NodeProcessInfo,
+} from "../types/project";
 
 type RunScriptParams = {
   projectPath: string;
@@ -57,6 +65,12 @@ export const tauriAPI = {
   runScript: (params: RunScriptParams): Promise<IpcResponse<ScriptRunResult>> =>
     invoke("run_script", params),
 
+  listNodeProcesses: (): Promise<IpcResponse<NodeProcessInfo[]>> =>
+    invoke("list_node_processes"),
+
+  killNodeProcess: (pid: number): Promise<IpcResponse<MessageResult>> =>
+    invoke("kill_node_process", { pid }),
+
   detectEditors: (force?: boolean): Promise<IpcResponse<EditorStatus>> =>
     invoke("detect_editors", { force }),
 
@@ -77,9 +91,7 @@ export const tauriAPI = {
   addProjectToConfig: (projectPath: string): Promise<IpcResponse<Project>> =>
     invoke("add_project_to_config", { projectPath }),
 
-  removeProjectFromConfig: (
-    projectId: string
-  ): Promise<IpcResponse<MessageResult>> =>
+  removeProjectFromConfig: (projectId: string): Promise<IpcResponse<MessageResult>> =>
     invoke("remove_project_from_config", { projectId }),
 
   getShellContextMenuState: (): Promise<IpcResponse<ShellContextMenuState>> =>
@@ -90,8 +102,7 @@ export const tauriAPI = {
   ): Promise<IpcResponse<ShellContextMenuState>> =>
     invoke("set_shell_context_menu_enabled", { enabled }),
 
-  getNvmInfo: (): Promise<IpcResponse<NvmInfo>> =>
-    invoke("get_nvm_info"),
+  getNvmInfo: (): Promise<IpcResponse<NvmInfo>> => invoke("get_nvm_info"),
 
   detectProjectNodeVersion: (
     projectPath: string
@@ -103,9 +114,8 @@ export const tauriAPI = {
   ): Promise<IpcResponse<NodeVersionResult>> =>
     invoke("set_project_node_version", params),
 
-  fetchRemoteNodeVersions: (): Promise<
-    IpcResponse<RemoteNodeVersion[]>
-  > => invoke("fetch_remote_node_versions"),
+  fetchRemoteNodeVersions: (): Promise<IpcResponse<RemoteNodeVersion[]>> =>
+    invoke("fetch_remote_node_versions"),
 
   installNodeVersion: (params: {
     version: string;
@@ -140,6 +150,12 @@ export const tauriAPI = {
   setupNodeGlobalPath: (): Promise<IpcResponse<{ message: string }>> =>
     invoke("setup_node_global_path"),
 
-  checkNodeInPath: (): Promise<IpcResponse<{ inPath: boolean; binPath: string | null; nodeAvailable: boolean; powerShellPolicyReady: boolean }>> =>
-    invoke("check_node_in_path"),
+  checkNodeInPath: (): Promise<
+    IpcResponse<{
+      inPath: boolean;
+      binPath: string | null;
+      nodeAvailable: boolean;
+      powerShellPolicyReady: boolean;
+    }>
+  > => invoke("check_node_in_path"),
 };
