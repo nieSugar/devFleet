@@ -14,8 +14,11 @@
     border-color var(--transition-slow);
 }
 
-/* 确保整个标题栏都可以拖动 */
-.titlebar[data-tauri-drag-region] {
+/* 左侧空白区域负责拖动，右侧按钮区保持纯交互。 */
+.titlebar-drag-region[data-tauri-drag-region] {
+  align-self: stretch;
+  flex: 1;
+  min-width: 0;
   -webkit-app-region: drag;
 }
 

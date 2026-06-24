@@ -9,6 +9,7 @@ import "./TitleBar.css";
 
 interface TitleBarProps {
   onOpenNodeManager?: () => void;
+  onRequestClose: () => void | Promise<void>;
 }
 
 const IS_MACOS = typeof window !== "undefined" && /mac/i.test(window.navigator.userAgent);
@@ -20,7 +21,7 @@ function getLanguageLabel(locale: string) {
   return locale.split("-")[0]?.toUpperCase() || locale;
 }
 
-const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
+const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager, onRequestClose }) => {
   const { theme, toggleTheme } = useTheme();
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -69,10 +70,10 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
   }, []);
 
   return (
-    <header
-      className="titlebar"
-      {...(!IS_MACOS ? { "data-tauri-drag-region": true } : {})}
-    >
+    <header className="titlebar">
+      {!IS_MACOS && (
+        <div className="titlebar-drag-region" data-tauri-drag-region="" />
+      )}
       <div className="titlebar-actions">
         <button
           className="tb-btn node-btn"
@@ -155,7 +156,7 @@ const TitleBar: React.FC<TitleBarProps> = ({ onOpenNodeManager }) => {
 
             <button
               className="tb-btn win-btn close-btn"
-              onClick={() => getCurrentWindow().close()}
+              onClick={() => void onRequestClose()}
               title={t("titleBar.close")}
             >
               <svg

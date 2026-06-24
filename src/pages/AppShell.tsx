@@ -14,12 +14,20 @@ type CloseBehavior = "minimize" | "quit";
 const CLOSE_BEHAVIOR_KEY = "devfleet.closeBehavior";
 
 function loadCloseBehavior(): CloseBehavior | null {
-  const value = window.localStorage.getItem(CLOSE_BEHAVIOR_KEY);
-  return value === "minimize" || value === "quit" ? value : null;
+  try {
+    const value = window.localStorage.getItem(CLOSE_BEHAVIOR_KEY);
+    return value === "minimize" || value === "quit" ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 function saveCloseBehavior(behavior: CloseBehavior) {
-  window.localStorage.setItem(CLOSE_BEHAVIOR_KEY, behavior);
+  try {
+    window.localStorage.setItem(CLOSE_BEHAVIOR_KEY, behavior);
+  } catch {
+    // 忽略存储失败，确保本次关闭动作继续执行。
+  }
 }
 
 const AppShell: React.FC = () => {
@@ -34,21 +42,35 @@ const AppShell: React.FC = () => {
     setNvmRefreshKey((k) => k + 1);
   }, []);
 
+  const performCloseBehavior = useCallback(async (behavior: CloseBehavior) => {
+    setClosePromptOpen(false);
+    if (behavior === "minimize") {
+      await getCurrentWindow().hide();
+      return;
+    }
+
+    await exitApp(0);
+  }, []);
+
+  const requestClose = useCallback(async () => {
+    const savedBehavior = loadCloseBehavior();
+    if (savedBehavior) {
+      await performCloseBehavior(savedBehavior);
+      return;
+    }
+
+    setClosePromptOpen(true);
+  }, [performCloseBehavior]);
+
   const applyCloseBehavior = useCallback(
     async (behavior: CloseBehavior) => {
       if (rememberCloseChoice) {
         saveCloseBehavior(behavior);
       }
 
-      setClosePromptOpen(false);
-      if (behavior === "minimize") {
-        await getCurrentWindow().hide();
-        return;
-      }
-
-      await exitApp(0);
+      await performCloseBehavior(behavior);
     },
-    [rememberCloseChoice],
+    [performCloseBehavior, rememberCloseChoice],
   );
 
   useEffect(() => {
@@ -64,22 +86,9 @@ const AppShell: React.FC = () => {
       else settingsUnlisten = cleanup;
     });
 
-    void getCurrentWindow().onCloseRequested(async (event) => {
-      const savedBehavior = loadCloseBehavior();
-      if (savedBehavior === "quit") {
-        event.preventDefault();
-        await exitApp(0);
-        return;
-      }
-
+    void getCurrentWindow().onCloseRequested((event) => {
       event.preventDefault();
-
-      if (savedBehavior === "minimize") {
-        await getCurrentWindow().hide();
-        return;
-      }
-
-      setClosePromptOpen(true);
+      void requestClose();
     }).then((cleanup) => {
       if (cancelled) cleanup();
       else closeUnlisten = cleanup;
@@ -90,11 +99,14 @@ const AppShell: React.FC = () => {
       settingsUnlisten?.();
       closeUnlisten?.();
     };
-  }, [navigate]);
+  }, [navigate, requestClose]);
 
   return (
     <div className="app">
-      <TitleBar onOpenNodeManager={() => setNodeDrawerOpen(true)} />
+      <TitleBar
+        onOpenNodeManager={() => setNodeDrawerOpen(true)}
+        onRequestClose={() => void requestClose()}
+      />
       <main className="app-main">
         <Outlet context={{ nvmRefreshKey }} />
       </main>
