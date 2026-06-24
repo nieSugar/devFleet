@@ -63,8 +63,7 @@ pub fn kill_node_process(pid: u32) -> Result<(), String> {
         return Err("不能结束 DevFleet 自身进程".to_string());
     }
 
-    let processes = platform_list_node_processes()?;
-    if !processes.iter().any(|p| p.pid == pid) {
+    if !platform_is_node_process(pid)? {
         return Err(format!("未找到 PID {} 的 Node 进程", pid));
     }
 
@@ -488,6 +487,14 @@ mod tests {
             r#"node e:\repo\node_modules\vite\bin\vite.js --host 127.0.0.1"#,
         ));
     }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn parses_tasklist_csv_image_name() {
+        let row = r#""node.exe","1240","Console","1","32,112 K""#;
+
+        assert_eq!(first_csv_field(row).as_deref(), Some("node.exe"));
+    }
 }
 
 fn match_project<'a>(process: &RawNodeProcess, projects: &'a [Project]) -> Option<&'a Project> {
@@ -520,7 +527,10 @@ fn is_node_process_name(name: &str) -> bool {
         .trim()
         .to_lowercase();
 
-    matches!(lowered.as_str(), "node" | "node.exe" | "nodejs")
+    matches!(
+        lowered.as_str(),
+        "node" | "node.exe" | "nodejs" | "nodejs.exe"
+    )
 }
 
 fn optional_string(value: Option<&Value>) -> Option<String> {
@@ -625,6 +635,63 @@ fn parse_windows_process_value(value: &Value) -> Option<RawNodeProcess> {
             started_at,
             ports: Vec::new(),
         })
+}
+
+#[cfg(target_os = "windows")]
+fn platform_is_node_process(pid: u32) -> Result<bool, String> {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    let filter = format!("PID eq {}", pid);
+    let output = Command::new("tasklist")
+        .args(["/FI", &filter, "/FO", "CSV", "/NH"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map_err(|e| format!("读取进程信息失败: {}", e))?;
+
+    if !output.status.success() {
+        return Err(command_error("读取进程信息失败", &output));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout.lines().any(|line| {
+        first_csv_field(line)
+            .as_deref()
+            .is_some_and(is_node_process_name)
+    }))
+}
+
+#[cfg(target_os = "windows")]
+fn first_csv_field(row: &str) -> Option<String> {
+    let row = row.trim();
+    if row.is_empty() {
+        return None;
+    }
+
+    let Some(rest) = row.strip_prefix('"') else {
+        return row
+            .split(',')
+            .next()
+            .map(|field| field.trim().to_string())
+            .filter(|field| !field.is_empty());
+    };
+
+    let mut field = String::new();
+    let mut chars = rest.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '"' {
+            if chars.peek().copied() == Some('"') {
+                field.push('"');
+                chars.next();
+            } else {
+                return Some(field);
+            }
+        } else {
+            field.push(ch);
+        }
+    }
+
+    (!field.is_empty()).then_some(field)
 }
 
 #[cfg(target_os = "windows")]
@@ -843,6 +910,22 @@ fn parse_ps_line(line: &str) -> Option<RawNodeProcess> {
         started_at,
         ports: Vec::new(),
     })
+}
+
+#[cfg(unix)]
+fn platform_is_node_process(pid: u32) -> Result<bool, String> {
+    let pid_text = pid.to_string();
+    let output = Command::new("ps")
+        .args(["-p", &pid_text, "-o", "comm="])
+        .output()
+        .map_err(|e| format!("读取进程信息失败: {}", e))?;
+
+    if !output.status.success() {
+        return Ok(false);
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout.lines().any(is_node_process_name))
 }
 
 #[cfg(target_os = "macos")]

@@ -382,6 +382,10 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   );
   const [rememberKillChoice, setRememberKillChoice] = useState(false);
   const [skipKillConfirm, setSkipKillConfirm] = useState(loadSkipKillConfirm);
+  const versionFetchInFlightRef = useRef(false);
+  const versionFetchRequestIdRef = useRef(0);
+  const processLoadInFlightRef = useRef(false);
+  const processLoadRequestIdRef = useRef(0);
 
   const checkPathStatus = useCallback(() => {
     tauriAPI.checkNodeInPath().then((res) => {
@@ -472,17 +476,19 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
     [installDir, messageApi, t]
   );
 
-  const cancelledRef = useRef(false);
-
   const fetchData = useCallback(async () => {
+    if (versionFetchInFlightRef.current) return;
+
+    const requestId = versionFetchRequestIdRef.current + 1;
+    versionFetchRequestIdRef.current = requestId;
+    versionFetchInFlightRef.current = true;
     setLoading(true);
-    cancelledRef.current = false;
     try {
       const [remoteResult, nvmResult] = await Promise.all([
         tauriAPI.fetchRemoteNodeVersions(),
         tauriAPI.getNvmInfo(),
       ]);
-      if (cancelledRef.current) return;
+      if (versionFetchRequestIdRef.current !== requestId) return;
       if (remoteResult.success && remoteResult.data) {
         setRemoteVersions(remoteResult.data);
       } else {
@@ -493,19 +499,28 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       }
       setHasFetched(true);
     } catch {
-      if (!cancelledRef.current) messageApi.error(t("nodeDrawer.networkError"));
+      if (versionFetchRequestIdRef.current === requestId) {
+        messageApi.error(t("nodeDrawer.networkError"));
+      }
     } finally {
-      if (!cancelledRef.current) setLoading(false);
+      if (versionFetchRequestIdRef.current === requestId) {
+        versionFetchInFlightRef.current = false;
+        setLoading(false);
+      }
     }
   }, [messageApi, t]);
 
   useEffect(() => {
-    if (open && !hasFetched) {
-      fetchData();
+    if (!open) {
+      versionFetchRequestIdRef.current += 1;
+      versionFetchInFlightRef.current = false;
+      setLoading(false);
+      return;
     }
-    return () => {
-      cancelledRef.current = true;
-    };
+
+    if (!hasFetched) {
+      void fetchData();
+    }
   }, [open, hasFetched, fetchData]);
 
   const refreshNvmInfo = useCallback(async () => {
@@ -516,22 +531,41 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
 
   const loadNodeProcesses = useCallback(
     async (notifyError = true) => {
+      if (processLoadInFlightRef.current) return;
+
+      const requestId = processLoadRequestIdRef.current + 1;
+      processLoadRequestIdRef.current = requestId;
+      processLoadInFlightRef.current = true;
       if (notifyError) setProcessLoading(true);
       try {
         const result = await tauriAPI.listNodeProcesses();
+        if (processLoadRequestIdRef.current !== requestId) return;
         if (result.success && result.data) {
           setNodeProcesses(result.data);
         } else if (notifyError) {
           messageApi.error(result.error || t("nodeDrawer.processes.loadFailed"));
         }
       } catch {
-        if (notifyError) messageApi.error(t("nodeDrawer.processes.loadFailed"));
+        if (notifyError && processLoadRequestIdRef.current === requestId) {
+          messageApi.error(t("nodeDrawer.processes.loadFailed"));
+        }
       } finally {
-        if (notifyError) setProcessLoading(false);
+        if (processLoadRequestIdRef.current === requestId) {
+          processLoadInFlightRef.current = false;
+          if (notifyError) setProcessLoading(false);
+        }
       }
     },
     [messageApi, t]
   );
+
+  useEffect(() => {
+    if (open && activeTab === "processes") return;
+
+    processLoadRequestIdRef.current += 1;
+    processLoadInFlightRef.current = false;
+    setProcessLoading(false);
+  }, [open, activeTab]);
 
   useEffect(() => {
     if (!open || activeTab !== "processes") return;
@@ -705,6 +739,9 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
           }
           setPendingKillProcess(null);
           setRememberKillChoice(false);
+          setNodeProcesses((prev) =>
+            prev.filter((item) => item.pid !== process.pid)
+          );
           messageApi.success(
             result.data?.message || t("nodeDrawer.processes.killSuccess")
           );
@@ -761,9 +798,10 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       return;
     }
 
+    if (versionFetchInFlightRef.current) return;
     setHasFetched(false);
     setExpandedGroups(new Set());
-    fetchData();
+    void fetchData();
   };
 
   const filterButtons: { key: FilterMode; label: string }[] = [
