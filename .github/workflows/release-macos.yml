@@ -36,6 +36,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
+          package-manager-cache: false
 
       - name: Prepare release and clear existing assets
         id: prepare
@@ -109,6 +110,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
+          package-manager-cache: false
 
       - name: Resolve pnpm store path
         id: pnpm-cache
