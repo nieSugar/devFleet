@@ -1,7 +1,7 @@
 {
   "name": "devfleet",
   "private": true,
-  "version": "2.1.12",
+  "version": "2.1.13",
   "description": "用于快速启动项目与编辑器",
   "type": "module",
   "scripts": {
@@ -18,7 +18,8 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"scripts/**/*.{ts,tsx}\"",
-    "icon": "tauri icon ./logo.png"
+    "icon": "tauri icon ./logo.png",
+    "pack:smoke": "tsx scripts/pack-smoke.ts"
   },
   "author": {
     "name": "nieSugar",
@@ -30,12 +31,39 @@
     "type": "git",
     "url": "https://github.com/nieSugar/devFleet"
   },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.14.0"
+  },
+  "files": [
+    ".env.example",
+    "docs",
+    "eslint.config.js",
+    "index.html",
+    "logo.png",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "scripts",
+    "src",
+    "src-tauri/build.rs",
+    "src-tauri/capabilities",
+    "src-tauri/Cargo.lock",
+    "src-tauri/Cargo.toml",
+    "src-tauri/icons/*.icns",
+    "src-tauri/icons/*.ico",
+    "src-tauri/icons/*.png",
+    "src-tauri/src",
+    "src-tauri/tauri.conf.json",
+    "src-tauri/tauri.macos.conf.json",
+    "tsconfig.json",
+    "tsconfig.node.json",
+    "vite.config.ts"
+  ],
   "dependencies": {
     "@ant-design/cssinjs": "^1.24.0",
     "@ant-design/icons": "^6.0.0",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@fontsource/plus-jakarta-sans": "^5.2.8",
-    "@lobehub/icons": "^5.2.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-autostart": "^2",
     "@tauri-apps/plugin-dialog": "^2",

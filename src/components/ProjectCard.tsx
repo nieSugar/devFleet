@@ -2,8 +2,8 @@ import React from "react";
 import { Select, Typography, Tooltip } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
-import { Cursor, Trae, Windsurf, Antigravity } from "@lobehub/icons";
 import { Project, NvmInfo, EditorStatus } from "../types/project";
+import EditorBrandIcon from "./EditorBrandIcon";
 import EditorButton from "./EditorButton";
 import NodeVersionSelect from "./NodeVersionSelect";
 import vscodeSvg from "../img/vscode.svg";
@@ -17,14 +17,14 @@ import "./ProjectCard.css";
 const EDITOR_ICONS: Record<string, React.ReactNode> = {
   vscode: <img alt="VSCode" src={vscodeSvg} draggable={false} />,
   "vscode-insiders": <img alt="VSCode Insiders" src={vscodeInsidersSvg} draggable={false} />,
-  cursor: <Cursor size={16} />,
-  windsurf: <Windsurf size={16} />,
-  trae: <Trae.Color size={16} />,
+  cursor: <EditorBrandIcon id="cursor" />,
+  windsurf: <EditorBrandIcon id="windsurf" />,
+  trae: <EditorBrandIcon id="trae" />,
   webstorm: <img alt="WebStorm" src={webstormSvg} draggable={false} />,
   idea: <img alt="IntelliJ IDEA" src={ideaSvg} draggable={false} />,
   zed: <img alt="Zed" src={zedSvg} draggable={false} />,
   kiro: <img alt="Kiro" src={kiroSvg} draggable={false} />,
-  antigravity: <Antigravity.Color size={16} />,
+  antigravity: <EditorBrandIcon id="antigravity" />,
 };
 
 interface ProjectCardProps {

@@ -420,7 +420,7 @@ fn option_takes_value(option: &str) -> bool {
 
 fn command_basename(token: &str) -> String {
     clean_token(token)
-        .rsplit(|c| c == '/' || c == '\\')
+        .rsplit(['/', '\\'])
         .next()
         .unwrap_or_default()
         .to_lowercase()
@@ -521,7 +521,7 @@ fn match_project<'a>(process: &RawNodeProcess, projects: &'a [Project]) -> Optio
 
 fn is_node_process_name(name: &str) -> bool {
     let lowered = name
-        .rsplit(|c| c == '/' || c == '\\')
+        .rsplit(['/', '\\'])
         .next()
         .unwrap_or(name)
         .trim()

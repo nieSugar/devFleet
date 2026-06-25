@@ -43,6 +43,12 @@ jobs:
       - name: Type check
         run: pnpm exec tsc --noEmit
 
+      - name: Build
+        run: pnpm build
+
+      - name: Package smoke test
+        run: pnpm pack:smoke
+
   backend:
     name: Rust Checks
     runs-on: ubuntu-latest
