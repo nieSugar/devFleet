@@ -151,7 +151,10 @@ async function waitForPreview(port: number, preview: ReturnType<typeof spawn>) {
   throw new Error(`vite preview did not become ready: ${lastError}`);
 }
 
-function stopProcessTree(child: ReturnType<typeof spawn>) {
+function stopProcessTree(
+  child: ReturnType<typeof spawn>,
+  signal: NodeJS.Signals = "SIGTERM",
+) {
   if (child.exitCode !== null || child.pid === undefined) {
     return;
   }
@@ -168,7 +171,11 @@ function stopProcessTree(child: ReturnType<typeof spawn>) {
     }
   }
 
-  child.kill("SIGTERM");
+  try {
+    process.kill(-child.pid, signal);
+  } catch {
+    child.kill(signal);
+  }
 }
 
 async function waitForExit(child: ReturnType<typeof spawn>, timeoutMs = 5000) {
@@ -212,6 +219,7 @@ async function smokePreview(packageDir: string) {
   const preview = spawn(invocation.command, invocation.args, {
     cwd: packageDir,
     env: process.env,
+    detached: process.platform !== "win32",
     stdio: ["ignore", "pipe", "pipe"],
   });
 
@@ -223,6 +231,10 @@ async function smokePreview(packageDir: string) {
   } finally {
     stopProcessTree(preview);
     await waitForExit(preview);
+    if (preview.exitCode === null) {
+      stopProcessTree(preview, "SIGKILL");
+      await waitForExit(preview);
+    }
   }
 }
 
