@@ -253,3 +253,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: gh release upload "v${APP_VERSION}" "$PORTABLE_ZIP" --clobber
+
+  publish-release:
+    needs: [prepare-release, publish-tauri]
+    if: ${{ needs.publish-tauri.result == 'success' }}
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish draft release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+        run: gh release edit "$RELEASE_TAG" --draft=false
