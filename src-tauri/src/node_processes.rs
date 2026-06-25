@@ -193,10 +193,7 @@ fn parse_lsof_address(value: &str) -> Option<(String, u16)> {
     let without_state = value.split(" (").next().unwrap_or(value);
     let (address, port_text) = without_state.rsplit_once(':')?;
     let port = port_text.parse::<u16>().ok()?;
-    Some((
-        address.trim_matches(|c| c == '[' || c == ']').to_string(),
-        port,
-    ))
+    Some((address.trim_matches(['[', ']']).to_string(), port))
 }
 
 fn infer_launch_command(
