@@ -190,7 +190,9 @@ fn parse_lsof_ports(stdout: &str) -> HashMap<u32, Vec<NodeProcessPort>> {
 
 #[cfg(unix)]
 fn parse_lsof_address(value: &str) -> Option<(String, u16)> {
-    let without_state = value.split(" (").next().unwrap_or(value);
+    let without_state = value
+        .split_once(" (")
+        .map_or(value, |(address, _state)| address);
     let (address, port_text) = without_state.rsplit_once(':')?;
     let port = port_text.parse::<u16>().ok()?;
     Some((address.trim_matches(['[', ']']).to_string(), port))
