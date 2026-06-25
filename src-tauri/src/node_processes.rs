@@ -532,6 +532,7 @@ fn is_node_process_name(name: &str) -> bool {
     )
 }
 
+#[cfg(target_os = "windows")]
 fn optional_string(value: Option<&Value>) -> Option<String> {
     match value {
         Some(Value::String(s)) => {
