@@ -74,7 +74,29 @@ jobs:
         working-directory: src-tauri
 
       - name: Clippy
-        run: cargo clippy -- -D warnings
+        shell: bash
+        run: |
+          set +e
+          output="$(cargo clippy -- -D warnings 2>&1)"
+          status=$?
+          printf '%s\n' "$output"
+
+          if [ "$status" -ne 0 ]; then
+            {
+              echo '### cargo clippy failed'
+              echo '```text'
+              printf '%s\n' "$output" | tail -n 120
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            message="$(
+              printf '%s\n' "$output" \
+                | tail -n 40 \
+                | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g'
+            )"
+            echo "::error title=cargo clippy failed::$message"
+            exit "$status"
+          fi
         working-directory: src-tauri
 
       - name: Build
