@@ -90,10 +90,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          - platform: macos-26
             args: '--target aarch64-apple-darwin'
-          - platform: macos-latest
+            rust_targets: 'aarch64-apple-darwin'
+          - platform: macos-26-intel
             args: '--target x86_64-apple-darwin'
+            rust_targets: 'x86_64-apple-darwin'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -128,7 +130,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+          targets: ${{ matrix.rust_targets }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
