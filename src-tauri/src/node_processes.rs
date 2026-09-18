@@ -68,7 +68,13 @@ pub fn kill_node_process(pid: u32) -> Result<(), String> {
         return Err(format!("未找到 PID {} 的 Node 进程", pid));
     }
 
-    platform_kill_process(pid)
+    // Windows 的 taskkill /T 会结束整棵树；Unix 的 kill 只处理指定 PID。
+    #[cfg(target_os = "windows")]
+    let kill_pid = resolve_node_kill_root_pid(pid, &platform_list_process_snapshots()?);
+    #[cfg(not(target_os = "windows"))]
+    let kill_pid = pid;
+
+    platform_kill_process(kill_pid)
 }
 
 fn enrich_process(process: RawNodeProcess, projects: &[Project]) -> NodeProcessInfo {
@@ -237,6 +243,69 @@ fn infer_launch_command(
     None
 }
 
+#[cfg(target_os = "windows")]
+fn resolve_node_kill_root_pid(pid: u32, snapshots: &HashMap<u32, RawProcessSnapshot>) -> u32 {
+    let mut kill_pid = pid;
+    let mut current_pid = Some(pid);
+    let mut visited = HashSet::new();
+
+    for _ in 0..10 {
+        let Some(candidate_pid) = current_pid else {
+            break;
+        };
+        if candidate_pid == std::process::id() || !visited.insert(candidate_pid) {
+            break;
+        }
+
+        let Some(snapshot) = snapshots.get(&candidate_pid) else {
+            break;
+        };
+
+        // 只沿 Node / shell 启动链追溯，不能穿过 DevFleet、编辑器等宿主。
+        if !is_node_process_name(&snapshot.name)
+            && !matches!(
+                command_basename(&snapshot.name).as_str(),
+                "cmd.exe" | "powershell.exe" | "pwsh.exe"
+            )
+        {
+            break;
+        }
+
+        if is_package_manager_node_snapshot(snapshot) {
+            kill_pid = candidate_pid;
+        }
+
+        current_pid = snapshot.parent_pid;
+    }
+
+    kill_pid
+}
+
+#[cfg(target_os = "windows")]
+fn is_package_manager_node_snapshot(snapshot: &RawProcessSnapshot) -> bool {
+    if !is_node_process_name(&snapshot.name)
+        && !snapshot
+            .executable
+            .as_deref()
+            .is_some_and(is_node_process_name)
+    {
+        return false;
+    }
+
+    let Some(command_line) = snapshot.command_line.as_deref() else {
+        return false;
+    };
+    let tokens = shell_words(command_line);
+    // ponytail: 只提升 shim 的直接 Node 入口；未知 Node 启动参数保守地不提升。
+    // 展示解析器会搜索所有参数，不能用它把普通脚本的 pnpm 参数当作进程身份。
+    tokens.get(1).is_some_and(|entrypoint| {
+        matches!(
+            command_basename(entrypoint).as_str(),
+            "npm-cli.js" | "pnpm.cjs" | "pnpm.mjs" | "yarn.js"
+        )
+    }) && parse_package_manager_command(command_line).is_some()
+}
+
 fn infer_project_script_command(process: &RawNodeProcess, project: &Project) -> Option<String> {
     let command_line = process.command_line.as_deref()?.to_lowercase();
 
@@ -309,7 +378,7 @@ fn package_manager_from_token(token: &str) -> Option<&'static str> {
 
     match base.as_str() {
         "npm" | "npm.cmd" | "npm.exe" | "npm-cli.js" => Some("npm"),
-        "pnpm" | "pnpm.cmd" | "pnpm.exe" | "pnpm.cjs" => Some("pnpm"),
+        "pnpm" | "pnpm.cmd" | "pnpm.exe" | "pnpm.cjs" | "pnpm.mjs" => Some("pnpm"),
         "yarn" | "yarn.cmd" | "yarn.exe" | "yarn.js" | "yarnpkg" | "yarnpkg.cmd" => Some("yarn"),
         "bun" | "bun.exe" => Some("bun"),
         _ if lower.contains("/npm/bin/npm-cli.js") => Some("npm"),
@@ -481,6 +550,15 @@ mod tests {
     }
 
     #[test]
+    fn parses_pnpm_mjs_run_command() {
+        let command = parse_package_manager_command(
+            r#""C:\node\node.exe" "C:\node\node_modules\pnpm\bin\pnpm.mjs" run dev"#,
+        );
+
+        assert_eq!(command.as_deref(), Some("pnpm run dev"));
+    }
+
+    #[test]
     fn matches_vite_project_script_command() {
         assert!(script_matches_command_line(
             "vite --host 127.0.0.1",
@@ -490,12 +568,159 @@ mod tests {
 
     #[cfg(target_os = "windows")]
     #[test]
+    fn resolves_package_manager_ancestor_as_kill_root() {
+        let mut snapshots = HashMap::new();
+        snapshots.insert(
+            100,
+            RawProcessSnapshot {
+                pid: 100,
+                parent_pid: Some(90),
+                name: "node.exe".to_string(),
+                executable: Some("C:\\node\\node.exe".to_string()),
+                command_line: Some(r#"node E:\repo\node_modules\vite\bin\vite.js"#.to_string()),
+            },
+        );
+        snapshots.insert(
+            90,
+            RawProcessSnapshot {
+                pid: 90,
+                parent_pid: Some(80),
+                name: "node.exe".to_string(),
+                executable: Some("C:\\node\\node.exe".to_string()),
+                command_line: Some(
+                    r#""C:\node\node.exe" "C:\node\node_modules\pnpm\bin\pnpm.cjs" dev"#
+                        .to_string(),
+                ),
+            },
+        );
+        snapshots.insert(
+            80,
+            RawProcessSnapshot {
+                pid: 80,
+                parent_pid: None,
+                name: "cmd.exe".to_string(),
+                executable: Some("C:\\Windows\\System32\\cmd.exe".to_string()),
+                command_line: Some("cmd /K pnpm dev".to_string()),
+            },
+        );
+
+        assert_eq!(resolve_node_kill_root_pid(100, &snapshots), 90);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn keeps_selected_pid_without_package_manager_ancestor() {
+        let mut snapshots = HashMap::new();
+        snapshots.insert(
+            100,
+            RawProcessSnapshot {
+                pid: 100,
+                parent_pid: Some(80),
+                name: "node.exe".to_string(),
+                executable: Some("C:\\node\\node.exe".to_string()),
+                command_line: Some("node server.js".to_string()),
+            },
+        );
+        snapshots.insert(
+            80,
+            RawProcessSnapshot {
+                pid: 80,
+                parent_pid: None,
+                name: "cmd.exe".to_string(),
+                executable: Some("C:\\Windows\\System32\\cmd.exe".to_string()),
+                command_line: Some("cmd /K node server.js".to_string()),
+            },
+        );
+
+        assert_eq!(resolve_node_kill_root_pid(100, &snapshots), 100);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn kill_root_does_not_cross_devfleet() {
+        let snapshots = HashMap::from([
+            (
+                100,
+                RawProcessSnapshot {
+                    pid: 100,
+                    parent_pid: Some(90),
+                    name: "node.exe".into(),
+                    executable: None,
+                    command_line: Some("node server.js".into()),
+                },
+            ),
+            (
+                90,
+                RawProcessSnapshot {
+                    pid: 90,
+                    parent_pid: Some(std::process::id()),
+                    name: "node.exe".into(),
+                    executable: None,
+                    command_line: Some("node pnpm.cjs dev".into()),
+                },
+            ),
+            (
+                std::process::id(),
+                RawProcessSnapshot {
+                    pid: std::process::id(),
+                    parent_pid: Some(80),
+                    name: "devfleet.exe".into(),
+                    executable: None,
+                    command_line: None,
+                },
+            ),
+            (
+                80,
+                RawProcessSnapshot {
+                    pid: 80,
+                    parent_pid: None,
+                    name: "node.exe".into(),
+                    executable: None,
+                    command_line: Some("node pnpm.cjs tauri dev".into()),
+                },
+            ),
+        ]);
+
+        assert_eq!(resolve_node_kill_root_pid(100, &snapshots), 90);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn package_manager_arguments_do_not_make_a_kill_root() {
+        let snapshot = RawProcessSnapshot {
+            pid: 90,
+            parent_pid: None,
+            name: "node.exe".into(),
+            executable: None,
+            command_line: Some("node orchestrator.js --package-manager pnpm run dev".into()),
+        };
+
+        assert!(!is_package_manager_node_snapshot(&snapshot));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
     fn parses_tasklist_csv_image_name() {
         let row = r#""node.exe","1240","Console","1","32,112 K""#;
 
         assert_eq!(first_csv_field(row).as_deref(), Some("node.exe"));
     }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn hidden_powershell_preserves_unicode() {
+        let output = powershell_output("'中文路径 Δ'", "读取测试输出失败").unwrap();
+
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap().trim(),
+            "中文路径 Δ"
+        );
+    }
 }
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "node_processes_windows_tests.rs"]
+mod windows_tests;
 
 fn match_project<'a>(process: &RawNodeProcess, projects: &'a [Project]) -> Option<&'a Project> {
     let haystack = [
@@ -551,12 +776,38 @@ fn optional_string(value: Option<&Value>) -> Option<String> {
 }
 
 #[cfg(target_os = "windows")]
-fn platform_list_node_processes() -> Result<Vec<RawNodeProcess>, String> {
+fn powershell_output(script: &str, error_prefix: &str) -> Result<std::process::Output, String> {
     use std::os::windows::process::CommandExt;
 
     const CREATE_NO_WINDOW: u32 = 0x08000000;
+    // 打包后的 GUI 无控制台，PowerShell 默认编码不一定是 UTF-8。
+    let script = format!(
+        "$ErrorActionPreference = 'Stop'; [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false);\n{}",
+        script
+    );
+    let output = Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &script,
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map_err(|e| format!("{}: {}", error_prefix, e))?;
+
+    if !output.status.success() {
+        return Err(command_error(error_prefix, &output));
+    }
+
+    Ok(output)
+}
+
+#[cfg(target_os = "windows")]
+fn platform_list_node_processes() -> Result<Vec<RawNodeProcess>, String> {
     let script = r#"
-$ErrorActionPreference = 'Stop'
 $items = Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
   Select-Object `
     @{Name='pid'; Expression={[uint32]$_.ProcessId}},
@@ -572,21 +823,7 @@ if ($null -eq $items) {
 }
 "#;
 
-    let output = Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            script,
-        ])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .map_err(|e| format!("读取 Node 进程失败: {}", e))?;
-
-    if !output.status.success() {
-        return Err(command_error("读取 Node 进程失败", &output));
-    }
+    let output = powershell_output(script, "读取 Node 进程失败")?;
 
     parse_windows_process_json(&String::from_utf8_lossy(&output.stdout))
 }
@@ -697,11 +934,7 @@ fn first_csv_field(row: &str) -> Option<String> {
 
 #[cfg(target_os = "windows")]
 fn platform_list_process_snapshots() -> Result<HashMap<u32, RawProcessSnapshot>, String> {
-    use std::os::windows::process::CommandExt;
-
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
     let script = r#"
-$ErrorActionPreference = 'Stop'
 $items = Get-CimInstance Win32_Process |
   Select-Object `
     @{Name='pid'; Expression={[uint32]$_.ProcessId}},
@@ -716,21 +949,7 @@ if ($null -eq $items) {
 }
 "#;
 
-    let output = Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            script,
-        ])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .map_err(|e| format!("读取进程父链失败: {}", e))?;
-
-    if !output.status.success() {
-        return Err(command_error("读取进程父链失败", &output));
-    }
+    let output = powershell_output(script, "读取进程父链失败")?;
 
     parse_windows_snapshot_json(&String::from_utf8_lossy(&output.stdout))
 }
@@ -780,11 +999,7 @@ fn parse_windows_snapshot_value(value: &Value) -> Option<RawProcessSnapshot> {
 
 #[cfg(target_os = "windows")]
 fn platform_list_process_ports() -> Result<HashMap<u32, Vec<NodeProcessPort>>, String> {
-    use std::os::windows::process::CommandExt;
-
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
     let script = r#"
-$ErrorActionPreference = 'Stop'
 $tcp = @()
 $udp = @()
 try {
@@ -813,21 +1028,7 @@ if ($items.Count -eq 0) {
 }
 "#;
 
-    let output = Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            script,
-        ])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .map_err(|e| format!("读取端口占用失败: {}", e))?;
-
-    if !output.status.success() {
-        return Err(command_error("读取端口占用失败", &output));
-    }
+    let output = powershell_output(script, "读取端口占用失败")?;
 
     parse_port_json(&String::from_utf8_lossy(&output.stdout))
 }
@@ -837,9 +1038,10 @@ fn platform_kill_process(pid: u32) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
 
     const CREATE_NO_WINDOW: u32 = 0x08000000;
-    let pid_text = pid.to_string();
-    let output = Command::new("taskkill")
-        .args(["/PID", &pid_text, "/T", "/F"])
+    // taskkill 的错误消息也会被按 UTF-8 读取，固定隐藏控制台的 code page。
+    let command = format!("chcp 65001 >nul & taskkill /PID {} /T /F", pid);
+    let output = Command::new("cmd")
+        .args(["/D", "/C", &command])
         .creation_flags(CREATE_NO_WINDOW)
         .output()
         .map_err(|e| format!("结束 Node 进程失败: {}", e))?;

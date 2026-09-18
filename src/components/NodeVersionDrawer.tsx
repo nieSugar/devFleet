@@ -530,8 +530,8 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   }, [checkPathStatus]);
 
   const loadNodeProcesses = useCallback(
-    async (notifyError = true) => {
-      if (processLoadInFlightRef.current) return;
+    async (notifyError = true, force = false) => {
+      if (processLoadInFlightRef.current && !force) return;
 
       const requestId = processLoadRequestIdRef.current + 1;
       processLoadRequestIdRef.current = requestId;
@@ -552,7 +552,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       } finally {
         if (processLoadRequestIdRef.current === requestId) {
           processLoadInFlightRef.current = false;
-          if (notifyError) setProcessLoading(false);
+          setProcessLoading(false);
         }
       }
     },
@@ -745,7 +745,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
           messageApi.success(
             result.data?.message || t("nodeDrawer.processes.killSuccess")
           );
-          await loadNodeProcesses(false);
+          await loadNodeProcesses(false, true);
         } else {
           messageApi.error(result.error || t("nodeDrawer.processes.killFailed"));
         }

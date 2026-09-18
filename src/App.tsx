@@ -32,10 +32,16 @@ const AppContent: React.FC = () => {
   const [router] = useState(createAppRouter);
   const antdLocale = useMemo(() => resolveAntdLocale(i18n.language), [i18n.language]);
   const antdTheme = useMemo(() => getDevFleetAntdThemeConfig(isDark), [isDark]);
+  const antdCsp = useMemo(() => {
+    // Tauri 给入口 style 注入随机 nonce；动态样式必须复用它才能通过生产 CSP。
+    const nonce = document.querySelector<HTMLStyleElement>("style[nonce]")?.nonce;
+    return nonce ? { nonce } : undefined;
+  }, []);
   const appTree = (
     <ConfigProvider
       locale={antdLocale}
       theme={antdTheme}
+      csp={antdCsp}
     >
       <AntdApp>
         <ErrorBoundary>
