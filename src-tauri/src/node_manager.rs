@@ -242,7 +242,7 @@ pub fn install_version(version: &str) -> Result<String, String> {
 
     // 如果没有当前版本（首次安装），自动设为当前版本并创建 current link
     if get_current_version().is_none() {
-        config::save_builtin_current_version(Some(ver));
+        config::save_builtin_current_version(Some(ver))?;
         update_current_link(ver);
     }
 
@@ -255,7 +255,7 @@ pub fn switch_version(version: &str) -> Result<String, String> {
     if get_bin_dir(ver).is_none() {
         return Err(format!("Node.js v{} 未安装", ver));
     }
-    config::save_builtin_current_version(Some(ver));
+    config::save_builtin_current_version(Some(ver))?;
     update_current_link(ver);
     Ok(format!("已切换到 Node.js v{}", ver))
 }
@@ -594,7 +594,7 @@ pub fn uninstall_version(version: &str) -> Result<String, String> {
 
     if let Some(current) = get_current_version() {
         if current == ver {
-            config::save_builtin_current_version(None::<&str>);
+            config::save_builtin_current_version(None::<&str>)?;
         }
     }
 

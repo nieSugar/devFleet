@@ -5,7 +5,10 @@
 // crate:: 前缀表示从当前 crate（项目）的其他模块导入
 use crate::config;
 use crate::detector;
-use crate::models::{IpcResponse, NodeVersionManager, PackageManager, ProjectConfig};
+use crate::editors;
+use crate::models::{
+    CustomEditor, EditorCache, IpcResponse, NodeVersionManager, PackageManager, ProjectConfig,
+};
 use crate::project;
 use crate::shell_context;
 use std::process::Command;
@@ -114,8 +117,11 @@ pub async fn refresh_project_config() -> IpcResponse {
             }
         }
 
-        config::save(&cfg);
-        IpcResponse::ok(cfg)
+        if config::save(&cfg) {
+            IpcResponse::ok(cfg)
+        } else {
+            IpcResponse::err("刷新后保存配置失败")
+        }
     })
     .await
     .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
@@ -340,31 +346,123 @@ pub async fn kill_node_process(pid: u32) -> IpcResponse {
 
 // ── 编辑器命令 ──
 
-/// 检测系统中安装了哪些代码编辑器（带缓存，force=true 时强制重新检测）
-#[tauri::command]
-pub async fn detect_editors(force: Option<bool>) -> IpcResponse {
-    tokio::task::spawn_blocking(move || {
-        if force != Some(true) {
-            if let Some(cached) = config::load_editor_cache() {
-                return IpcResponse::ok(cached);
-            }
-        }
+#[cfg(target_os = "linux")]
+async fn render_editor_views(
+    app: tauri::AppHandle,
+    editors: EditorCache,
+    custom_editors: Vec<CustomEditor>,
+) -> IpcResponse {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    if let Err(error) = app.run_on_main_thread(move || {
+        let _ = sender.send(crate::editors::project_editor_views(
+            &editors,
+            &custom_editors,
+        ));
+    }) {
+        return IpcResponse::err(format!("调度 Linux 图标解析失败: {}", error));
+    }
+    match receiver.await {
+        Ok(views) => IpcResponse::ok(views),
+        Err(_) => IpcResponse::err("Linux 图标解析任务未返回结果"),
+    }
+}
 
-        let editors = detector::detect_editors();
-        config::save_editor_cache(&editors);
-        IpcResponse::ok(editors)
+#[cfg(not(target_os = "linux"))]
+async fn render_editor_views(
+    _app: tauri::AppHandle,
+    editors: EditorCache,
+    custom_editors: Vec<CustomEditor>,
+) -> IpcResponse {
+    tokio::task::spawn_blocking(move || {
+        IpcResponse::ok(crate::editors::project_editor_views(
+            &editors,
+            &custom_editors,
+        ))
     })
     .await
-    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
+    .unwrap_or_else(|error| IpcResponse::err(format!("图标解析失败: {}", error)))
+}
+
+/// 检测系统中安装了哪些代码编辑器（带缓存，force=true 时强制重新检测）
+#[tauri::command]
+pub async fn detect_editors(app: tauri::AppHandle, force: Option<bool>) -> IpcResponse {
+    let editors = tokio::task::spawn_blocking(
+        move || -> Result<(EditorCache, Vec<CustomEditor>), String> {
+            let editors = if force == Some(true) {
+                crate::icons::clear_cache();
+                let editors = detector::detect_editors();
+                config::save_editor_cache(&editors)
+                    .map_err(|error| format!("保存编辑器缓存失败: {}", error))?;
+                editors
+            } else {
+                match config::load_editor_cache() {
+                    Ok(Some(cached)) => cached,
+                    Ok(None) => {
+                        let editors = detector::detect_editors();
+                        config::save_editor_cache(&editors)
+                            .map_err(|error| format!("保存编辑器缓存失败: {}", error))?;
+                        editors
+                    }
+                    Err(error) => return Err(error),
+                }
+            };
+            let custom_editors = config::load_custom_editors()?;
+            Ok((editors, custom_editors))
+        },
+    )
+    .await;
+
+    match editors {
+        Ok(Ok((editors, custom_editors))) => {
+            render_editor_views(app, editors, custom_editors).await
+        }
+        Ok(Err(error)) => IpcResponse::err(error),
+        Err(error) => IpcResponse::err(format!("内部错误: {}", error)),
+    }
+}
+
+#[tauri::command]
+pub fn upsert_custom_editor(request: editors::UpsertCustomEditorRequest) -> IpcResponse {
+    match editors::upsert_custom_editor(request) {
+        Ok(editor) => IpcResponse::ok(editor),
+        Err(error) => IpcResponse::err(error),
+    }
+}
+
+#[tauri::command]
+pub fn remove_custom_editor(editor_id: String) -> IpcResponse {
+    match editors::remove_custom_editor(&editor_id) {
+        Ok(editor) => IpcResponse::ok(editor),
+        Err(error) => IpcResponse::err(error),
+    }
+}
+
+#[tauri::command]
+pub async fn discover_editor_candidates() -> IpcResponse {
+    tokio::task::spawn_blocking(|| match crate::candidates::discover_editor_candidates() {
+        Ok(result) => IpcResponse::ok(result),
+        Err(error) => IpcResponse::err(error),
+    })
+    .await
+    .unwrap_or_else(|error| IpcResponse::err(format!("候选扫描失败: {}", error)))
+}
+
+#[tauri::command]
+pub fn import_editor_candidate(
+    request: crate::candidates::ImportEditorCandidateRequest,
+) -> IpcResponse {
+    match crate::candidates::import_editor_candidate(request) {
+        Ok(editor) => IpcResponse::ok(editor),
+        Err(error) => IpcResponse::err(error),
+    }
 }
 
 /// 用指定编辑器打开项目
 #[tauri::command]
 pub fn open_in_editor(editor: String, project_path: String) -> IpcResponse {
-    if detector::open_editor(&editor, &project_path) {
-        IpcResponse::ok(serde_json::json!({ "message": "已打开编辑器" }))
-    } else {
-        IpcResponse::err("未找到对应编辑器或命令不可用")
+    match editors::open_editor(&editor, &project_path) {
+        Ok(()) => IpcResponse::ok(serde_json::json!({ "message": "已打开编辑器" })),
+        Err(error) => IpcResponse::err(error),
     }
 }
 
@@ -414,8 +512,10 @@ pub fn set_node_mirror(mirror: String) -> IpcResponse {
     } else {
         Some(mirror.trim())
     };
-    config::save_node_mirror(value);
-    IpcResponse::ok_msg("镜像地址已更新")
+    match config::save_node_mirror(value) {
+        Ok(()) => IpcResponse::ok_msg("镜像地址已更新"),
+        Err(e) => IpcResponse::err(format!("保存镜像地址失败: {}", e)),
+    }
 }
 
 fn resolve_manager(manager: Option<String>) -> NodeVersionManager {
@@ -558,8 +658,10 @@ pub fn set_node_install_dir(dir: String) -> IpcResponse {
         }
         Some(dir.trim())
     };
-    config::save_node_install_dir(value);
-    IpcResponse::ok_msg("安装目录已更新")
+    match config::save_node_install_dir(value) {
+        Ok(()) => IpcResponse::ok_msg("安装目录已更新"),
+        Err(e) => IpcResponse::err(format!("保存安装目录失败: {}", e)),
+    }
 }
 
 /// 设置项目的 Node 版本（写入对应的版本文件，如 .nvmrc）

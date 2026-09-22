@@ -131,8 +131,11 @@ pub fn add_to_config(project_path: &str) -> Result<Project, bool> {
     }
 
     config.projects.push(project.clone());
-    config::save(&config);
-    Ok(project)
+    if config::save(&config) {
+        Ok(project)
+    } else {
+        Err(false)
+    }
 }
 
 /// 从配置中删除指定 ID 的项目

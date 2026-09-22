@@ -3,29 +3,10 @@ import { Select, Typography, Tooltip } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { Project, NvmInfo, EditorStatus } from "../types/project";
-import EditorBrandIcon from "./EditorBrandIcon";
 import EditorButton from "./EditorButton";
 import NodeVersionSelect from "./NodeVersionSelect";
-import vscodeSvg from "../img/vscode.svg";
-import vscodeInsidersSvg from "../img/vscode-insiders.svg";
-import webstormSvg from "../img/webstorm.svg";
-import ideaSvg from "../img/idea.svg";
-import zedSvg from "../img/zed.svg";
-import kiroSvg from "../img/kiro.svg";
 import "./ProjectCard.css";
 
-const EDITOR_ICONS: Record<string, React.ReactNode> = {
-  vscode: <img alt="VSCode" src={vscodeSvg} draggable={false} />,
-  "vscode-insiders": <img alt="VSCode Insiders" src={vscodeInsidersSvg} draggable={false} />,
-  cursor: <EditorBrandIcon id="cursor" />,
-  windsurf: <EditorBrandIcon id="windsurf" />,
-  trae: <EditorBrandIcon id="trae" />,
-  webstorm: <img alt="WebStorm" src={webstormSvg} draggable={false} />,
-  idea: <img alt="IntelliJ IDEA" src={ideaSvg} draggable={false} />,
-  zed: <img alt="Zed" src={zedSvg} draggable={false} />,
-  kiro: <img alt="Kiro" src={kiroSvg} draggable={false} />,
-  antigravity: <EditorBrandIcon id="antigravity" />,
-};
 
 interface ProjectCardProps {
   project: Project;
@@ -130,10 +111,14 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
         <div className="card-editors">
           {editors && Object.entries(editors)
             .filter(([, info]) => info.installed)
+            .sort(
+              ([idA, infoA], [idB, infoB]) =>
+                infoA.name.localeCompare(infoB.name) || idA.localeCompare(idB),
+            )
             .map(([id, info]) => (
               <EditorButton
                 key={id}
-                icon={EDITOR_ICONS[id]}
+                icon={info.icon}
                 alt={info.name}
                 title={info.name}
                 onClick={() => editorAction(id)}

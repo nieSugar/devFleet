@@ -3,7 +3,7 @@
 
 [package]
 name = "devfleet"
-version = "2.1.14"
+version = "2.1.15"
 description = "用于快速启动项目与编辑器"
 authors = ["nieSugar"]
 # edition 指定 Rust 版本规范（不是编译器版本，是语言特性集）
@@ -37,6 +37,8 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 # serde_json: JSON 格式的 serde 实现（类似 JSON.parse/stringify）
 serde_json = { version = "1", features = ["preserve_order"] }
+base64 = "=0.22.1"
+png = "=0.17.16"
 
 # dirs: 跨平台获取标准目录路径（如配置目录、主目录）
 dirs = "6"
@@ -55,7 +57,7 @@ zip = "2"
 flate2 = "1"
 tar = "0.4"
 # tokio: 异步运行时（仅用 spawn_blocking 将阻塞操作移出 async 线程）
-tokio = { version = "1", features = ["rt"] }
+tokio = { version = "1", features = ["rt", "sync"] }
 # Tauri 自动更新插件
 tauri-plugin-updater = "2"
 # Tauri 进程管理插件（提供 relaunch 能力）
@@ -63,13 +65,22 @@ tauri-plugin-process = "2"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
+windows = { version = "=0.61.3", features = ["Win32_Graphics_Gdi", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-autostart = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 include_dir = "0.7"
+objc2 = { version = "=0.6.4" }
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSWorkspace", "NSImage", "NSBitmapImageRep", "NSImageRep", "NSGraphics", "NSGraphicsContext"] }
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSString", "NSGeometry", "objc2-core-foundation"] }
 sys-locale = "0.3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gdk-pixbuf = { version = "=0.18.5", default-features = false }
+gio = { version = "0.18.4", default-features = false }
+gtk = { version = "=0.18.2", default-features = false }
 
 [profile.release]
 # release 编译优化配置（cargo build --release 时生效）

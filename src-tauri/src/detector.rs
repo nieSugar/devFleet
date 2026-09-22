@@ -2,31 +2,15 @@
 // 核心思路：通过检查 lock 文件是否存在、CLI 命令是否可用来判断用户安装了什么
 
 use crate::models::{
-    EditorInfo, NodeVersion, NodeVersionManager, NvmInfo, PackageManager, RemoteNodeVersion,
+    EditorInfo, EditorLaunch, NodeVersion, NodeVersionManager, NvmInfo, PackageManager,
+    RemoteNodeVersion,
 };
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{LazyLock, OnceLock};
 use std::time::{Duration, Instant};
-
-/// 回收子进程退出状态，通过单一 reaper 线程避免 Unix 上产生僵尸进程
-fn detach_child(result: std::io::Result<std::process::Child>) -> bool {
-    static REAPER_TX: OnceLock<std::sync::mpsc::Sender<std::process::Child>> = OnceLock::new();
-    let tx = REAPER_TX.get_or_init(|| {
-        let (tx, rx) = std::sync::mpsc::channel::<std::process::Child>();
-        std::thread::spawn(move || {
-            for mut child in rx {
-                let _ = child.wait();
-            }
-        });
-        tx
-    });
-    match result {
-        Ok(child) => tx.send(child).is_ok(),
-        Err(_) => false,
-    }
-}
 
 /// Windows 上创建隐藏窗口的 cmd.exe Command，避免弹出黑色控制台窗口
 fn new_cmd() -> Command {
@@ -90,7 +74,7 @@ pub fn detect_package_manager(project_path: &str) -> PackageManager {
 // 分层检测策略（命中即停，后续层不执行）：
 //   Layer 1: OS 原生注册信息 — Win Registry / macOS .app / Linux .desktop（微秒级）
 //   Layer 2: 已知安装路径探测 — fs::exists（微秒级）
-//   Layer 3: CLI 兜底 — spawn 子进程（秒级，并发执行）
+//   Layer 3: PATH/PATHEXT 兜底 — 只解析并检查文件，不启动目标程序
 
 /// 编辑器规格表
 #[allow(dead_code)]
@@ -307,7 +291,100 @@ fn expand_env_path(template: &str) -> Option<PathBuf> {
     Some(PathBuf::from(result))
 }
 
+fn executable_launch(path: PathBuf) -> EditorLaunch {
+    EditorLaunch::Executable {
+        path: path.to_string_lossy().into_owned(),
+        args: Vec::new(),
+        working_directory: None,
+    }
+}
+
+fn editor_info(spec: &EditorSpec, launch: Option<EditorLaunch>) -> EditorInfo {
+    let icon_source = launch.as_ref().and_then(|launch| match launch {
+        EditorLaunch::Executable { path, .. }
+        | EditorLaunch::MacApp { path }
+        | EditorLaunch::DesktopEntry { path } => Some(path.clone()),
+        EditorLaunch::KnownWindowsBatch { .. } => None,
+    });
+    EditorInfo {
+        name: spec.name.to_string(),
+        installed: launch.is_some(),
+        launch,
+        icon_source,
+    }
+}
+
+fn resolve_command_in_path(
+    command: &str,
+    path_value: &OsStr,
+    extensions: &[String],
+) -> Option<PathBuf> {
+    if command.is_empty() || command.contains(['\0', '/', '\\']) {
+        return None;
+    }
+
+    let command_extension = Path::new(command)
+        .extension()
+        .and_then(|extension| extension.to_str());
+    let names = if let Some(command_extension) = command_extension {
+        if extensions.iter().any(|extension| {
+            extension.is_empty()
+                || extension
+                    .trim_start_matches('.')
+                    .eq_ignore_ascii_case(command_extension)
+        }) {
+            vec![command.to_string()]
+        } else {
+            Vec::new()
+        }
+    } else {
+        extensions
+            .iter()
+            .map(|extension| format!("{}{}", command, extension))
+            .collect()
+    };
+
+    std::env::split_paths(path_value)
+        .filter(|dir| dir.is_absolute())
+        .find_map(|dir| {
+            names
+                .iter()
+                .map(|name| dir.join(name))
+                .find(|candidate| candidate.is_file())
+        })
+}
+
+#[cfg(unix)]
+fn is_unix_executable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    path.metadata()
+        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
 // ── Layer 1: OS 原生应用注册信息 ──
+
+#[cfg(target_os = "windows")]
+fn is_windows_exe(path: &Path) -> bool {
+    path.is_absolute()
+        && path.is_file()
+        && path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+}
+
+#[cfg(target_os = "windows")]
+fn is_windows_batch(path: &Path) -> bool {
+    path.is_absolute()
+        && path.is_file()
+        && path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| {
+                extension.eq_ignore_ascii_case("cmd") || extension.eq_ignore_ascii_case("bat")
+            })
+}
 
 /// 从注册表命令字符串中提取 exe 路径
 /// 格式如: "C:\...\Code.exe" "--open-url" -- "%1"
@@ -320,7 +397,7 @@ fn parse_exe_from_command(cmd: &str) -> Option<PathBuf> {
         trimmed.split_whitespace().next()
     }?;
     let p = PathBuf::from(path_str);
-    if p.exists() {
+    if is_windows_exe(&p) {
         Some(p)
     } else {
         None
@@ -355,7 +432,7 @@ fn find_exe_via_registry(spec: &EditorSpec) -> Option<PathBuf> {
             if let Ok(key) = RegKey::predef(root).open_subkey(&sub) {
                 if let Ok(exe_str) = key.get_value::<String, _>("") {
                     let p = PathBuf::from(exe_str.trim_matches('"'));
-                    if p.exists() {
+                    if is_windows_exe(&p) {
                         return Some(p);
                     }
                 }
@@ -390,7 +467,7 @@ fn find_jetbrains_exe(product_name: &str, exe_name: &str) -> Option<PathBuf> {
                     let exe = PathBuf::from(location.trim_matches('"'))
                         .join("bin")
                         .join(exe_name);
-                    if exe.exists() {
+                    if is_windows_exe(&exe) {
                         return Some(exe);
                     }
                 }
@@ -400,46 +477,47 @@ fn find_jetbrains_exe(product_name: &str, exe_name: &str) -> Option<PathBuf> {
     None
 }
 
-/// Linux: 解析 .desktop 文件中的 Exec= 行获取可执行文件路径
+/// Linux: 从标准目录找到可由 GIO 加载的 .desktop 文件。
 #[cfg(target_os = "linux")]
-fn parse_desktop_exec(desktop_path: &Path) -> Option<PathBuf> {
-    let content = std::fs::read_to_string(desktop_path).ok()?;
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("Exec=") {
-            let exec = trimmed.trim_start_matches("Exec=");
-            let exe = exec.split_whitespace().next()?;
-            return Some(PathBuf::from(exe));
-        }
-    }
-    None
+fn linux_desktop_dirs() -> Vec<PathBuf> {
+    let data_home = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .filter(|path| path.is_absolute())
+                .map(|path| path.join(".local/share"))
+        });
+    let mut dirs: Vec<PathBuf> = data_home
+        .into_iter()
+        .map(|path| path.join("applications"))
+        .collect();
+
+    let data_dirs = std::env::var_os("XDG_DATA_DIRS")
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| std::ffi::OsString::from("/usr/local/share:/usr/share"));
+    dirs.extend(
+        std::env::split_paths(&data_dirs)
+            .filter(|path| path.is_absolute())
+            .map(|path| path.join("applications")),
+    );
+    dirs.extend([
+        PathBuf::from("/var/lib/snapd/desktop/applications"),
+        PathBuf::from("/var/lib/flatpak/exports/share/applications"),
+    ]);
+    dirs.dedup();
+    dirs
 }
 
-/// Linux: 从标准 .desktop 文件目录检测编辑器
 #[cfg(target_os = "linux")]
-fn find_exe_via_desktop_file(spec: &EditorSpec) -> Option<PathBuf> {
-    const DESKTOP_DIRS: &[&str] = &[
-        "/usr/share/applications",
-        "/usr/local/share/applications",
-        "/var/lib/snapd/desktop/applications",
-        "/var/lib/flatpak/exports/share/applications",
-    ];
-    let home = std::env::var("HOME").ok();
-
+fn find_desktop_entry(spec: &EditorSpec) -> Option<PathBuf> {
     for name in spec.linux_desktop_names {
         let filename = format!("{}.desktop", name);
-        for dir in DESKTOP_DIRS {
-            let p = Path::new(dir).join(&filename);
-            if let Some(exe) = parse_desktop_exec(&p) {
-                return Some(exe);
-            }
-        }
-        if let Some(ref h) = home {
-            let p = Path::new(h)
-                .join(".local/share/applications")
-                .join(&filename);
-            if let Some(exe) = parse_desktop_exec(&p) {
-                return Some(exe);
+        for dir in linux_desktop_dirs() {
+            let p = dir.join(&filename);
+            if p.is_file() && gio::DesktopAppInfo::from_filename(&p).is_some() {
+                return Some(p);
             }
         }
     }
@@ -453,111 +531,156 @@ fn find_exe_via_desktop_file(spec: &EditorSpec) -> Option<PathBuf> {
 fn find_win_exe(spec: &EditorSpec) -> Option<PathBuf> {
     spec.win_paths
         .iter()
-        .find_map(|p| expand_env_path(p).filter(|ep| ep.exists()))
+        .find_map(|p| expand_env_path(p).filter(|path| is_windows_exe(path)))
+}
+
+#[cfg(target_os = "windows")]
+fn find_win_batch(spec: &EditorSpec) -> Option<PathBuf> {
+    spec.win_paths
+        .iter()
+        .find_map(|p| expand_env_path(p).filter(|path| is_windows_batch(path)))
 }
 
 #[cfg(target_os = "linux")]
 fn find_linux_exe(spec: &EditorSpec) -> Option<PathBuf> {
     spec.linux_paths
         .iter()
-        .find_map(|p| expand_env_path(p).filter(|ep| ep.exists()))
+        .find_map(|p| expand_env_path(p).filter(|path| is_unix_executable(path)))
 }
 
 // ── 综合快速检测 ──
 
-/// 依次尝试 OS 原生检测 → 已知路径（全部微秒级，零子进程）
-fn is_editor_found_fast(spec: &EditorSpec) -> bool {
+/// 依次尝试 OS 原生注册信息 → 已知路径，并保留真实启动目标。
+fn find_editor_fast(spec: &EditorSpec) -> Option<EditorLaunch> {
     #[cfg(target_os = "windows")]
     {
-        if find_exe_via_registry(spec).is_some() {
-            return true;
+        if let Some(path) = find_exe_via_registry(spec) {
+            return Some(executable_launch(path));
         }
-        if spec
-            .win_paths
-            .iter()
-            .any(|p| expand_env_path(p).map(|ep| ep.exists()).unwrap_or(false))
-        {
-            return true;
-        }
-        // 直装版 JetBrains：枚举 SOFTWARE\JetBrains\{product}\* 注册表
         if let Some((product, exe)) = spec.win_jetbrains {
-            if find_jetbrains_exe(product, exe).is_some() {
-                return true;
+            if let Some(path) = find_jetbrains_exe(product, exe) {
+                return Some(executable_launch(path));
             }
         }
-        return false;
+        if let Some(path) = find_win_exe(spec) {
+            return Some(executable_launch(path));
+        }
+        if let Some(path) = find_win_batch(spec) {
+            return Some(EditorLaunch::KnownWindowsBatch {
+                adapter_id: spec.id.to_string(),
+                path: path.to_string_lossy().into_owned(),
+            });
+        }
+        return None;
     }
 
     #[cfg(target_os = "macos")]
     {
-        return spec.mac_apps.iter().any(|app| {
-            Path::new(&format!("/Applications/{}.app", app)).exists()
-                || std::env::var("HOME")
-                    .ok()
-                    .map(|h| Path::new(&format!("{}/Applications/{}.app", h, app)).exists())
-                    .unwrap_or(false)
-        });
+        for app in spec.mac_apps {
+            let system = Path::new("/Applications").join(format!("{}.app", app));
+            if system.is_dir() {
+                return Some(EditorLaunch::MacApp {
+                    path: system.to_string_lossy().into_owned(),
+                });
+            }
+            if let Ok(home) = std::env::var("HOME") {
+                let user = Path::new(&home)
+                    .join("Applications")
+                    .join(format!("{}.app", app));
+                if user.is_dir() {
+                    return Some(EditorLaunch::MacApp {
+                        path: user.to_string_lossy().into_owned(),
+                    });
+                }
+            }
+        }
+        return None;
     }
 
     #[cfg(target_os = "linux")]
     {
-        return find_exe_via_desktop_file(spec).is_some()
-            || spec
-                .linux_paths
-                .iter()
-                .any(|p| expand_env_path(p).map(|ep| ep.exists()).unwrap_or(false));
+        if let Some(path) = find_desktop_entry(spec) {
+            return Some(EditorLaunch::DesktopEntry {
+                path: path.to_string_lossy().into_owned(),
+            });
+        }
+        return find_linux_exe(spec).map(executable_launch);
     }
 
     #[allow(unreachable_code)]
-    false
+    None
 }
 
-/// 通过 CLI 命令检测是否可用（慢，需要 spawn 进程，带 5 秒超时）
-fn is_command_available(cmd: &str) -> bool {
-    let child = if cfg!(target_os = "windows") {
-        new_cmd()
-            .args(["/C", &format!("{} --version", cmd)])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-    } else {
-        Command::new("sh")
-            .args(["-c", &format!("command -v {} >/dev/null 2>&1", cmd)])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-    };
-    match child {
-        Ok(mut c) => {
-            let deadline = Instant::now() + Duration::from_secs(5);
-            loop {
-                match c.try_wait() {
-                    Ok(Some(s)) => return s.success(),
-                    Ok(None) if Instant::now() >= deadline => {
-                        let _ = c.kill();
-                        let _ = c.wait();
-                        return false;
-                    }
-                    Ok(None) => std::thread::sleep(Duration::from_millis(50)),
-                    Err(_) => return false,
+fn find_editor_in_path(spec: &EditorSpec) -> Option<EditorLaunch> {
+    let path = std::env::var_os("PATH")?;
+
+    #[cfg(target_os = "windows")]
+    {
+        let extensions: Vec<String> = std::env::var("PATHEXT")
+            .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string())
+            .split(';')
+            .filter(|extension| !extension.is_empty())
+            .map(|extension| {
+                let extension = extension.trim();
+                if extension.starts_with('.') {
+                    extension.to_string()
+                } else {
+                    format!(".{}", extension)
+                }
+            })
+            .collect();
+
+        for wanted in ["exe", "cmd", "bat"] {
+            let allowed: Vec<String> = extensions
+                .iter()
+                .filter(|extension| {
+                    extension
+                        .trim_start_matches('.')
+                        .eq_ignore_ascii_case(wanted)
+                })
+                .cloned()
+                .collect();
+            for command in spec.cli_cmds {
+                if let Some(path) = resolve_command_in_path(command, &path, &allowed) {
+                    return if wanted == "exe" {
+                        Some(executable_launch(path))
+                    } else {
+                        Some(EditorLaunch::KnownWindowsBatch {
+                            adapter_id: spec.id.to_string(),
+                            path: path.to_string_lossy().into_owned(),
+                        })
+                    };
                 }
             }
         }
-        Err(_) => false,
+        return None;
     }
+
+    #[cfg(unix)]
+    {
+        let extensions = vec![String::new()];
+        return spec.cli_cmds.iter().find_map(|command| {
+            resolve_command_in_path(command, &path, &extensions)
+                .filter(|path| is_unix_executable(path))
+                .map(executable_launch)
+        });
+    }
+
+    #[allow(unreachable_code)]
+    None
 }
 
 /// macOS: 通过 Spotlight 索引批量检测已安装的 .app（单次 mdfind 调用，毫秒级）
 /// 用于覆盖未安装在 /Applications 或 ~/Applications 的应用（如 JetBrains Toolbox 安装的 IDE）
 #[cfg(target_os = "macos")]
-fn find_installed_mac_apps(specs: &[&EditorSpec]) -> std::collections::HashSet<String> {
+fn find_installed_mac_apps(specs: &[&EditorSpec]) -> HashMap<String, PathBuf> {
     let all_apps: Vec<&str> = specs
         .iter()
         .flat_map(|s| s.mac_apps.iter().copied())
         .collect();
 
     if all_apps.is_empty() {
-        return std::collections::HashSet::new();
+        return HashMap::new();
     }
 
     let conditions: Vec<String> = all_apps
@@ -573,14 +696,18 @@ fn find_installed_mac_apps(specs: &[&EditorSpec]) -> std::collections::HashSet<S
     cmd.arg(&query);
     let output = output_with_timeout(cmd, DISCOVERY_TIMEOUT_SECS);
 
-    let mut found = std::collections::HashSet::new();
+    let mut found = HashMap::new();
     if let Ok(o) = output {
         if o.status.success() {
             let text = String::from_utf8_lossy(&o.stdout);
             for line in text.lines() {
                 let path = Path::new(line.trim());
-                if let Some(stem) = path.file_stem() {
-                    found.insert(stem.to_string_lossy().to_string());
+                if path.is_absolute() && path.is_dir() {
+                    if let Some(stem) = path.file_stem() {
+                        found
+                            .entry(stem.to_string_lossy().to_string())
+                            .or_insert_with(|| path.to_path_buf());
+                    }
                 }
             }
         }
@@ -588,165 +715,193 @@ fn find_installed_mac_apps(specs: &[&EditorSpec]) -> std::collections::HashSet<S
     found
 }
 
-/// 检测所有已知编辑器，返回 { id: EditorInfo } 映射
-/// 快速检测（Registry / .app / .desktop + 已知路径）未命中的，并发走 CLI 兜底
+/// 检测所有已知编辑器，返回带真实启动目标的 { id: EditorInfo } 映射。
 pub fn detect_editors() -> HashMap<String, EditorInfo> {
     let mut result = HashMap::new();
-    let mut need_cli: Vec<&EditorSpec> = Vec::new();
+    let mut unresolved: Vec<&EditorSpec> = Vec::new();
 
     for spec in EDITORS {
-        if is_editor_found_fast(spec) {
-            result.insert(
-                spec.id.to_string(),
-                EditorInfo {
-                    name: spec.name.to_string(),
-                    installed: true,
-                },
-            );
+        if let Some(launch) = find_editor_fast(spec) {
+            result.insert(spec.id.to_string(), editor_info(spec, Some(launch)));
         } else {
-            need_cli.push(spec);
+            unresolved.push(spec);
         }
     }
 
     // macOS: Spotlight 中间层 — 通过 mdfind 批量查找未在标准路径下发现的 .app
     // 覆盖 JetBrains Toolbox、Homebrew --cask 非标准路径安装等场景
     #[cfg(target_os = "macos")]
-    if !need_cli.is_empty() {
-        let spotlight_apps = find_installed_mac_apps(&need_cli);
+    if !unresolved.is_empty() {
+        let spotlight_apps = find_installed_mac_apps(&unresolved);
         if !spotlight_apps.is_empty() {
-            let mut still_need_cli = Vec::new();
-            for spec in need_cli {
-                if spec
+            let mut still_unresolved = Vec::new();
+            for spec in unresolved {
+                if let Some(path) = spec
                     .mac_apps
                     .iter()
-                    .any(|app| spotlight_apps.contains(*app))
+                    .find_map(|app| spotlight_apps.get(*app))
                 {
                     result.insert(
                         spec.id.to_string(),
-                        EditorInfo {
-                            name: spec.name.to_string(),
-                            installed: true,
-                        },
+                        editor_info(
+                            spec,
+                            Some(EditorLaunch::MacApp {
+                                path: path.to_string_lossy().into_owned(),
+                            }),
+                        ),
                     );
                 } else {
-                    still_need_cli.push(spec);
+                    still_unresolved.push(spec);
                 }
             }
-            need_cli = still_need_cli;
+            unresolved = still_unresolved;
         }
     }
 
-    if !need_cli.is_empty() {
-        let handles: Vec<_> = need_cli
-            .into_iter()
-            .map(|spec| {
-                let id = spec.id.to_string();
-                let name = spec.name.to_string();
-                let cmds: Vec<String> = spec.cli_cmds.iter().map(|s| s.to_string()).collect();
-                std::thread::spawn(move || {
-                    let found = cmds.iter().any(|cmd| is_command_available(cmd));
-                    (id, name, found)
-                })
-            })
-            .collect();
-
-        for h in handles {
-            if let Ok((id, name, found)) = h.join() {
-                result.insert(
-                    id,
-                    EditorInfo {
-                        name,
-                        installed: found,
-                    },
-                );
-            }
-        }
+    for spec in unresolved {
+        result.insert(
+            spec.id.to_string(),
+            editor_info(spec, find_editor_in_path(spec)),
+        );
     }
 
     result
 }
 
-/// Windows: 启动 exe 或 cmd/bat 脚本打开项目
+pub(crate) fn is_known_editor_id(editor_id: &str) -> bool {
+    EDITORS.iter().any(|spec| spec.id == editor_id)
+}
+
+pub(crate) fn resolve_known_editor(editor_id: &str) -> Option<EditorInfo> {
+    is_known_editor_id(editor_id)
+        .then(|| detect_editors().remove(editor_id))
+        .flatten()
+}
+
 #[cfg(target_os = "windows")]
-fn launch_win_exe(exe: &Path, project_path: &str) -> bool {
-    let ext = exe.extension().and_then(|e| e.to_str()).unwrap_or("");
-    if ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat") {
-        detach_child(
-            new_cmd()
-                .args(["/C", &exe.to_string_lossy(), project_path])
-                .spawn(),
-        )
-    } else {
-        detach_child(Command::new(exe).arg(project_path).shell_spawn())
+pub(crate) fn is_allowed_known_windows_batch(
+    editor_id: &str,
+    adapter_id: &str,
+    path: &Path,
+) -> bool {
+    if editor_id != adapter_id {
+        return false;
+    }
+    let Some(spec) = EDITORS.iter().find(|spec| spec.id == editor_id) else {
+        return false;
+    };
+    let Some(EditorLaunch::KnownWindowsBatch { path: expected, .. }) =
+        find_editor_fast(spec).or_else(|| find_editor_in_path(spec))
+    else {
+        return false;
+    };
+    let expected = PathBuf::from(expected);
+    match (path.canonicalize(), expected.canonicalize()) {
+        (Ok(actual), Ok(expected)) => actual == expected,
+        _ => false,
     }
 }
 
-/// 用指定编辑器打开项目目录
-/// macOS 先检测 .app 是否存在再调用 open -a（避免系统弹错误弹窗），
-/// Windows 优先注册表路径，Linux 优先 .desktop Exec 路径，最终 CLI 兜底
-pub fn open_editor(editor_id: &str, project_path: &str) -> bool {
-    let spec = match EDITORS.iter().find(|s| s.id == editor_id) {
-        Some(s) => s,
-        None => return false,
-    };
+#[cfg(test)]
+mod editor_tests {
+    use super::*;
+    use std::fs;
 
-    #[cfg(target_os = "macos")]
-    {
-        // open -a 走 LaunchServices，能找到系统上任意位置的 .app（不限于 /Applications）
-        for app in spec.mac_apps {
-            let status = Command::new("open")
-                .args(["-a", app, project_path])
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status();
-            if matches!(status, Ok(s) if s.success()) {
-                return true;
-            }
-        }
-        for cmd in spec.cli_cmds {
-            if detach_child(Command::new(cmd).arg(project_path).spawn()) {
-                return true;
-            }
-        }
-        return false;
+    fn temp_dir(name: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "devfleet-detector-{}-{}-{}",
+            std::process::id(),
+            rand::random::<u64>(),
+            name
+        ));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn path_resolution_only_accepts_existing_files() {
+        let dir = temp_dir("path-resolution");
+        let executable = dir.join(if cfg!(windows) {
+            "controlled-editor.EXE"
+        } else {
+            "controlled-editor"
+        });
+        fs::write(&executable, b"not an executable and must never be run").unwrap();
+        let path = std::env::join_paths([&dir]).unwrap();
+        let extensions = if cfg!(windows) {
+            vec![".EXE".to_string()]
+        } else {
+            vec![String::new()]
+        };
+
+        assert_eq!(
+            resolve_command_in_path("controlled-editor", &path, &extensions),
+            Some(executable)
+        );
+        assert_eq!(
+            resolve_command_in_path("missing-editor", &path, &extensions),
+            None
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn path_resolution_rejects_command_paths() {
+        let path = std::env::join_paths([std::env::temp_dir()]).unwrap();
+        assert_eq!(
+            resolve_command_in_path("../editor", &path, &[String::new()]),
+            None
+        );
+        assert_eq!(
+            resolve_command_in_path("editor\\nested", &path, &[String::new()]),
+            None
+        );
     }
 
     #[cfg(target_os = "windows")]
-    {
-        let exe = find_exe_via_registry(spec)
-            .or_else(|| find_win_exe(spec))
-            .or_else(|| {
-                spec.win_jetbrains
-                    .and_then(|(product, exe_name)| find_jetbrains_exe(product, exe_name))
-            });
-        if let Some(exe) = exe {
-            return launch_win_exe(&exe, project_path);
-        }
-        for cmd in spec.cli_cmds {
-            if detach_child(Command::new(cmd).arg(project_path).shell_spawn()) {
-                return true;
-            }
-        }
-        return false;
+    #[test]
+    fn registry_command_parser_only_accepts_real_exe_files() {
+        let dir = temp_dir("registry-command");
+        let executable = dir.join("Editor.exe");
+        let wrapper = dir.join("Editor.cmd");
+        fs::write(&executable, b"fixture").unwrap();
+        fs::write(&wrapper, b"@echo off").unwrap();
+
+        assert_eq!(
+            parse_exe_from_command(&format!("\"{}\" --open-url \"%1\"", executable.display())),
+            Some(executable)
+        );
+        assert_eq!(
+            parse_exe_from_command(&format!("\"{}\" /C", wrapper.display())),
+            None
+        );
+        fs::remove_dir_all(dir).unwrap();
     }
 
-    #[cfg(target_os = "linux")]
-    {
-        if let Some(exe) = find_exe_via_desktop_file(spec).or_else(|| find_linux_exe(spec)) {
-            if detach_child(Command::new(&exe).arg(project_path).spawn()) {
-                return true;
+    #[test]
+    fn detected_installed_editors_always_include_launch_targets() {
+        let detected = detect_editors();
+        assert_eq!(detected.len(), EDITORS.len());
+        for editor in detected.values().filter(|editor| editor.installed) {
+            let launch = editor.launch.as_ref().unwrap();
+            match launch {
+                EditorLaunch::Executable { path, .. }
+                | EditorLaunch::DesktopEntry { path }
+                | EditorLaunch::KnownWindowsBatch { path, .. } => {
+                    assert!(Path::new(path).is_file());
+                }
+                EditorLaunch::MacApp { path } => assert!(Path::new(path).is_dir()),
+            }
+            match launch {
+                EditorLaunch::KnownWindowsBatch { .. } => assert!(editor.icon_source.is_none()),
+                EditorLaunch::Executable { path, .. }
+                | EditorLaunch::MacApp { path }
+                | EditorLaunch::DesktopEntry { path } => {
+                    assert_eq!(editor.icon_source.as_deref(), Some(path.as_str()));
+                }
             }
         }
-        for cmd in spec.cli_cmds {
-            if detach_child(Command::new(cmd).arg(project_path).spawn()) {
-                return true;
-            }
-        }
-        return false;
     }
-
-    #[allow(unreachable_code)]
-    false
 }
 
 // ── Node 版本管理器检测 ──
@@ -1077,7 +1232,7 @@ fn command_succeeds_with_timeout(cmd: Command, timeout_secs: u64) -> bool {
 
 /// 带超时保护的命令执行，防止 nvm-windows 等工具卡死时阻塞整个应用。
 /// 在独立线程中读取 stdout/stderr 以避免管道缓冲区满导致死锁。
-fn output_with_timeout(
+pub(crate) fn output_with_timeout(
     mut cmd: Command,
     timeout_secs: u64,
 ) -> Result<std::process::Output, String> {
@@ -1660,35 +1815,5 @@ pub fn uninstall_node_version(
             }
         }
         Err(e) => Err(format!("执行卸载命令失败: {}", e)),
-    }
-}
-
-// ── Helper Trait：扩展 Command 的能力 ──
-
-// trait 类似 TS 的 interface，定义一组方法签名
-// 区别：Rust 的 trait 可以为已有类型添加方法（扩展方法），TS 的 interface 不行
-// 这里为标准库的 Command 类型添加了 shell_spawn 方法
-#[cfg(target_os = "windows")]
-trait CommandShellSpawn {
-    fn shell_spawn(&mut self) -> std::io::Result<std::process::Child>;
-}
-
-// impl Trait for Type：为已有类型实现 trait（类似 JS 的原型扩展，但更安全）
-#[cfg(target_os = "windows")]
-impl CommandShellSpawn for Command {
-    /// Windows 上通过 cmd /C 间接执行命令
-    /// 原因：某些通过 PATH 注册的命令（如 code、cursor），直接 spawn 找不到
-    /// 必须通过 cmd.exe 的 PATH 解析才能找到
-    fn shell_spawn(&mut self) -> std::io::Result<std::process::Child> {
-        let prog = format!("{:?}", self.get_program());
-        let args: Vec<String> = self
-            .get_args()
-            .map(|a| a.to_string_lossy().to_string())
-            .collect();
-        new_cmd()
-            .arg("/C")
-            .arg(prog.trim_matches('"'))
-            .args(args)
-            .spawn()
     }
 }

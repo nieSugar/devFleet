@@ -85,6 +85,10 @@ function StaticAntdStyleFixture(
           placeholder: "Search node version...",
           allowClear: true,
         }),
+        React.createElement(Input.TextArea, {
+          placeholder: "One argument per line",
+          autoSize: { minRows: 3, maxRows: 7 },
+        }),
         React.createElement(Select, {
           style: { width: 220 },
           defaultValue: "dev",

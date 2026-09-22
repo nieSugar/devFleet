@@ -7,6 +7,10 @@ import type {
   NvmInfo,
   RemoteNodeVersion,
   EditorStatus,
+  CustomEditor,
+  EditorCandidateDiscovery,
+  ImportEditorCandidateInput,
+  UpsertCustomEditorInput,
   NodeProcessInfo,
 } from "../types/project";
 
@@ -57,6 +61,14 @@ export const tauriAPI = {
     return await open({ directory: true, title: "选择项目文件夹" });
   },
 
+  selectEditor: async (title = "选择编辑器程序"): Promise<string | null> => {
+    return await open({
+      directory: false,
+      multiple: false,
+      title,
+    });
+  },
+
   getPackageScripts: (
     projectPath: string
   ): Promise<IpcResponse<{ scripts: Project["scripts"]; packageManager: string }>> =>
@@ -78,6 +90,20 @@ export const tauriAPI = {
     editor: string;
     projectPath: string;
   }): Promise<IpcResponse<MessageResult>> => invoke("open_in_editor", params),
+
+  upsertCustomEditor: (
+    request: UpsertCustomEditorInput
+  ): Promise<IpcResponse<CustomEditor>> => invoke("upsert_custom_editor", { request }),
+
+  removeCustomEditor: (editorId: string): Promise<IpcResponse<CustomEditor>> =>
+    invoke("remove_custom_editor", { editorId }),
+
+  discoverEditorCandidates: (): Promise<IpcResponse<EditorCandidateDiscovery>> =>
+    invoke("discover_editor_candidates"),
+
+  importEditorCandidate: (
+    request: ImportEditorCandidateInput
+  ): Promise<IpcResponse<CustomEditor>> => invoke("import_editor_candidate", { request }),
 
   loadProjectConfig: (): Promise<IpcResponse<ProjectConfig>> =>
     invoke("load_project_config"),

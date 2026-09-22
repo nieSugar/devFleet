@@ -90,6 +90,63 @@ export interface RemoteNodeVersion {
 export interface EditorInfo {
   name: string;
   installed: boolean;
+  source: "auto" | "custom";
+  icon?: string;
+  path?: string;
+  args: string[];
+  canEditArgs: boolean;
 }
 
 export type EditorStatus = Record<string, EditorInfo>;
+
+export type EditorLaunch =
+  | {
+      kind: "executable";
+      path: string;
+      args: string[];
+      workingDirectory?: string;
+    }
+  | { kind: "macApp"; path: string }
+  | { kind: "desktopEntry"; path: string }
+  | { kind: "knownWindowsBatch"; adapterId: string; path: string };
+
+export interface CustomEditor {
+  id: string;
+  name: string;
+  launch: EditorLaunch;
+  iconSource?: string;
+}
+
+export interface UpsertCustomEditorInput {
+  id?: string;
+  name?: string;
+  path?: string;
+  args?: string[];
+}
+
+export type EditorCandidateSource =
+  | "startMenu"
+  | "appPaths"
+  | "applications"
+  | "spotlight"
+  | "desktopEntry";
+
+export interface EditorCandidate {
+  id: string;
+  name: string;
+  path: string;
+  source: EditorCandidateSource;
+  added: boolean;
+  recommended: boolean;
+}
+
+export interface EditorCandidateDiscovery {
+  candidates: EditorCandidate[];
+  warnings: string[];
+  truncated: boolean;
+}
+
+export interface ImportEditorCandidateInput {
+  candidateId: string;
+  name?: string;
+}

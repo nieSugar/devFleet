@@ -6,6 +6,7 @@ import { useTheme } from "../contexts/ThemeContext";
 import { getSupportedLanguages } from "../i18n";
 import { getAutostartState, setAutostartEnabled } from "../lib/autostart";
 import { tauriAPI } from "../lib/tauri";
+import EditorSettings from "./EditorSettings";
 import "./SettingsWindow.css";
 
 const LANGUAGE_LABELS: Record<string, string> = {
@@ -35,6 +36,8 @@ const SettingsWindow: React.FC = () => {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        const modal = document.querySelector<HTMLElement>(".ant-modal-wrap");
+        if (modal && window.getComputedStyle(modal).display !== "none") return;
         navigate("/");
       }
     };
@@ -218,6 +221,8 @@ const SettingsWindow: React.FC = () => {
             </button>
           </div>
         </section>
+
+        <EditorSettings />
 
         <section className="settings-section">
           <div className="settings-section-head">

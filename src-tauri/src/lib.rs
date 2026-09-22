@@ -29,9 +29,12 @@ use tauri::{Manager, Runtime};
 // mod 声明：告诉 Rust 编译器"把这些同目录下的 .rs 文件纳入编译"
 // 每个 mod 对应 src/ 下的一个同名文件，比如 mod commands → commands.rs
 // Rust 的模块系统：必须显式声明 mod，文件不会自动被编译（跟 JS 的 import 不同）
+mod candidates;
 mod commands;
 mod config;
 mod detector;
+mod editors;
+mod icons;
 mod models;
 mod node_manager;
 mod node_processes;
@@ -952,6 +955,10 @@ pub fn run() {
             commands::kill_node_process,
             commands::detect_editors,
             commands::open_in_editor,
+            commands::upsert_custom_editor,
+            commands::remove_custom_editor,
+            commands::discover_editor_candidates,
+            commands::import_editor_candidate,
             commands::get_nvm_info,
             commands::detect_project_node_version,
             commands::set_project_node_version,

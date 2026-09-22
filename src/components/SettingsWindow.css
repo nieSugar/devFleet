@@ -3,7 +3,8 @@
   min-height: 100%;
   background: var(--bg-base);
   color: var(--text-primary);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   transition:
     background-color var(--transition-slow),
     color var(--transition-slow);

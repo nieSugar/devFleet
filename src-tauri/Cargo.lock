@@ -663,12 +663,20 @@ dependencies = [
 
 [[package]]
 name = "devfleet"
-version = "2.1.14"
+version = "2.1.15"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "dirs 6.0.0",
  "flate2",
+ "gdk-pixbuf",
+ "gio",
+ "gtk",
  "include_dir",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "png",
  "rand 0.8.5",
  "regex-lite",
  "serde",
@@ -683,6 +691,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tokio",
  "ureq",
+ "windows",
  "winreg 0.56.0",
  "zip 2.4.2",
 ]

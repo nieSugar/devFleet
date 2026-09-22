@@ -66,7 +66,7 @@ impl IpcResponse {
 
 // ── 应用设置 ──
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -75,14 +75,54 @@ pub struct AppSettings {
     pub node_install_dir: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub builtin_current_version: Option<String>,
+    #[serde(default)]
+    pub custom_editors: Vec<CustomEditor>,
 }
 
 // ── 编辑器缓存 ──
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum EditorLaunch {
+    Executable {
+        path: String,
+        #[serde(default)]
+        args: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        working_directory: Option<String>,
+    },
+    MacApp {
+        path: String,
+    },
+    DesktopEntry {
+        path: String,
+    },
+    KnownWindowsBatch {
+        #[serde(rename = "adapterId")]
+        adapter_id: String,
+        path: String,
+    },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomEditor {
+    pub id: String,
+    pub name: String,
+    pub launch: EditorLaunch,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon_source: Option<String>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct EditorInfo {
     pub name: String,
     pub installed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launch: Option<EditorLaunch>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon_source: Option<String>,
 }
 
 impl<'de> serde::Deserialize<'de> for EditorInfo {
@@ -102,15 +142,21 @@ impl<'de> serde::Deserialize<'de> for EditorInfo {
                 Ok(EditorInfo {
                     name: String::new(),
                     installed: v,
+                    launch: None,
+                    icon_source: None,
                 })
             }
             fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<EditorInfo, M::Error> {
                 let mut name = None;
                 let mut installed = None;
+                let mut launch = None;
+                let mut icon_source = None;
                 while let Some(key) = map.next_key::<String>()? {
                     match key.as_str() {
                         "name" => name = Some(map.next_value()?),
                         "installed" => installed = Some(map.next_value()?),
+                        "launch" => launch = Some(map.next_value()?),
+                        "iconSource" => icon_source = Some(map.next_value()?),
                         _ => {
                             let _ = map.next_value::<serde::de::IgnoredAny>()?;
                         }
@@ -119,6 +165,8 @@ impl<'de> serde::Deserialize<'de> for EditorInfo {
                 Ok(EditorInfo {
                     name: name.unwrap_or_default(),
                     installed: installed.unwrap_or(false),
+                    launch: launch.unwrap_or_default(),
+                    icon_source: icon_source.unwrap_or_default(),
                 })
             }
         }
@@ -127,6 +175,59 @@ impl<'de> serde::Deserialize<'de> for EditorInfo {
 }
 
 pub type EditorCache = std::collections::HashMap<String, EditorInfo>;
+
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EditorSource {
+    Auto,
+    Custom,
+}
+
+/// Runtime-only editor response. Icon data is deliberately absent from EditorInfo,
+/// which is the type persisted in ProjectConfig.
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorView {
+    pub name: String,
+    pub installed: bool,
+    pub source: EditorSource,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    pub args: Vec<String>,
+    pub can_edit_args: bool,
+}
+
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)] // Platform-specific variants are constructed only on their target OS.
+pub enum EditorCandidateSource {
+    StartMenu,
+    AppPaths,
+    Applications,
+    Spotlight,
+    DesktopEntry,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorCandidate {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub source: EditorCandidateSource,
+    pub added: bool,
+    pub recommended: bool,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorCandidateDiscovery {
+    pub candidates: Vec<EditorCandidate>,
+    pub warnings: Vec<String>,
+    pub truncated: bool,
+}
 
 // ── 项目相关类型 ──
 
@@ -168,6 +269,10 @@ pub struct ProjectConfig {
     pub editors: Option<EditorCache>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settings: Option<AppSettings>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub editor_cache_version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub editor_cache_updated_at: Option<String>,
 }
 
 // ── Node 版本管理器类型 ──
@@ -317,5 +422,87 @@ impl std::str::FromStr for PackageManager {
             "bun" => Ok(PackageManager::Bun),
             _ => Err(format!("Unknown package manager: {}", s)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn editor_info_reads_legacy_boolean() {
+        let info: EditorInfo = serde_json::from_str("true").unwrap();
+
+        assert_eq!(
+            info,
+            EditorInfo {
+                name: String::new(),
+                installed: true,
+                launch: None,
+                icon_source: None,
+            }
+        );
+    }
+
+    #[test]
+    fn editor_info_reads_legacy_object() {
+        let info: EditorInfo =
+            serde_json::from_str(r#"{"name":"Visual Studio Code","installed":true}"#).unwrap();
+
+        assert_eq!(info.name, "Visual Studio Code");
+        assert!(info.installed);
+        assert_eq!(info.launch, None);
+        assert_eq!(info.icon_source, None);
+    }
+
+    #[test]
+    fn editor_info_round_trip_preserves_launch_and_icon_source() {
+        let expected = EditorInfo {
+            name: "Example Editor".to_string(),
+            installed: true,
+            launch: Some(EditorLaunch::Executable {
+                path: "/opt/example/editor".to_string(),
+                args: vec!["--reuse-window".to_string()],
+                working_directory: None,
+            }),
+            icon_source: Some("/opt/example/editor".to_string()),
+        };
+
+        let json = serde_json::to_string(&expected).unwrap();
+        let actual: EditorInfo = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(actual, expected);
+        assert!(json.contains("\"iconSource\""));
+    }
+
+    #[test]
+    fn editor_info_accepts_null_optional_fields() {
+        let info: EditorInfo = serde_json::from_str(
+            r#"{"name":"Example","installed":true,"launch":null,"iconSource":null}"#,
+        )
+        .unwrap();
+
+        assert_eq!(info.launch, None);
+        assert_eq!(info.icon_source, None);
+    }
+
+    #[test]
+    fn app_settings_defaults_custom_editors_to_empty() {
+        let settings: AppSettings = serde_json::from_str("{}").unwrap();
+
+        assert!(settings.custom_editors.is_empty());
+        assert_eq!(
+            serde_json::to_value(settings).unwrap()["customEditors"],
+            serde_json::json!([])
+        );
+    }
+
+    #[test]
+    fn project_config_defaults_editor_cache_metadata() {
+        let config: ProjectConfig =
+            serde_json::from_str(r#"{"projects":[],"lastUpdated":"legacy"}"#).unwrap();
+
+        assert_eq!(config.editor_cache_version, None);
+        assert_eq!(config.editor_cache_updated_at, None);
     }
 }
