@@ -321,10 +321,8 @@ fn extract_icon_rgba(source: &Path, output_size: u32) -> Option<Vec<u8>> {
 
 #[cfg(target_os = "macos")]
 fn extract_icon_rgba(source: &Path, output_size: u32) -> Option<Vec<u8>> {
-    use objc2::ClassType;
-    use objc2_app_kit::{
-        NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSImage, NSWorkspace,
-    };
+    use objc2::AnyThread;
+    use objc2_app_kit::{NSBitmapImageRep, NSDeviceRGBColorSpace, NSGraphicsContext, NSWorkspace};
     use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
     let size = usize::try_from(output_size).ok()?;
