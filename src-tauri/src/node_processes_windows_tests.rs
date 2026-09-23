@@ -118,7 +118,24 @@ if (process.argv.includes('--server')) {
         started.elapsed() < Duration::from_secs(30),
         "startup exceeded the fixture's safety budget"
     );
-    kill_node_process(servers[0].0).unwrap();
+    let target = processes
+        .iter()
+        .find(|process| process.pid == servers[0].0)
+        .unwrap();
+    assert!(kill_node_process(
+        target.pid,
+        Some("stale-process-identity"),
+        target.command_line.as_deref(),
+        target.executable.as_deref()
+    )
+    .is_err());
+    kill_node_process(
+        target.pid,
+        target.started_at.as_deref(),
+        target.command_line.as_deref(),
+        target.executable.as_deref(),
+    )
+    .unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         let remaining = platform_list_node_processes().unwrap();

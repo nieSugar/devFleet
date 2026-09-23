@@ -6,6 +6,9 @@ export function useEditors() {
   const [editors, setEditors] = useState<EditorStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [defaultEditorId, setDefaultEditorIdState] = useState<string | null>(null);
+  const [defaultEditorLoading, setDefaultEditorLoading] = useState(true);
+  const [defaultEditorError, setDefaultEditorError] = useState<string | null>(null);
 
   const detect = useCallback(async (force?: boolean) => {
     try {
@@ -47,6 +50,23 @@ export function useEditors() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+    tauriAPI
+      .getDefaultEditor()
+      .then((result) => {
+        if (cancelled) return;
+        if (result.success && result.data) {
+          setDefaultEditorIdState(result.data.editorId);
+        } else {
+          setDefaultEditorError(result.error || "读取默认编辑器失败");
+        }
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setDefaultEditorError(e instanceof Error ? e.message : "读取默认编辑器异常");
+      })
+      .finally(() => {
+        if (!cancelled) setDefaultEditorLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -57,6 +77,26 @@ export function useEditors() {
   }, []);
 
   const refreshEditors = useCallback(() => detect(true), [detect]);
+
+  const setDefaultEditor = useCallback(async (editorId: string | null) => {
+    setDefaultEditorLoading(true);
+    setDefaultEditorError(null);
+    try {
+      const result = await tauriAPI.setDefaultEditor(editorId);
+      if (result.success && result.data) {
+        setDefaultEditorIdState(result.data.editorId);
+      } else {
+        setDefaultEditorError(result.error || "保存默认编辑器失败");
+      }
+      return result;
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : "保存默认编辑器异常";
+      setDefaultEditorError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setDefaultEditorLoading(false);
+    }
+  }, []);
 
   const upsertCustomEditor = useCallback(
     async (request: UpsertCustomEditorInput) => {
@@ -80,8 +120,12 @@ export function useEditors() {
     editors,
     error,
     loading,
+    defaultEditorId,
+    defaultEditorLoading,
+    defaultEditorError,
     openInEditor,
     refreshEditors,
+    setDefaultEditor,
     upsertCustomEditor,
     removeCustomEditor,
   };

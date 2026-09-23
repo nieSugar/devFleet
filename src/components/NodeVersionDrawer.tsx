@@ -23,12 +23,14 @@ import {
   PoweroffOutlined,
 } from "@ant-design/icons";
 import { tauriAPI } from "../lib/tauri";
+import type { NodeProcessesState } from "../hooks/useNodeProcesses";
 import type {
   NvmInfo,
   NodeProcessInfo,
   NodeProcessPort,
   RemoteNodeVersion,
   NodeVersionManager,
+  Project,
 } from "../types/project";
 import "./NodeVersionDrawer.css";
 
@@ -36,6 +38,11 @@ interface NodeVersionDrawerProps {
   open: boolean;
   onClose: () => void;
   onVersionChange?: () => void;
+  activeTab: DrawerTab;
+  onTabChange: (tab: DrawerTab) => void;
+  processState: NodeProcessesState;
+  processProject: Project | null;
+  onClearProcessProject: () => void;
 }
 
 type FilterMode = "all" | "lts" | "installed";
@@ -353,6 +360,11 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   open,
   onClose,
   onVersionChange,
+  activeTab,
+  onTabChange,
+  processState,
+  processProject,
+  onClearProcessProject,
 }) => {
   const { t } = useTranslation();
   const [remoteVersions, setRemoteVersions] = useState<RemoteNodeVersion[]>([]);
@@ -371,9 +383,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   const [nodeAvailable, setNodeAvailable] = useState(true);
   const [powerShellPolicyReady, setPowerShellPolicyReady] = useState(true);
   const [pathSetupBusy, setPathSetupBusy] = useState(false);
-  const [activeTab, setActiveTab] = useState<DrawerTab>("versions");
-  const [nodeProcesses, setNodeProcesses] = useState<NodeProcessInfo[]>([]);
-  const [processLoading, setProcessLoading] = useState(false);
+  const { processes: nodeProcesses, loading: processLoading, refresh: refreshProcesses } = processState;
   const [processSearch, setProcessSearch] = useState("");
   const [onlyPortProcesses, setOnlyPortProcesses] = useState(false);
   const [killingPid, setKillingPid] = useState<number | null>(null);
@@ -384,8 +394,6 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   const [skipKillConfirm, setSkipKillConfirm] = useState(loadSkipKillConfirm);
   const versionFetchInFlightRef = useRef(false);
   const versionFetchRequestIdRef = useRef(0);
-  const processLoadInFlightRef = useRef(false);
-  const processLoadRequestIdRef = useRef(0);
 
   const checkPathStatus = useCallback(() => {
     tauriAPI.checkNodeInPath().then((res) => {
@@ -529,55 +537,6 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
     checkPathStatus();
   }, [checkPathStatus]);
 
-  const loadNodeProcesses = useCallback(
-    async (notifyError = true, force = false) => {
-      if (processLoadInFlightRef.current && !force) return;
-
-      const requestId = processLoadRequestIdRef.current + 1;
-      processLoadRequestIdRef.current = requestId;
-      processLoadInFlightRef.current = true;
-      if (notifyError) setProcessLoading(true);
-      try {
-        const result = await tauriAPI.listNodeProcesses();
-        if (processLoadRequestIdRef.current !== requestId) return;
-        if (result.success && result.data) {
-          setNodeProcesses(result.data);
-        } else if (notifyError) {
-          messageApi.error(result.error || t("nodeDrawer.processes.loadFailed"));
-        }
-      } catch {
-        if (notifyError && processLoadRequestIdRef.current === requestId) {
-          messageApi.error(t("nodeDrawer.processes.loadFailed"));
-        }
-      } finally {
-        if (processLoadRequestIdRef.current === requestId) {
-          processLoadInFlightRef.current = false;
-          setProcessLoading(false);
-        }
-      }
-    },
-    [messageApi, t]
-  );
-
-  useEffect(() => {
-    if (open && activeTab === "processes") return;
-
-    processLoadRequestIdRef.current += 1;
-    processLoadInFlightRef.current = false;
-    setProcessLoading(false);
-  }, [open, activeTab]);
-
-  useEffect(() => {
-    if (!open || activeTab !== "processes") return;
-
-    void loadNodeProcesses();
-    const timer = window.setInterval(() => {
-      void loadNodeProcesses(false);
-    }, 5000);
-
-    return () => window.clearInterval(timer);
-  }, [open, activeTab, loadNodeProcesses]);
-
   const installedSet = useMemo(() => {
     const set = new Set<string>();
     nvmInfo?.availableVersions?.forEach((v) => set.add(v.version));
@@ -627,10 +586,13 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   }, [remoteVersions, installedSet, nvmInfo, filter, search]);
 
   const filteredNodeProcesses = useMemo(() => {
-    const q = processSearch.trim().toLowerCase();
-    const visibleProcesses = onlyPortProcesses
-      ? nodeProcesses.filter((process) => (process.ports || []).length > 0)
-      : nodeProcesses;
+    // 从项目卡片进入时，项目筛选优先，避免旧搜索条件把相关进程藏起来。
+    const q = processProject ? "" : processSearch.trim().toLowerCase();
+    const visibleProcesses = processProject
+      ? nodeProcesses.filter((process) => process.matchedProjectId === processProject.id)
+      : onlyPortProcesses
+        ? nodeProcesses.filter((process) => (process.ports || []).length > 0)
+        : nodeProcesses;
     if (!q) return visibleProcesses;
 
     return visibleProcesses.filter((process) => {
@@ -651,7 +613,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
         .toLowerCase()
         .includes(q);
     });
-  }, [nodeProcesses, onlyPortProcesses, processSearch]);
+  }, [nodeProcesses, onlyPortProcesses, processSearch, processProject]);
 
   const toggleGroup = (major: number) => {
     setExpandedGroups((prev) => {
@@ -731,7 +693,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
     async (process: NodeProcessInfo, rememberSkipConfirm = false) => {
       setKillingPid(process.pid);
       try {
-        const result = await tauriAPI.killNodeProcess(process.pid);
+        const result = await tauriAPI.killNodeProcess(process);
         if (result.success) {
           if (rememberSkipConfirm) {
             saveSkipKillConfirm(true);
@@ -739,13 +701,10 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
           }
           setPendingKillProcess(null);
           setRememberKillChoice(false);
-          setNodeProcesses((prev) =>
-            prev.filter((item) => item.pid !== process.pid)
-          );
           messageApi.success(
             result.data?.message || t("nodeDrawer.processes.killSuccess")
           );
-          await loadNodeProcesses(false, true);
+          await refreshProcesses(true);
         } else {
           messageApi.error(result.error || t("nodeDrawer.processes.killFailed"));
         }
@@ -755,12 +714,12 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
         setKillingPid(null);
       }
     },
-    [loadNodeProcesses, messageApi, t]
+    [refreshProcesses, messageApi, t]
   );
 
   const handleKillNodeProcess = useCallback(
     (process: NodeProcessInfo) => {
-      if (skipKillConfirm) {
+      if (skipKillConfirm && !processProject) {
         void executeKillNodeProcess(process);
         return;
       }
@@ -768,7 +727,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       setRememberKillChoice(false);
       setPendingKillProcess(process);
     },
-    [executeKillNodeProcess, skipKillConfirm]
+    [executeKillNodeProcess, skipKillConfirm, processProject]
   );
 
   const handleConfirmKillNodeProcess = useCallback(async () => {
@@ -794,7 +753,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
 
   const handleRefresh = () => {
     if (activeTab === "processes") {
-      void loadNodeProcesses();
+      void refreshProcesses(true);
       return;
     }
 
@@ -938,13 +897,13 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
           <div className="nd-tabs">
             <button
               className={`nd-tab-btn ${activeTab === "versions" ? "active" : ""}`}
-              onClick={() => setActiveTab("versions")}
+              onClick={() => onTabChange("versions")}
             >
               {t("nodeDrawer.tabs.versions")}
             </button>
             <button
               className={`nd-tab-btn ${activeTab === "processes" ? "active" : ""}`}
-              onClick={() => setActiveTab("processes")}
+              onClick={() => onTabChange("processes")}
             >
               {t("nodeDrawer.tabs.processes")}
               {nodeProcesses.length > 0 && (
@@ -1058,9 +1017,20 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
           </>
         ) : (
           <>
+            {processProject && (
+              <div className="nd-toolbar">
+                <span>{t("nodeDrawer.processes.projectFilter", { name: processProject.name })}</span>
+                <button className="nd-retry-btn" onClick={() => {
+                  onClearProcessProject();
+                  setProcessSearch("");
+                  setOnlyPortProcesses(false);
+                }}>{t("nodeDrawer.processes.showAll")}</button>
+              </div>
+            )}
             <div className="nd-toolbar">
               <Input
                 placeholder={t("nodeDrawer.processes.searchPlaceholder")}
+                disabled={processProject !== null}
                 prefix={<SearchOutlined style={{ color: "var(--text-muted)" }} />}
                 value={processSearch}
                 onChange={(e) => setProcessSearch(e.target.value)}
@@ -1070,6 +1040,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
               <label className="nd-port-filter">
                 <Switch
                   size="small"
+                  disabled={processProject !== null}
                   checked={onlyPortProcesses}
                   onChange={setOnlyPortProcesses}
                 />
@@ -1078,7 +1049,12 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
             </div>
 
             <div className="nd-content">
-              {processLoading && nodeProcesses.length === 0 ? (
+              {processState.status === "error" ? (
+                <div className="nd-empty" role="alert">
+                  <span className="nd-empty-text" title={processState.error || undefined}>{t("project.processesUnavailable")}</span>
+                  <button className="nd-retry-btn" onClick={() => void refreshProcesses(true)}>{t("common.retry")}</button>
+                </div>
+              ) : processState.status === "loading" ? (
                 <div className="nd-loading">
                   <Spin indicator={<LoadingOutlined style={{ fontSize: 28 }} />} />
                   <span className="nd-loading-text">
@@ -1089,14 +1065,16 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
                 <div className="nd-empty">
                   <ApiOutlined className="nd-empty-icon" />
                   <span className="nd-empty-text">
-                    {processSearch
+                    {processProject
+                      ? t("project.noProcessesDetected")
+                      : processSearch
                       ? t("nodeDrawer.processes.noMatch")
                       : onlyPortProcesses
                         ? t("nodeDrawer.processes.noPortProcesses")
                         : t("nodeDrawer.processes.noProcesses")}
                   </span>
                   {!processSearch && !onlyPortProcesses && (
-                    <button className="nd-retry-btn" onClick={() => loadNodeProcesses()}>
+                    <button className="nd-retry-btn" onClick={() => void refreshProcesses(true)}>
                       {t("common.refresh")}
                     </button>
                   )}
@@ -1137,14 +1115,14 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
         <div className="nd-process-confirm">
           <p>{t("nodeDrawer.processes.killContent")}</p>
           <code title={pendingKillCommand}>{shortenMiddle(pendingKillCommand, 120)}</code>
-          <Checkbox
+          {!processProject && <Checkbox
             className="nd-process-remember"
             checked={rememberKillChoice}
             disabled={isKillingPendingProcess}
             onChange={(event) => setRememberKillChoice(event.target.checked)}
           >
             {t("nodeDrawer.processes.rememberKillChoice")}
-          </Checkbox>
+          </Checkbox>}
         </div>
       </Modal>
     </>

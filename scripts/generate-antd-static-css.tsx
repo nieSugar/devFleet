@@ -14,11 +14,13 @@ type ReactRuntime = typeof import("react");
 type AntdRuntime = Pick<
   typeof import("antd"),
   | "App"
+  | "Alert"
   | "Button"
   | "Checkbox"
   | "ConfigProvider"
   | "Drawer"
   | "Input"
+  | "List"
   | "message"
   | "Modal"
   | "Result"
@@ -35,10 +37,12 @@ function StaticAntdStyleFixture(
   antd: AntdRuntime,
 ) {
   const {
+    Alert,
     Button,
     Checkbox,
     Drawer,
     Input,
+    List,
     message,
     Modal,
     Result,
@@ -163,6 +167,16 @@ function StaticAntdStyleFixture(
         },
         "The running development service will stop.",
       ),
+      React.createElement(Alert, {
+        type: "warning",
+        showIcon: true,
+        message: "Scan limit reached",
+      }),
+      React.createElement(List, {
+        bordered: true,
+        dataSource: ["Project candidate"],
+        renderItem: (item: string) => React.createElement(List.Item, null, item),
+      }),
       React.createElement(MessagePanel, {
         type: "success",
         content: "Node process ended",
@@ -254,6 +268,8 @@ async function collectStyles() {
       ".ant-modal-wrap",
       ".ant-modal-content",
       ".ant-checkbox-inner",
+      ".ant-alert",
+      ".ant-list",
       ".ant-message-notice-content",
     ]) {
       if (!css.includes(selector)) {

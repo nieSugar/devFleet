@@ -5,7 +5,7 @@
 **轻量、快速的跨平台开发项目管理工具**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.1.14-green.svg)](https://github.com/nieSugar/devFleet/releases)
+[![Version](https://img.shields.io/badge/version-2.1.17-green.svg)](https://github.com/nieSugar/devFleet/releases)
 [![Tauri](https://img.shields.io/badge/Tauri-2-24C8D8?logo=tauri&logoColor=white)](https://v2.tauri.app)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
 [![Rust](https://img.shields.io/badge/Rust-2021-DEA584?logo=rust&logoColor=white)](https://www.rust-lang.org)
@@ -15,7 +15,9 @@
 
 [下载安装](#-下载安装) · [功能特性](#-功能特性) · [快速开始](#-快速开始) · [参与贡献](#-参与贡献)
 
-<!-- ![devFleet Screenshot](docs/screenshot.png) -->
+![devFleet 项目与进程管理界面](docs/screenshot.jpg)
+
+<small>Windows 实机截图，使用隔离配置和演示项目。</small>
 
 </div>
 
@@ -31,6 +33,11 @@
 - 选择包含 `package.json` 的文件夹即可添加项目
 - 自动识别 npm scripts 与包管理器（npm / yarn / pnpm / bun）
 - 项目配置自动持久化，支持按名称或路径快速搜索
+- 路径暂不可用时保留项目记录和备注，支持重新定位到新目录
+- 常用项目可置顶，搜索时保持置顶优先
+- 可选择开发目录扫描项目候选，勾选后批量导入
+- 扫描最多深入 3 层、访问 5,000 个目录、展示 500 个候选；自动跳过 `.git`、`node_modules`、构建产物和目录链接
+- 扫描支持取消；不会安装依赖或执行项目 scripts，只有确认勾选的项目才会导入
 
 </td>
 <td width="50%">
@@ -38,6 +45,7 @@
 ### 🟢 Node 版本管理
 - 支持 nvmd、nvs、nvm、nvm-windows
 - 为每个项目指定独立的 Node 版本
+- 启动前校验指定版本；缺失、无法解析或实际版本不一致时阻止启动，并提供管理入口
 - 自动生成 `.nvmdrc` / `.node-version` / `.nvmrc` 配置文件
 - 远程获取 Node.js 版本列表，一键安装 / 切换 / 卸载
 
@@ -47,10 +55,12 @@
 <td width="50%">
 
 ### 🚀 脚本快速启动
-- 外部终端运行 & 应用内托管模式
-- 跨平台支持：Windows (PowerShell)、macOS (Terminal)、Linux
+- 使用系统外部终端运行脚本
+- 跨平台支持：Windows (cmd)、macOS (Terminal)、Linux
 - 根据包管理器自动生成运行命令
 - 脚本名校验，防止命令注入
+- “已提交到外部终端”不代表服务已就绪；进程存在、端口监听也不等同于服务健康
+- 项目卡片显示关联进程与端口，可进入按项目筛选的进程页；停止前核对进程身份
 
 </td>
 <td width="50%">
@@ -58,8 +68,8 @@
 ### 🖥️ 编辑器集成
 - 一键在 VSCode / Cursor / WebStorm / Zed / IntelliJ IDEA / Kiro 等编辑器中打开项目
 - 支持 VSCode Insiders
-- 自动检测系统已安装的编辑器
-- 支持设置默认编辑器偏好
+- 设置页动态扫描可用编辑器，并支持导入自定义编辑器
+- 可设全局默认编辑器，项目卡片优先显示它；其他可用编辑器收进菜单
 
 </td>
 </tr>
@@ -86,7 +96,7 @@
 <td width="50%">
 
 ### 🌐 国际化
-- 内置中文（zh-CN）和英文（en-US）语言包
+- 内置中文（zh-CN）、英文（en-US）和日语（ja-JP）语言包
 - 基于 i18next + react-i18next，可轻松扩展更多语言
 - 界面语言自由切换
 
@@ -114,10 +124,12 @@
 
 ## 🛠️ 快速开始
 
+日常使用：添加项目 → 选择已安装的 Node 完整版本与脚本 → 点击运行 → 从卡片查看关联进程和端口。项目较多时，可使用“批量导入”选择一个开发目录，扫描候选项目后手动勾选并确认导入；扫描不会自动修改项目列表，也不会安装依赖或执行 scripts。项目目录移动后，可在失效卡片上选择“重新定位”，原项目 ID 和备注会保留。当前脚本运行采用外部终端，不提供应用内托管终端；进程关联属于尽力识别，未匹配的进程仍可在全局进程页查看。
+
 ### 前置要求
 
-- [Node.js](https://nodejs.org/) >= 18
-- [pnpm](https://pnpm.io/) >= 9
+- [Node.js](https://nodejs.org/) >= 22.0.0
+- [pnpm](https://pnpm.io/) >= 10.14.0
 - [Rust](https://www.rust-lang.org/tools/install) (stable)
 
 ### 克隆并安装
@@ -162,7 +174,7 @@ pnpm tauri build
 | 层 | 技术 |
 |----|------|
 | 框架 | [Tauri 2](https://v2.tauri.app) — 轻量级跨平台桌面框架 |
-| 前端 | [React 19](https://react.dev) + [TypeScript 5.9](https://www.typescriptlang.org/) + [Vite 7](https://vite.dev) |
+| 前端 | [React 19](https://react.dev) + [TypeScript 5.9](https://www.typescriptlang.org/) + [Vite 8](https://vite.dev) |
 | UI | [Ant Design 5](https://ant.design/) + [@ant-design/icons 6](https://ant.design/components/icon) + [@lobehub/icons](https://github.com/lobehub/lobe-icons) |
 | 国际化 | [i18next](https://www.i18next.com/) + [react-i18next](https://react.i18next.com/) |
 | 字体 | [Plus Jakarta Sans](https://fonts.google.com/specimen/Plus+Jakarta+Sans) + [JetBrains Mono](https://www.jetbrains.com/lp/mono/) |
@@ -201,39 +213,51 @@ src/                              # 前端源码 (React + TypeScript)
 │   └── ErrorBoundary.tsx         # 错误边界
 ├── contexts/
 │   └── ThemeContext.tsx           # 主题上下文
+├── pages/
+│   ├── AppShell.tsx               # 应用窗口壳层
+│   └── MainWindowPage.tsx          # 主窗口页面
+├── routes/
+│   └── createAppRouter.tsx         # 应用路由
+├── theme/
+│   └── antdTheme.ts                # Ant Design 主题配置
 ├── hooks/
 │   ├── useProjects.ts            # 项目数据管理
 │   ├── useEditors.ts             # 编辑器检测
 │   ├── useNvmInfo.ts             # NVM 信息
+│   ├── useNodeProcesses.ts       # 单实例进程查询与可见性轮询
 │   └── useKeyboardShortcuts.ts   # 快捷键绑定
 ├── i18n/                         # 国际化
 │   ├── index.ts                  # i18next 初始化配置
 │   └── locales/
 │       ├── zh-CN.json            # 中文语言包
-│       └── en-US.json            # 英文语言包
+│       ├── en-US.json             # 英文语言包
+│       └── ja-JP.json             # 日语语言包
 ├── lib/
-│   └── tauri.ts                  # Tauri IPC 命令封装
+│   ├── tauri.ts                  # Tauri IPC 命令封装
+│   ├── autostart.ts              # 开机自启动
+│   ├── macosNative.ts            # macOS 原生集成
+│   └── projectEvents.ts           # 项目变更事件
 ├── types/
 │   ├── project.ts                # 类型定义
 │   └── assets.d.ts               # 静态资源类型声明
-└── img/                          # 编辑器 SVG 图标
-    ├── vscode.svg
-    ├── vscode-insiders.svg
-    ├── webstorm.svg
-    ├── idea.svg
-    ├── kiro.svg
-    └── zed.svg
+└── assets/                       # 静态资源
+    └── app-icon.png
 
 src-tauri/                        # 后端源码 (Rust + Tauri)
 ├── src/
 │   ├── main.rs                   # 程序入口
 │   ├── lib.rs                    # Tauri 启动与命令注册
 │   ├── commands.rs               # IPC 命令实现
+│   ├── candidates.rs             # 编辑器候选扫描与导入
 │   ├── config.rs                 # 配置文件读写
 │   ├── detector.rs               # 包管理器 / 编辑器 / NVM 检测
+│   ├── editors.rs                # 编辑器配置与启动
+│   ├── icons.rs                  # 编辑器图标
 │   ├── models.rs                 # 数据模型
 │   ├── node_manager.rs           # Node.js 版本下载 / 安装 / 卸载
-│   └── project.rs                # 项目逻辑
+│   ├── node_processes.rs          # Node 进程信息
+│   ├── project.rs                 # 项目逻辑
+│   └── shell_context.rs           # 外部终端上下文
 ├── capabilities/                 # Tauri 权限声明
 ├── icons/                        # 应用图标（多平台多尺寸）
 ├── Cargo.toml
@@ -251,6 +275,8 @@ src-tauri/                        # 后端源码 (Rust + Tauri)
 | Linux | `~/.local/share/devfleet/` |
 
 ## 🤝 参与贡献
+
+修改运行状态相关逻辑后，可运行 `pnpm dev` 并打开 `http://localhost:1420/scripts/check-project-hooks.html`，执行不读取用户配置的 10 项 hook 回归检查；页面应显示 `PASS (10)`。后端回归使用 `cargo test --manifest-path src-tauri/Cargo.toml`。
 
 欢迎任何形式的贡献！
 

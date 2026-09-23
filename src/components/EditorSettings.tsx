@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { App, Button, Input, Modal } from "antd";
+import { App, Button, Input, Modal, Select } from "antd";
 import {
   AppstoreAddOutlined,
   DeleteOutlined,
@@ -62,7 +62,11 @@ const EditorSettings: React.FC = () => {
     editors,
     error,
     loading,
+    defaultEditorId,
+    defaultEditorLoading,
+    defaultEditorError,
     refreshEditors,
+    setDefaultEditor,
     upsertCustomEditor,
     removeCustomEditor,
   } = useEditors();
@@ -101,6 +105,38 @@ const EditorSettings: React.FC = () => {
 
   // ponytail: search all 1000 records, render 200; add virtualization only if profiling needs it.
   const visibleCandidates = filteredCandidates.slice(0, 200);
+
+  const defaultEditorOptions = useMemo(() => {
+    const options = entries.map(([id, editor]) => ({
+      value: id,
+      disabled: !editor.installed && id !== defaultEditorId,
+      label: (
+        <span className="editor-default-option">
+          <span>{editor.name}</span>
+          {!editor.installed && (
+            <span className="editor-default-option-status">
+              {t("settings.editors.unavailable")}
+            </span>
+          )}
+        </span>
+      ),
+    }));
+    if (defaultEditorId && !entries.some(([id]) => id === defaultEditorId)) {
+      options.push({
+        value: defaultEditorId,
+        disabled: true,
+        label: (
+          <span className="editor-default-option">
+            <span>{defaultEditorId}</span>
+            <span className="editor-default-option-status">
+              {t("settings.editors.unavailable")}
+            </span>
+          </span>
+        ),
+      });
+    }
+    return options;
+  }, [defaultEditorId, entries, t]);
 
   const chooseProgram = async () => {
     const path = await tauriAPI.selectEditor(
@@ -174,6 +210,15 @@ const EditorSettings: React.FC = () => {
       );
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDefaultEditorChange = async (editorId: string | undefined) => {
+    const result = await setDefaultEditor(editorId ?? null);
+    if (result.success) {
+      message.success(t("settings.editors.defaultEditorSaved"));
+    } else {
+      message.error(result.error || t("settings.editors.defaultEditorSaveFailed"));
     }
   };
 
@@ -292,6 +337,31 @@ const EditorSettings: React.FC = () => {
       </div>
 
       {error && <div className="editor-settings-error">{error}</div>}
+      <div className="editor-default-setting">
+        <div className="editor-default-copy">
+          <strong>{t("settings.editors.defaultEditor")}</strong>
+          <span>{t("settings.editors.defaultEditorHint")}</span>
+          {defaultEditorId && !editors?.[defaultEditorId]?.installed && (
+            <small className="editor-default-error" role="status">
+              {t("settings.editors.defaultEditorUnavailable")}
+            </small>
+          )}
+          {defaultEditorError && (
+            <small className="editor-default-error">{defaultEditorError}</small>
+          )}
+        </div>
+        <Select
+          className="editor-default-select"
+          allowClear
+          loading={defaultEditorLoading}
+          disabled={defaultEditorLoading}
+          value={defaultEditorId ?? undefined}
+          placeholder={t("settings.editors.noDefaultEditor")}
+          options={defaultEditorOptions}
+          onChange={(value) => void handleDefaultEditorChange(value)}
+          aria-label={t("settings.editors.defaultEditor")}
+        />
+      </div>
       <div className="editor-settings-list" aria-busy={loading}>
         {!loading && entries.length === 0 && (
           <div className="editor-settings-empty">{t("settings.editors.empty")}</div>

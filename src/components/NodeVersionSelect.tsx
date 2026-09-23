@@ -22,12 +22,14 @@ interface NodeVersionSelectProps {
   record: Project;
   nvmInfo: NvmInfo | null;
   onChange: (projectId: string, version: string | null | undefined) => void;
+  disabled?: boolean;
 }
 
 const NodeVersionSelect: React.FC<NodeVersionSelectProps> = ({
   record,
   nvmInfo,
   onChange,
+  disabled,
 }) => {
   const { t } = useTranslation();
   const availableVersions = nvmInfo?.availableVersions || [];
@@ -53,6 +55,7 @@ const NodeVersionSelect: React.FC<NodeVersionSelectProps> = ({
 
   return (
     <Select<string | undefined>
+      disabled={disabled}
       value={record.nodeVersion || undefined}
       placeholder={t("nodeVersion.selectVersion")}
       allowClear

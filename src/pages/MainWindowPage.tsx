@@ -1,14 +1,12 @@
 import React from "react";
 import { useOutletContext } from "react-router-dom";
 import ProjectManager from "../components/ProjectManager";
-type AppShellContext = {
-  nvmRefreshKey: number;
-};
+import type { AppShellContext } from "./AppShell";
 
 const MainWindowPage: React.FC = () => {
-  const { nvmRefreshKey } = useOutletContext<AppShellContext>();
+  const context = useOutletContext<AppShellContext>();
 
-  return <ProjectManager nvmRefreshKey={nvmRefreshKey} />;
+  return <ProjectManager {...context} />;
 };
 
 export default MainWindowPage;

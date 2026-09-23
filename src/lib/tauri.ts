@@ -4,14 +4,17 @@ import type {
   IpcResponse,
   Project,
   ProjectConfig,
+  ProjectSnapshot,
   NvmInfo,
   RemoteNodeVersion,
   EditorStatus,
+  DefaultEditorResult,
   CustomEditor,
   EditorCandidateDiscovery,
   ImportEditorCandidateInput,
   UpsertCustomEditorInput,
   NodeProcessInfo,
+  ProjectScanResult,
 } from "../types/project";
 
 type RunScriptParams = {
@@ -27,7 +30,7 @@ type SetNodeVersionParams = {
   nodeVersion: string | null | undefined;
 };
 
-interface ScriptRunResult {
+export interface ScriptRunResult {
   message: string;
   command: string;
   packageManager: string;
@@ -80,11 +83,24 @@ export const tauriAPI = {
   listNodeProcesses: (): Promise<IpcResponse<NodeProcessInfo[]>> =>
     invoke("list_node_processes"),
 
-  killNodeProcess: (pid: number): Promise<IpcResponse<MessageResult>> =>
-    invoke("kill_node_process", { pid }),
+  killNodeProcess: (process: NodeProcessInfo): Promise<IpcResponse<MessageResult>> =>
+    invoke("kill_node_process", {
+      pid: process.pid,
+      expectedStartedAt: process.startedAt ?? null,
+      expectedCommandLine: process.commandLine ?? null,
+      expectedExecutable: process.executable ?? null,
+    }),
 
   detectEditors: (force?: boolean): Promise<IpcResponse<EditorStatus>> =>
     invoke("detect_editors", { force }),
+
+  getDefaultEditor: (): Promise<IpcResponse<DefaultEditorResult>> =>
+    invoke("get_default_editor"),
+
+  setDefaultEditor: (
+    editorId: string | null,
+  ): Promise<IpcResponse<DefaultEditorResult>> =>
+    invoke("set_default_editor", { editorId }),
 
   openInEditor: (params: {
     editor: string;
@@ -105,17 +121,38 @@ export const tauriAPI = {
     request: ImportEditorCandidateInput
   ): Promise<IpcResponse<CustomEditor>> => invoke("import_editor_candidate", { request }),
 
-  loadProjectConfig: (): Promise<IpcResponse<ProjectConfig>> =>
+  loadProjectConfig: (): Promise<IpcResponse<ProjectSnapshot>> =>
     invoke("load_project_config"),
 
-  refreshProjectConfig: (): Promise<IpcResponse<ProjectConfig>> =>
+  refreshProjectConfig: (): Promise<IpcResponse<ProjectSnapshot>> =>
     invoke("refresh_project_config"),
+
+  relocateProject: (projectId: string, projectPath: string): Promise<IpcResponse<Project>> =>
+    invoke("relocate_project", { projectId, projectPath }),
+
+  setProjectPinned: (
+    projectId: string,
+    pinned: boolean,
+  ): Promise<IpcResponse<{ projectIds: string[] }>> =>
+    invoke("set_project_pinned", { projectId, pinned }),
+
+  setProjectScript: (projectId: string, scriptName: string): Promise<IpcResponse<Project>> =>
+    invoke("set_project_script", { projectId, scriptName }),
+
+  setProjectNote: (projectId: string, note: string): Promise<IpcResponse<Project>> =>
+    invoke("set_project_note", { projectId, note }),
 
   saveProjectConfig: (config: ProjectConfig): Promise<IpcResponse<MessageResult>> =>
     invoke("save_project_config", { config }),
 
   addProjectToConfig: (projectPath: string): Promise<IpcResponse<Project>> =>
     invoke("add_project_to_config", { projectPath }),
+
+  scanProjectCandidates: (rootPath: string): Promise<IpcResponse<ProjectScanResult>> =>
+    invoke("scan_project_candidates", { rootPath }),
+
+  cancelProjectScan: (): Promise<IpcResponse<MessageResult>> =>
+    invoke("cancel_project_scan"),
 
   removeProjectFromConfig: (projectId: string): Promise<IpcResponse<MessageResult>> =>
     invoke("remove_project_from_config", { projectId }),

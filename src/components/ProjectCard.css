@@ -10,7 +10,7 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  overflow: hidden;
+  overflow: visible;
   animation: fadeInUp 0.3s ease both;
   transition:
     border-color var(--transition-fast),
@@ -18,6 +18,10 @@
 }
 .project-card:hover {
   border-color: var(--border-default);
+}
+.project-card:hover,
+.project-card:focus-within {
+  z-index: 3;
 }
 
 /* Accent top bar — thin left edge */
@@ -74,6 +78,35 @@
   letter-spacing: 0.02em;
 }
 
+.card-pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.card-pin:hover:not(:disabled),
+.card-pin.is-pinned {
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+.card-pin:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+.card-pin:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .card-delete {
   display: flex;
   align-items: center;
@@ -97,6 +130,15 @@
   color: var(--danger);
   background: var(--danger-muted);
 }
+.card-delete:focus-visible,
+.card-relocate-btn:focus-visible,
+.card-view-processes:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.card-delete:focus-visible {
+  opacity: 1;
+}
 
 /* Path */
 .card-path {
@@ -112,6 +154,29 @@
 .project-card .card-path .ant-typography-copy {
   color: var(--text-secondary);
   font-size: 11px;
+}
+.card-path-unavailable {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  color: var(--danger);
+  font-size: var(--text-2xs);
+}
+.card-relocate-btn,
+.card-view-processes {
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.card-relocate-btn:disabled {
+  color: var(--text-muted);
+  cursor: wait;
 }
 
 /* Note */
@@ -152,6 +217,74 @@
   gap: 6px;
   flex-wrap: wrap;
   min-width: 0;
+}
+
+.editor-picker {
+  position: relative;
+  flex-shrink: 0;
+}
+.editor-picker > summary {
+  list-style: none;
+}
+.editor-picker > summary::-webkit-details-marker {
+  display: none;
+}
+.editor-choice-btn,
+.editor-more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: var(--text-2xs);
+  cursor: pointer;
+  user-select: none;
+}
+.editor-choice-btn {
+  padding: 0 8px;
+}
+.editor-more-btn {
+  padding: 0 7px;
+}
+.editor-choice-btn:hover,
+.editor-more-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.editor-picker.is-disabled > summary {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.editor-picker > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.editor-menu {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: min(160px, calc(100vw - 48px));
+  max-width: min(320px, calc(100vw - 48px));
+  flex-wrap: wrap;
+  padding: 5px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+}
+.editor-menu-message {
+  max-width: 180px;
+  padding: 3px 5px;
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  line-height: 1.35;
 }
 
 .card-node {
@@ -262,6 +395,35 @@
 }
 .run-btn:hover:not(:disabled) .run-btn-icon {
   transform: scale(1.15);
+}
+
+.card-processes {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 9px;
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  line-height: 1.4;
+}
+.card-process-ports {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.card-view-processes {
+  margin-left: auto;
+}
+.editor-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.editor-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ═══════════════════════════════════════

@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Clone, Debug)]
 pub struct IpcResponse {
     pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
     // Option<T> 是 Rust 的"可空类型"，类似 TS 的 T | null
     // Some(值) 表示有值，None 表示没值
     // skip_serializing_if：序列化为 JSON 时，如果值是 None 就不包含这个字段
@@ -33,11 +35,13 @@ impl IpcResponse {
         match serde_json::to_value(data) {
             Ok(value) => Self {
                 success: true,
+                code: None,
                 data: Some(value),
                 error: None,
             },
             Err(e) => Self {
                 success: false,
+                code: None,
                 data: None,
                 error: Some(format!("Serialization error: {}", e)),
             },
@@ -49,14 +53,23 @@ impl IpcResponse {
     pub fn err(message: impl Into<String>) -> Self {
         Self {
             success: false,
+            code: None,
             data: None,
             error: Some(message.into()),
+        }
+    }
+
+    pub fn err_code(code: &str, message: impl Into<String>) -> Self {
+        Self {
+            code: Some(code.to_string()),
+            ..Self::err(message)
         }
     }
 
     pub fn ok_msg(message: impl Into<String>) -> Self {
         Self {
             success: true,
+            code: None,
             // serde_json::json!() 宏：快速构造 JSON 值，语法类似 JS 对象字面量
             data: serde_json::to_value(serde_json::json!({ "message": message.into() })).ok(),
             error: None,
@@ -75,6 +88,10 @@ pub struct AppSettings {
     pub node_install_dir: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub builtin_current_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_editor_id: Option<String>,
+    #[serde(default)]
+    pub pinned_project_ids: Vec<String>,
     #[serde(default)]
     pub custom_editors: Vec<CustomEditor>,
 }

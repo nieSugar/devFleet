@@ -1430,8 +1430,15 @@ pub fn get_node_bin_dir(version: &str, manager: &NodeVersionManager) -> Option<P
         NodeVersionManager::Builtin => {
             return crate::node_manager::get_bin_dir(ver);
         }
-        // nvmd 通过 shim 自动处理，无需 PATH 注入
-        NodeVersionManager::Nvmd | NodeVersionManager::None => return None,
+        NodeVersionManager::Nvmd => {
+            let base = get_nvmd_versions_dir()?.join(ver);
+            if cfg!(unix) {
+                base.join("bin")
+            } else {
+                base
+            }
+        }
+        NodeVersionManager::None => return None,
     };
 
     if dir.is_dir() {

@@ -59,13 +59,31 @@ pub fn list_node_processes(projects: &[Project]) -> Result<Vec<NodeProcessInfo>,
         .collect())
 }
 
-pub fn kill_node_process(pid: u32) -> Result<(), String> {
+pub fn kill_node_process(
+    pid: u32,
+    expected_started_at: Option<&str>,
+    expected_command_line: Option<&str>,
+    expected_executable: Option<&str>,
+) -> Result<(), String> {
     if pid == std::process::id() {
         return Err("不能结束 DevFleet 自身进程".to_string());
     }
 
     if !platform_is_node_process(pid)? {
         return Err(format!("未找到 PID {} 的 Node 进程", pid));
+    }
+
+    let current = platform_list_node_processes()?
+        .into_iter()
+        .find(|process| process.pid == pid)
+        .ok_or_else(|| "进程已经退出，请刷新后重试".to_string())?;
+    if !process_identity_matches(
+        &current,
+        expected_started_at,
+        expected_command_line,
+        expected_executable,
+    ) {
+        return Err("进程身份已变化或无法确认，请刷新后重试".into());
     }
 
     // Windows 的 taskkill /T 会结束整棵树；Unix 的 kill 只处理指定 PID。
@@ -75,6 +93,19 @@ pub fn kill_node_process(pid: u32) -> Result<(), String> {
     let kill_pid = pid;
 
     platform_kill_process(kill_pid)
+}
+
+fn process_identity_matches(
+    current: &RawNodeProcess,
+    started_at: Option<&str>,
+    command_line: Option<&str>,
+    executable: Option<&str>,
+) -> bool {
+    // 没有任何可比对身份时拒绝操作，不把陈旧列表中的 PID 当作永久身份。
+    (started_at.is_some_and(|s| !s.is_empty()) || command_line.is_some_and(|s| !s.is_empty()))
+        && started_at.is_none_or(|s| current.started_at.as_deref() == Some(s))
+        && command_line.is_none_or(|s| current.command_line.as_deref() == Some(s))
+        && executable.is_none_or(|s| current.executable.as_deref() == Some(s))
 }
 
 fn enrich_process(process: RawNodeProcess, projects: &[Project]) -> NodeProcessInfo {
@@ -532,6 +563,25 @@ fn shell_words(command_line: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{NpmScript, Project};
+
+    fn project(path: &str) -> Project {
+        Project {
+            id: path.to_string(),
+            name: path.to_string(),
+            path: path.to_string(),
+            scripts: vec![NpmScript {
+                name: "dev".to_string(),
+                command: "vite".to_string(),
+            }],
+            selected_script: Some("dev".to_string()),
+            is_running: Some(false),
+            last_run_time: None,
+            package_manager: Some("npm".to_string()),
+            node_version: None,
+            note: None,
+        }
+    }
 
     #[test]
     fn parses_npm_cli_run_command() {
@@ -563,6 +613,89 @@ mod tests {
         assert!(script_matches_command_line(
             "vite --host 127.0.0.1",
             r#"node e:\repo\node_modules\vite\bin\vite.js --host 127.0.0.1"#,
+        ));
+    }
+
+    #[test]
+    fn matches_longest_project_path_on_directory_boundaries() {
+        let projects = vec![project("E:/repo"), project("E:/repo/web")];
+        let process = RawNodeProcess {
+            pid: 1,
+            parent_pid: None,
+            name: "node".to_string(),
+            executable: None,
+            command_line: Some(r#"node "E:\repo\web\server.js""#.to_string()),
+            launch_command: None,
+            started_at: None,
+            ports: vec![],
+        };
+
+        assert_eq!(
+            match_project(&process, &projects).unwrap().path,
+            "E:/repo/web"
+        );
+    }
+
+    #[test]
+    fn rejects_same_prefix_and_unrelated_paths() {
+        let projects = vec![project("E:/repo"), project("E:/repository")];
+        let process = RawNodeProcess {
+            pid: 1,
+            parent_pid: None,
+            name: "node".to_string(),
+            executable: None,
+            command_line: Some("node E:/repository-old/server.js".to_string()),
+            launch_command: None,
+            started_at: None,
+            ports: vec![],
+        };
+
+        assert!(match_project(&process, &projects).is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_path_matching_keeps_case_sensitive() {
+        let projects = vec![project("/Repo")];
+        let process = RawNodeProcess {
+            pid: 1,
+            parent_pid: None,
+            name: "node".to_string(),
+            executable: None,
+            command_line: Some("node /repo/server.js".to_string()),
+            launch_command: None,
+            started_at: None,
+            ports: vec![],
+        };
+
+        assert!(match_project(&process, &projects).is_none());
+    }
+
+    #[test]
+    fn process_identity_rejects_missing_or_changed_identity() {
+        let current = RawNodeProcess {
+            pid: 1,
+            parent_pid: None,
+            name: "node".to_string(),
+            executable: Some("/usr/bin/node".to_string()),
+            command_line: Some("node server.js".to_string()),
+            launch_command: None,
+            started_at: Some("started".to_string()),
+            ports: vec![],
+        };
+
+        assert!(!process_identity_matches(&current, None, None, None));
+        assert!(!process_identity_matches(
+            &current,
+            Some("changed"),
+            current.command_line.as_deref(),
+            current.executable.as_deref()
+        ));
+        assert!(process_identity_matches(
+            &current,
+            current.started_at.as_deref(),
+            current.command_line.as_deref(),
+            current.executable.as_deref()
         ));
     }
 
@@ -728,20 +861,48 @@ fn match_project<'a>(process: &RawNodeProcess, projects: &'a [Project]) -> Optio
         process.executable.as_deref().unwrap_or_default(),
         process.command_line.as_deref().unwrap_or_default(),
     ]
-    .join(" ")
-    .to_lowercase();
-    let slash_haystack = haystack.replace('\\', "/");
+    .join(" ");
 
-    projects.iter().find(|project| {
-        let path = project.path.trim();
-        if path.is_empty() {
-            return false;
+    projects
+        .iter()
+        .filter(|project| path_occurs(&haystack, &project.path))
+        .max_by_key(|project| project.path.trim().trim_matches(['"', '\'']).len())
+}
+
+fn path_occurs(haystack: &str, path: &str) -> bool {
+    let path = path.trim().trim_matches(['"', '\'']);
+    if path.is_empty() {
+        return false;
+    }
+
+    let haystack = haystack.replace('\\', "/");
+    let path = path.replace('\\', "/");
+    let (haystack, path) = if cfg!(target_os = "windows") {
+        (haystack.to_lowercase(), path.to_lowercase())
+    } else {
+        (haystack, path)
+    };
+
+    let mut offset = 0;
+    while let Some(relative) = haystack[offset..].find(&path) {
+        let start = offset + relative;
+        let end = start + path.len();
+        let before_ok = start == 0
+            || haystack[..start]
+                .chars()
+                .next_back()
+                .is_some_and(|ch| ch.is_whitespace() || matches!(ch, '"' | '\''));
+        let after_ok = end == haystack.len()
+            || haystack[end..]
+                .chars()
+                .next()
+                .is_some_and(|ch| ch == '/' || ch.is_whitespace() || matches!(ch, '"' | '\''));
+        if before_ok && after_ok {
+            return true;
         }
-
-        let normalized = path.to_lowercase();
-        let slash_normalized = normalized.replace('\\', "/");
-        haystack.contains(&normalized) || slash_haystack.contains(&slash_normalized)
-    })
+        offset = end;
+    }
+    false
 }
 
 fn is_node_process_name(name: &str) -> bool {

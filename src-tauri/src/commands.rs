@@ -72,55 +72,66 @@ pub fn detect_package_manager(project_path: String) -> IpcResponse {
 }
 
 #[tauri::command]
-pub fn load_project_config() -> IpcResponse {
-    IpcResponse::ok(config::load())
+pub fn get_default_editor() -> IpcResponse {
+    match config::load_default_editor_id() {
+        Ok(editor_id) => IpcResponse::ok(serde_json::json!({ "editorId": editor_id })),
+        Err(error) => IpcResponse::err(error),
+    }
+}
+
+#[tauri::command]
+pub fn set_default_editor(editor_id: Option<String>) -> IpcResponse {
+    match config::save_default_editor_id(editor_id.as_deref()) {
+        Ok(editor_id) => IpcResponse::ok(serde_json::json!({ "editorId": editor_id })),
+        Err(error) => IpcResponse::err(error),
+    }
+}
+
+fn project_config_response(cfg: ProjectConfig) -> IpcResponse {
+    let availability: std::collections::HashMap<_, _> = cfg
+        .projects
+        .iter()
+        .map(|p| (p.id.clone(), project::is_valid_path(&p.path)))
+        .collect();
+    let mut pinned_project_ids = cfg
+        .settings
+        .as_ref()
+        .map(|settings| settings.pinned_project_ids.clone())
+        .unwrap_or_default();
+    crate::config::normalize_pinned_project_ids(&mut pinned_project_ids, &cfg.projects);
+    // 可用性和置顶列表只属于本次响应，不重复写入项目结构。
+    let mut data = serde_json::json!(cfg);
+    data["availability"] = serde_json::json!(availability);
+    data["pinnedProjectIds"] = serde_json::json!(pinned_project_ids);
+    IpcResponse::ok(data)
+}
+
+#[tauri::command]
+pub async fn load_project_config() -> IpcResponse {
+    tokio::task::spawn_blocking(|| match config::load_checked() {
+        Ok(cfg) => project_config_response(cfg),
+        Err(e) => IpcResponse::err(e),
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
 }
 
 #[tauri::command]
 pub async fn refresh_project_config() -> IpcResponse {
-    tokio::task::spawn_blocking(|| {
-        let mut cfg = config::load_and_refresh();
+    tokio::task::spawn_blocking(|| match config::load_and_refresh() {
+        Ok(cfg) => project_config_response(cfg),
+        Err(e) => IpcResponse::err(e),
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
+}
 
-        let indices: Vec<usize> = cfg
-            .projects
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| p.package_manager.is_none())
-            .map(|(i, _)| i)
-            .collect();
-
-        if !indices.is_empty() {
-            let paths: Vec<String> = indices
-                .iter()
-                .map(|&i| cfg.projects[i].path.clone())
-                .collect();
-            let results: Vec<String> = std::thread::scope(|s| {
-                let handles: Vec<_> = paths
-                    .iter()
-                    .map(|path| s.spawn(|| detector::detect_package_manager(path).to_string()))
-                    .collect();
-                handles
-                    .into_iter()
-                    .map(|h| {
-                        h.join().unwrap_or_else(|e| {
-                            eprintln!(
-                                "[devfleet] package manager detection thread panicked: {:?}",
-                                e
-                            );
-                            "npm".to_string()
-                        })
-                    })
-                    .collect()
-            });
-            for (idx, pm) in indices.into_iter().zip(results) {
-                cfg.projects[idx].package_manager = Some(pm);
-            }
-        }
-
-        if config::save(&cfg) {
-            IpcResponse::ok(cfg)
-        } else {
-            IpcResponse::err("刷新后保存配置失败")
+#[tauri::command]
+pub async fn relocate_project(project_id: String, project_path: String) -> IpcResponse {
+    tokio::task::spawn_blocking(move || {
+        match config::relocate_project(&project_id, &project_path) {
+            Ok(project) => IpcResponse::ok(project),
+            Err(e) => IpcResponse::err(e),
         }
     })
     .await
@@ -134,6 +145,55 @@ pub fn save_project_config(config: ProjectConfig) -> IpcResponse {
     } else {
         IpcResponse::err("保存配置失败")
     }
+}
+
+#[tauri::command]
+pub async fn set_project_script(project_id: String, script_name: String) -> IpcResponse {
+    tokio::task::spawn_blocking(move || {
+        match config::update_project(&project_id, |project| {
+            if !project
+                .scripts
+                .iter()
+                .any(|script| script.name == script_name)
+            {
+                return Err("脚本不存在，请刷新后重新选择".into());
+            }
+            project.selected_script = Some(script_name);
+            Ok(())
+        }) {
+            Ok(project) => IpcResponse::ok(project),
+            Err(error) => IpcResponse::err(error),
+        }
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {e}")))
+}
+
+#[tauri::command]
+pub async fn set_project_note(project_id: String, note: String) -> IpcResponse {
+    tokio::task::spawn_blocking(move || {
+        match config::update_project(&project_id, |project| {
+            project.note = (!note.trim().is_empty()).then(|| note.trim().to_string());
+            Ok(())
+        }) {
+            Ok(project) => IpcResponse::ok(project),
+            Err(error) => IpcResponse::err(error),
+        }
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {e}")))
+}
+
+#[tauri::command]
+pub async fn set_project_pinned(project_id: String, pinned: bool) -> IpcResponse {
+    tokio::task::spawn_blocking(
+        move || match config::set_project_pinned(&project_id, pinned) {
+            Ok(project_ids) => IpcResponse::ok(serde_json::json!({ "projectIds": project_ids })),
+            Err(error) => IpcResponse::err(error),
+        },
+    )
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {e}")))
 }
 
 #[tauri::command]
@@ -162,11 +222,30 @@ pub fn add_project_to_config(project_path: String) -> IpcResponse {
     if !project::is_valid_path(&project_path) {
         return IpcResponse::err("所选文件夹不是有效的项目目录（缺少 package.json）");
     }
+    if !project::has_valid_package_json(&project_path) {
+        return IpcResponse::err("package.json 不是有效的 JSON 对象，无法添加项目");
+    }
     match project::add_to_config(&project_path) {
         Ok(p) => IpcResponse::ok(p),
         Err(true) => IpcResponse::err("该项目路径已存在，请勿重复添加"),
         Err(false) => IpcResponse::err("添加项目失败"),
     }
+}
+
+#[tauri::command]
+pub async fn scan_project_candidates(root_path: String) -> IpcResponse {
+    let generation = project::begin_project_scan();
+    tokio::task::spawn_blocking(move || {
+        IpcResponse::ok(project::scan_project_candidates(&root_path, generation))
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {e}")))
+}
+
+#[tauri::command]
+pub fn cancel_project_scan() -> IpcResponse {
+    project::cancel_project_scan();
+    IpcResponse::ok_msg("扫描已取消")
 }
 
 #[tauri::command]
@@ -202,7 +281,7 @@ fn spawn_external_terminal(project_path: &str, run_command: &str) -> bool {
     const CREATE_NEW_CONSOLE: u32 = 0x00000010;
     spawn_and_detach(
         Command::new("cmd")
-            .raw_arg(format!("/K {}", run_command))
+            .raw_arg(format!("/D /V:OFF /K {}", run_command))
             .current_dir(project_path)
             .creation_flags(CREATE_NEW_CONSOLE),
     )
@@ -248,9 +327,81 @@ fn spawn_external_terminal(project_path: &str, run_command: &str) -> bool {
 
 /// 构建 PATH 注入命令，将指定版本的 Node 二进制目录插入 PATH 最前面
 /// 比 `nvm use` 更好：不修改全局状态，多终端可同时使用不同版本
-fn build_node_path_prefix(version: &str, manager: &NodeVersionManager) -> Option<String> {
-    let dir = detector::get_node_bin_dir(version, manager)?;
-    format_path_prefix(&dir)
+fn exact_node_version(value: &str) -> Option<&str> {
+    let version = value.trim().strip_prefix('v').unwrap_or(value.trim());
+    let parts: Vec<_> = version.split('.').collect();
+    (parts.len() == 3
+        && parts
+            .iter()
+            .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit())))
+    .then_some(version)
+}
+
+fn verify_node_output(expected: &str, output: &str) -> Result<(), (&'static str, String)> {
+    match exact_node_version(output) {
+        Some(actual) if actual == expected => Ok(()),
+        Some(actual) => Err((
+            "NODE_VERSION_MISMATCH",
+            format!("要求 Node {expected}，实际为 {actual}"),
+        )),
+        None => Err(("NODE_VERSION_CHECK_FAILED", "无法识别 Node 版本输出".into())),
+    }
+}
+
+fn checked_node_prefix(
+    version: &str,
+    manager: &NodeVersionManager,
+    project_path: &str,
+) -> Result<Option<String>, (&'static str, String)> {
+    let dir = detector::get_node_bin_dir(version, manager);
+    let executable = match dir.as_ref() {
+        Some(dir) => {
+            let executable = dir.join(if cfg!(windows) { "node.exe" } else { "node" });
+            if !executable.is_file() {
+                return Err((
+                    "NODE_VERSION_MISSING",
+                    format!("Node {version} 可执行文件不存在"),
+                ));
+            }
+            executable
+        }
+        // nvmd 可通过 shim 接管；先验证已安装，再在项目目录探测，不能静默下载安装。
+        None if *manager == NodeVersionManager::Nvmd => {
+            if !detector::get_node_versions(manager)
+                .iter()
+                .any(|v| v.version == version)
+            {
+                return Err((
+                    "NODE_VERSION_MISSING",
+                    format!("未确认 nvmd 已安装 Node {version}"),
+                ));
+            }
+            std::path::PathBuf::from("node")
+        }
+        None => return Err(("NODE_VERSION_MISSING", format!("未找到 Node {version}"))),
+    };
+    let mut probe = Command::new(executable);
+    probe.arg("--version").current_dir(project_path);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        probe.creation_flags(0x08000000);
+    }
+    let output =
+        detector::output_with_timeout(probe, 5).map_err(|e| ("NODE_VERSION_CHECK_FAILED", e))?;
+    if !output.status.success() {
+        return Err((
+            "NODE_VERSION_CHECK_FAILED",
+            "Node 版本校验命令执行失败".into(),
+        ));
+    }
+    verify_node_output(version, &String::from_utf8_lossy(&output.stdout))?;
+    Ok(dir.as_deref().and_then(format_path_prefix))
+}
+
+fn version_guard(version: &str) -> String {
+    // 外部终端可能加载不同环境；执行脚本前再核对一次，失败不会执行后面的脚本。
+    format!("node -e \"if(process.versions.node !== '{version}'){{console.error('DevFleet: Node version mismatch.');process.exit(1)}}\"")
 }
 
 /// 构建 builtin 管理器 current 目录的 PATH 注入命令，
@@ -265,19 +416,38 @@ fn format_path_prefix(dir: &std::path::Path) -> Option<String> {
     if cfg!(target_os = "windows") {
         Some(format!(r#"set "PATH={};%PATH%""#, dir_str))
     } else {
-        Some(format!("export PATH={}:$PATH", dir_str))
+        Some(format!(
+            "export PATH='{}':\"$PATH\"",
+            dir_str.replace('\'', "'\\''")
+        ))
     }
 }
 
 #[tauri::command]
-pub fn run_script(
+pub async fn run_script(
     project_path: String,
     script_name: String,
     _project_id: String,
     package_manager: Option<String>,
     node_version: Option<String>,
 ) -> IpcResponse {
-    if !validate_script_name(&script_name) {
+    tokio::task::spawn_blocking(move || {
+        run_script_checked(&project_path, &script_name, package_manager, node_version)
+    })
+    .await
+    .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
+}
+
+fn run_script_checked(
+    project_path: &str,
+    script_name: &str,
+    package_manager: Option<String>,
+    node_version: Option<String>,
+) -> IpcResponse {
+    if !project::is_valid_path(project_path) {
+        return IpcResponse::err_code("PROJECT_UNAVAILABLE", "项目路径不可用，请重新定位后再运行");
+    }
+    if !validate_script_name(script_name) {
         return IpcResponse::err(
             "脚本名称包含非法字符，仅允许字母、数字、连字符、下划线、冒号和点",
         );
@@ -285,19 +455,30 @@ pub fn run_script(
 
     let pm = package_manager
         .and_then(|s| s.parse::<PackageManager>().ok())
-        .unwrap_or_else(|| detector::detect_package_manager(&project_path));
+        .unwrap_or_else(|| detector::detect_package_manager(project_path));
 
-    let base_command = pm.run_command(&script_name);
+    let base_command = pm.run_command(script_name);
 
-    // 项目指定了 Node 版本 → 注入该版本的 bin 目录
-    // 未指定 → fallback 注入 builtin current 目录，确保全局安装的 pnpm/yarn 等可用
+    let mut verified_version = None;
     let run_command = match node_version.as_deref().filter(|v| !v.trim().is_empty()) {
         Some(ver) => {
+            let Some(version) = exact_node_version(ver) else {
+                return IpcResponse::err_code(
+                    "NODE_VERSION_UNRESOLVED",
+                    format!("无法确认版本需求 {ver}，请选用已安装的完整版本"),
+                );
+            };
             let manager = detector::detect_node_version_manager();
-            match build_node_path_prefix(ver, &manager) {
-                Some(prefix) => format!("{} && {}", prefix, base_command),
-                None => base_command,
-            }
+            let prefix = match checked_node_prefix(version, &manager, project_path) {
+                Ok(prefix) => prefix,
+                Err((code, message)) => return IpcResponse::err_code(code, message),
+            };
+            verified_version = Some(version.to_string());
+            let guarded = format!("{} && {}", version_guard(version), base_command);
+            prefix.map_or_else(
+                || guarded.clone(),
+                |prefix| format!("{prefix} && {guarded}"),
+            )
         }
         None => match build_builtin_current_path_prefix() {
             Some(prefix) => format!("{} && {}", prefix, base_command),
@@ -305,15 +486,15 @@ pub fn run_script(
         },
     };
 
-    if !spawn_external_terminal(&project_path, &run_command) {
+    if !spawn_external_terminal(project_path, &run_command) {
         return IpcResponse::err("启动外部终端失败，无法找到可用的终端程序");
     }
 
     IpcResponse::ok(serde_json::json!({
-        "message": "已在外部终端启动",
+        "message": "已提交到外部终端",
         "command": run_command,
         "packageManager": pm.to_string(),
-        "nodeVersion": node_version,
+        "nodeVersion": verified_version,
     }))
 }
 
@@ -333,16 +514,30 @@ pub async fn list_node_processes() -> IpcResponse {
 }
 
 #[tauri::command]
-pub async fn kill_node_process(pid: u32) -> IpcResponse {
-    tokio::task::spawn_blocking(
-        move || match crate::node_processes::kill_node_process(pid) {
+pub async fn kill_node_process(
+    pid: u32,
+    expected_started_at: Option<String>,
+    expected_command_line: Option<String>,
+    expected_executable: Option<String>,
+) -> IpcResponse {
+    tokio::task::spawn_blocking(move || {
+        match crate::node_processes::kill_node_process(
+            pid,
+            expected_started_at.as_deref(),
+            expected_command_line.as_deref(),
+            expected_executable.as_deref(),
+        ) {
             Ok(()) => IpcResponse::ok_msg(format!("已结束 Node 进程 {}", pid)),
             Err(e) => IpcResponse::err(e),
-        },
-    )
+        }
+    })
     .await
     .unwrap_or_else(|e| IpcResponse::err(format!("内部错误: {}", e)))
 }
+
+#[cfg(test)]
+#[path = "commands_tests.rs"]
+mod tests;
 
 // ── 编辑器命令 ──
 
@@ -667,13 +862,6 @@ pub fn set_node_install_dir(dir: String) -> IpcResponse {
 /// 设置项目的 Node 版本（写入对应的版本文件，如 .nvmrc）
 #[tauri::command]
 pub fn set_project_node_version(project_id: String, node_version: Option<String>) -> IpcResponse {
-    let mut cfg = config::load();
-    // .position() 返回第一个满足条件的元素的索引，类似 JS 的 findIndex()
-    let proj_idx = match cfg.projects.iter().position(|p| p.id == project_id) {
-        Some(i) => i,
-        None => return IpcResponse::err("项目不存在"),
-    };
-
     let mut manager = detector::detect_node_version_manager();
     if manager == NodeVersionManager::None {
         manager = NodeVersionManager::Builtin;
@@ -682,22 +870,19 @@ pub fn set_project_node_version(project_id: String, node_version: Option<String>
     // .as_deref() 把 Option<String> 转为 Option<&str>
     // 这是 Rust 所有权系统的常见操作：String 是拥有所有权的，&str 是借用的
     let nv = node_version.as_deref();
-    if !project::set_node_version_file(&cfg.projects[proj_idx].path, nv, &manager) {
-        return IpcResponse::err("操作版本配置文件失败");
-    }
-
-    // .filter() 在 Option 上使用：满足条件保持 Some，不满足变 None
-    // .cloned() 把 Option<&String> 转成 Option<String>（深拷贝）
-    cfg.projects[proj_idx].node_version = node_version
-        .as_ref()
-        .filter(|v| !v.trim().is_empty())
-        .cloned();
-
-    let updated_proj = cfg.projects[proj_idx].clone();
-
-    if !config::save(&cfg) {
-        return IpcResponse::err("保存配置失败");
-    }
+    let updated_proj = match config::update_project(&project_id, |item| {
+        if !project::is_valid_path(&item.path) {
+            return Err("项目路径不可用，请先重新定位".into());
+        }
+        if !project::set_node_version_file(&item.path, nv, &manager) {
+            return Err("操作版本配置文件失败".into());
+        }
+        item.node_version = nv.filter(|v| !v.trim().is_empty()).map(str::to_string);
+        Ok(())
+    }) {
+        Ok(project) => project,
+        Err(error) => return IpcResponse::err(error),
+    };
 
     let file_name = match manager {
         NodeVersionManager::Builtin => ".node-version",

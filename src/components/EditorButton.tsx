@@ -6,9 +6,10 @@ interface EditorButtonProps {
   alt: string;
   title: string;
   onClick: () => void;
+  disabled?: boolean;
 }
 
-const EditorButton: React.FC<EditorButtonProps> = ({ icon, alt, title, onClick }) => {
+const EditorButton: React.FC<EditorButtonProps> = ({ icon, alt, title, onClick, disabled }) => {
   const [failedIcon, setFailedIcon] = useState<string | null>(null);
 
   const fallback =
@@ -22,7 +23,7 @@ const EditorButton: React.FC<EditorButtonProps> = ({ icon, alt, title, onClick }
 
   return (
     <Tooltip title={title} placement="top" mouseEnterDelay={0.4}>
-      <button className="editor-btn" onClick={onClick} aria-label={title}>
+      <button className="editor-btn" onClick={onClick} aria-label={title} disabled={disabled}>
         {icon && failedIcon !== icon ? (
           <img
             alt={alt}

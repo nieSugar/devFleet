@@ -13,6 +13,7 @@ interface ProjectHeaderProps {
   totalCount: number;
   searchText: string;
   onAdd: () => void;
+  onImport: () => void;
   onRefresh: () => void;
   onSearch: (text: string) => void;
 }
@@ -23,6 +24,7 @@ const ProjectHeader: React.FC<ProjectHeaderProps> = ({
   totalCount,
   searchText,
   onAdd,
+  onImport,
   onRefresh,
   onSearch,
 }) => {
@@ -52,6 +54,9 @@ const ProjectHeader: React.FC<ProjectHeaderProps> = ({
             disabled={loading}
           />
         </Tooltip>
+        <Button onClick={onImport}>
+          {t("project.import.button")}
+        </Button>
         <Button
           type="primary"
           ghost

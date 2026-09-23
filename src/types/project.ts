@@ -21,6 +21,11 @@ export interface ProjectConfig {
   lastUpdated: Date | string;
 }
 
+export interface ProjectSnapshot extends ProjectConfig {
+  availability: Record<string, boolean>;
+  pinnedProjectIds: string[];
+}
+
 export interface ProcessInfo {
   pid: number;
   projectId: string;
@@ -51,6 +56,7 @@ export interface NodeProcessInfo {
 
 export interface IpcResponse<T = unknown> {
   success: boolean;
+  code?: string;
   data?: T;
   error?: string;
 }
@@ -98,6 +104,10 @@ export interface EditorInfo {
 }
 
 export type EditorStatus = Record<string, EditorInfo>;
+
+export interface DefaultEditorResult {
+  editorId: string | null;
+}
 
 export type EditorLaunch =
   | {
@@ -149,4 +159,33 @@ export interface EditorCandidateDiscovery {
 export interface ImportEditorCandidateInput {
   candidateId: string;
   name?: string;
+}
+
+export interface ProjectScanCandidate {
+  path: string;
+  name: string;
+  packageManager?: string;
+  added: boolean;
+}
+
+export type ProjectScanWarningCode =
+  | "ROOT_UNAVAILABLE"
+  | "ROOT_INVALID"
+  | "CONFIG_READ_FAILED"
+  | "DIRECTORY_LIMIT"
+  | "CANDIDATE_LIMIT"
+  | "DIRECTORY_UNREADABLE";
+
+export interface ProjectScanWarning {
+  code: ProjectScanWarningCode;
+  path?: string;
+  detail?: string;
+}
+
+export interface ProjectScanResult {
+  candidates: ProjectScanCandidate[];
+  warnings: ProjectScanWarning[];
+  truncated: boolean;
+  cancelled: boolean;
+  visitedDirectories: number;
 }

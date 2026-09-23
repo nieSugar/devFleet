@@ -4,9 +4,275 @@
 use crate::config;
 use crate::detector;
 use crate::models::{NodeVersionManager, NpmScript, Project};
+use std::collections::HashSet;
 use std::fs;
-use std::path::Path;
-use std::sync::LazyLock;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+pub const MAX_SCAN_DEPTH: usize = 3;
+pub const MAX_SCAN_DIRECTORIES: usize = 5_000;
+pub const MAX_SCAN_CANDIDATES: usize = 500;
+
+static PROJECT_SCAN_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+#[derive(serde::Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectScanCandidate {
+    pub path: String,
+    pub name: String,
+    pub package_manager: String,
+    pub added: bool,
+}
+
+#[derive(serde::Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectScanResult {
+    pub candidates: Vec<ProjectScanCandidate>,
+    pub warnings: Vec<ProjectScanWarning>,
+    pub truncated: bool,
+    pub cancelled: bool,
+    pub visited_directories: usize,
+}
+
+#[derive(serde::Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectScanWarning {
+    pub code: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+pub fn begin_project_scan() -> u64 {
+    PROJECT_SCAN_GENERATION.fetch_add(1, Ordering::AcqRel) + 1
+}
+
+pub fn cancel_project_scan() {
+    PROJECT_SCAN_GENERATION.fetch_add(1, Ordering::AcqRel);
+}
+
+fn scan_cancelled(generation: u64) -> bool {
+    PROJECT_SCAN_GENERATION.load(Ordering::Acquire) != generation
+}
+
+fn path_key(path: &Path) -> String {
+    let key = path.to_string_lossy().replace('\\', "/");
+    if cfg!(target_os = "windows") {
+        key.to_ascii_lowercase()
+    } else {
+        key
+    }
+}
+
+fn is_directory_link(path: &Path) -> bool {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return true;
+    };
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return true;
+        }
+    }
+    false
+}
+
+fn read_package_object(project_path: &Path) -> Option<serde_json::Value> {
+    let package_path = project_path.join("package.json");
+    if is_directory_link(&package_path) {
+        return None;
+    }
+    let content = fs::read_to_string(package_path).ok()?;
+    let package = serde_json::from_str::<serde_json::Value>(&content).ok()?;
+    package.is_object().then_some(package)
+}
+
+pub fn has_valid_package_json(project_path: &str) -> bool {
+    read_package_object(Path::new(project_path)).is_some()
+}
+
+pub fn scan_project_candidates(root_path: &str, generation: u64) -> ProjectScanResult {
+    let mut result = ProjectScanResult {
+        candidates: Vec::new(),
+        warnings: Vec::new(),
+        truncated: false,
+        cancelled: false,
+        visited_directories: 0,
+    };
+    let config = match config::load_checked() {
+        Ok(config) => config,
+        Err(error) => {
+            push_warning(
+                &mut result.warnings,
+                "CONFIG_READ_FAILED",
+                None,
+                Some(error),
+            );
+            return result;
+        }
+    };
+    let existing: HashSet<String> = config
+        .projects
+        .iter()
+        .filter_map(|project| canonicalize_path(&project.path))
+        .map(|path| path_key(Path::new(&path)))
+        .collect();
+    scan_project_candidates_with_existing(root_path, generation, existing)
+}
+
+fn scan_project_candidates_with_existing(
+    root_path: &str,
+    generation: u64,
+    existing: HashSet<String>,
+) -> ProjectScanResult {
+    let mut result = ProjectScanResult {
+        candidates: Vec::new(),
+        warnings: Vec::new(),
+        truncated: false,
+        cancelled: false,
+        visited_directories: 0,
+    };
+
+    let Some(root) = canonicalize_path(root_path).map(PathBuf::from) else {
+        push_warning(&mut result.warnings, "ROOT_UNAVAILABLE", None, None);
+        return result;
+    };
+    if !root.is_dir() || is_directory_link(Path::new(root_path)) {
+        push_warning(
+            &mut result.warnings,
+            "ROOT_INVALID",
+            Some(root_path.to_string()),
+            None,
+        );
+        return result;
+    }
+
+    let mut seen = HashSet::new();
+    let mut pending = vec![(root, 0usize)];
+
+    while let Some((directory, depth)) = pending.pop() {
+        if scan_cancelled(generation) {
+            result.cancelled = true;
+            break;
+        }
+        if result.visited_directories >= MAX_SCAN_DIRECTORIES {
+            result.truncated = true;
+            push_warning(
+                &mut result.warnings,
+                "DIRECTORY_LIMIT",
+                None,
+                Some(MAX_SCAN_DIRECTORIES.to_string()),
+            );
+            break;
+        }
+        result.visited_directories += 1;
+
+        let directory_key = path_key(&directory);
+        if !seen.insert(directory_key) {
+            continue;
+        }
+
+        if read_package_object(&directory).is_some() {
+            if result.candidates.len() >= MAX_SCAN_CANDIDATES {
+                result.truncated = true;
+                push_warning(
+                    &mut result.warnings,
+                    "CANDIDATE_LIMIT",
+                    None,
+                    Some(MAX_SCAN_CANDIDATES.to_string()),
+                );
+                break;
+            }
+            let key = path_key(&directory);
+            result.candidates.push(ProjectScanCandidate {
+                path: directory.to_string_lossy().to_string(),
+                name: get_project_name(&directory.to_string_lossy()),
+                package_manager: detector::detect_package_manager(&directory.to_string_lossy())
+                    .to_string(),
+                added: existing.contains(&key),
+            });
+            if result.candidates.len() == MAX_SCAN_CANDIDATES {
+                result.truncated = true;
+                push_warning(
+                    &mut result.warnings,
+                    "CANDIDATE_LIMIT",
+                    None,
+                    Some(MAX_SCAN_CANDIDATES.to_string()),
+                );
+                break;
+            }
+        }
+
+        if depth >= MAX_SCAN_DEPTH {
+            continue;
+        }
+        let Ok(entries) = fs::read_dir(&directory) else {
+            push_warning(
+                &mut result.warnings,
+                "DIRECTORY_UNREADABLE",
+                Some(directory.to_string_lossy().to_string()),
+                None,
+            );
+            continue;
+        };
+        let mut directories: Vec<PathBuf> = entries
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path())
+            .filter(|path| {
+                let name = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("");
+                !matches!(
+                    name.to_ascii_lowercase().as_str(),
+                    ".git"
+                        | "node_modules"
+                        | "dist"
+                        | "build"
+                        | "out"
+                        | ".next"
+                        | ".nuxt"
+                        | ".output"
+                        | ".svelte-kit"
+                        | ".astro"
+                        | ".turbo"
+                        | "coverage"
+                        | "target"
+                ) && !is_directory_link(path)
+                    && path.is_dir()
+            })
+            .collect();
+        directories.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
+        pending.extend(directories.into_iter().rev().map(|path| (path, depth + 1)));
+    }
+
+    if scan_cancelled(generation) {
+        result.cancelled = true;
+    }
+    result
+}
+
+fn push_warning(
+    warnings: &mut Vec<ProjectScanWarning>,
+    code: &str,
+    path: Option<String>,
+    detail: Option<String>,
+) {
+    const MAX_WARNINGS: usize = 50;
+    if warnings.len() < MAX_WARNINGS {
+        warnings.push(ProjectScanWarning {
+            code: code.to_string(),
+            path,
+            detail,
+        });
+    }
+}
 
 /// 读取项目 package.json 中的 scripts 字段，返回脚本列表
 pub fn get_package_scripts(project_path: &str) -> Vec<NpmScript> {
@@ -120,22 +386,14 @@ pub fn create_project(project_path: &str) -> Option<Project> {
 /// 添加项目到配置文件，路径已存在则返回 None（由调用方区分"重复"和"失败"）
 /// 返回 Result：Ok(Project) 成功添加，Err(true) 路径已存在，Err(false) 其他失败
 pub fn add_to_config(project_path: &str) -> Result<Project, bool> {
+    if read_package_object(Path::new(project_path)).is_none() {
+        return Err(false);
+    }
     let project = match create_project(project_path) {
         Some(p) => p,
         None => return Err(false),
     };
-    let mut config = config::load();
-
-    if config.projects.iter().any(|p| p.path == project.path) {
-        return Err(true); // 路径已存在
-    }
-
-    config.projects.push(project.clone());
-    if config::save(&config) {
-        Ok(project)
-    } else {
-        Err(false)
-    }
+    config::add_project_to_config(project.clone()).map(|()| project)
 }
 
 /// 从配置中删除指定 ID 的项目
@@ -181,7 +439,7 @@ pub fn get_node_version(project_path: &str) -> Option<String> {
         }
     }
 
-    // 最后尝试从 package.json 的 engines.node 字段提取版本号
+    // 保留完整需求，不能把 >=22.0.0 等范围误报成已选定 22.0.0。
     if let Ok(content) = fs::read_to_string(p.join("package.json")) {
         if let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&content) {
             if let Some(node_ver) = pkg
@@ -189,16 +447,9 @@ pub fn get_node_version(project_path: &str) -> Option<String> {
                 .and_then(|e| e.get("node"))
                 .and_then(|n| n.as_str())
             {
-                static VERSION_RE: LazyLock<regex_lite::Regex> =
-                    LazyLock::new(|| regex_lite::Regex::new(r"(\d+\.\d+\.\d+)").unwrap());
-                static MAJOR_RE: LazyLock<regex_lite::Regex> =
-                    LazyLock::new(|| regex_lite::Regex::new(r"(\d+)").unwrap());
-
-                if let Some(caps) = VERSION_RE.captures(node_ver) {
-                    return Some(caps[1].to_string());
-                }
-                if let Some(caps) = MAJOR_RE.captures(node_ver) {
-                    return Some(caps[1].to_string());
+                let requirement = node_ver.trim();
+                if !requirement.is_empty() {
+                    return Some(requirement.to_string());
                 }
             }
         }
@@ -238,5 +489,186 @@ pub fn set_node_version_file(
                 true
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn test_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
+
+    fn temp_root(label: &str) -> PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be available")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("devfleet-scan-{label}-{suffix}"));
+        fs::create_dir_all(&path).expect("temp root should be created");
+        path
+    }
+
+    fn package(path: &Path, content: &str) {
+        fs::create_dir_all(path).expect("project directory should be created");
+        fs::write(path.join("package.json"), content).expect("package should be written");
+    }
+
+    #[test]
+    fn scan_finds_valid_projects_and_skips_invalid_json() {
+        let _guard = test_lock();
+        let root = temp_root("valid");
+        package(&root.join("app"), r#"{"name":"app","scripts":{}}"#);
+        package(&root.join("broken"), "{not-json");
+        let generation = begin_project_scan();
+        let result = scan_project_candidates(root.to_str().unwrap(), generation);
+        assert_eq!(result.candidates.len(), 1);
+        assert_eq!(result.candidates[0].name, "app");
+        assert!(!result.candidates[0].added);
+        fs::remove_dir_all(root).expect("owned temp root should be removable");
+    }
+
+    #[test]
+    fn scan_stops_at_depth_limit() {
+        let _guard = test_lock();
+        let root = temp_root("depth");
+        let nested = root.join("a").join("b").join("c").join("too-deep");
+        package(&nested, r#"{"name":"too-deep"}"#);
+        let generation = begin_project_scan();
+        let result = scan_project_candidates(root.to_str().unwrap(), generation);
+        assert!(result.candidates.is_empty());
+        assert!(!result.truncated);
+        fs::remove_dir_all(root).expect("owned temp root should be removable");
+    }
+
+    #[test]
+    fn cancelled_scan_does_not_return_candidates() {
+        let _guard = test_lock();
+        let root = temp_root("cancel");
+        package(&root.join("app"), r#"{"name":"app"}"#);
+        let generation = begin_project_scan();
+        cancel_project_scan();
+        let result = scan_project_candidates(root.to_str().unwrap(), generation);
+        assert!(result.cancelled);
+        assert!(result.candidates.is_empty());
+        fs::remove_dir_all(root).expect("owned temp root should be removable");
+        let _ = begin_project_scan();
+    }
+
+    #[test]
+    fn scan_includes_monorepo_projects_through_depth_three_only() {
+        let _guard = test_lock();
+        let root = temp_root("monorepo");
+        package(&root, r#"{"name":"root"}"#);
+        package(&root.join("packages").join("one"), r#"{"name":"one"}"#);
+        package(
+            &root.join("packages").join("one").join("nested"),
+            r#"{"name":"nested"}"#,
+        );
+        package(
+            &root
+                .join("packages")
+                .join("one")
+                .join("nested")
+                .join("deep"),
+            r#"{"name":"deep"}"#,
+        );
+        package(
+            &root
+                .join("packages")
+                .join("one")
+                .join("nested")
+                .join("deep")
+                .join("too-deep"),
+            r#"{"name":"too-deep"}"#,
+        );
+        let result = scan_project_candidates_with_existing(
+            root.to_str().unwrap(),
+            begin_project_scan(),
+            HashSet::new(),
+        );
+        assert_eq!(result.candidates.len(), 3);
+        assert!(!result
+            .candidates
+            .iter()
+            .any(|candidate| candidate.name == "too-deep"));
+        fs::remove_dir_all(root).expect("owned temp root should be removable");
+    }
+
+    #[test]
+    fn scan_marks_existing_canonical_path_as_added() {
+        let _guard = test_lock();
+        let root = temp_root("existing");
+        let app = root.join("app");
+        package(&app, r#"{"name":"app"}"#);
+        let existing = [path_key(Path::new(
+            &canonicalize_path(app.to_str().unwrap()).unwrap(),
+        ))]
+        .into_iter()
+        .collect();
+        let result = scan_project_candidates_with_existing(
+            root.to_str().unwrap(),
+            begin_project_scan(),
+            existing,
+        );
+        assert!(result.candidates.iter().any(|candidate| candidate.added));
+        fs::remove_dir_all(root).expect("owned temp root should be removable");
+    }
+
+    #[test]
+    fn scan_caps_candidates_at_five_hundred() {
+        let _guard = test_lock();
+        let root = temp_root("cap");
+        for index in 0..501 {
+            package(
+                &root.join(format!("project-{index:03}")),
+                r#"{"name":"app"}"#,
+            );
+        }
+        let result = scan_project_candidates_with_existing(
+            root.to_str().unwrap(),
+            begin_project_scan(),
+            HashSet::new(),
+        );
+        assert_eq!(result.candidates.len(), MAX_SCAN_CANDIDATES);
+        assert!(result.truncated);
+        fs::remove_dir_all(root).expect("owned temp root should be removable");
+    }
+
+    #[test]
+    fn newer_scan_generation_invalidates_older_scan() {
+        let _guard = test_lock();
+        let root = temp_root("generation");
+        package(&root.join("app"), r#"{"name":"app"}"#);
+        let old = begin_project_scan();
+        let _new = begin_project_scan();
+        let result =
+            scan_project_candidates_with_existing(root.to_str().unwrap(), old, HashSet::new());
+        assert!(result.cancelled);
+        assert!(result.candidates.is_empty());
+        fs::remove_dir_all(root).expect("owned temp root should be removable");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn scan_does_not_follow_symlinked_directory() {
+        use std::os::unix::fs::symlink;
+        let _guard = test_lock();
+        let root = temp_root("symlink");
+        let outside = temp_root("symlink-target");
+        package(&outside.join("outside"), r#"{"name":"outside"}"#);
+        symlink(&outside, root.join("linked")).expect("symlink should be available");
+        let result = scan_project_candidates_with_existing(
+            root.to_str().unwrap(),
+            begin_project_scan(),
+            HashSet::new(),
+        );
+        assert!(result.candidates.is_empty());
+        fs::remove_dir_all(root).expect("owned temp root should be removable");
+        fs::remove_dir_all(outside).expect("owned temp target should be removable");
     }
 }

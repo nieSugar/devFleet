@@ -1,0 +1,64 @@
+.project-import-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.project-import-path {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-secondary);
+}
+
+.project-import-alert {
+  margin-bottom: 8px;
+}
+
+.project-import-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  color: var(--text-secondary);
+}
+
+.project-import-summary {
+  margin: 12px 0 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.project-import-list {
+  max-height: 360px;
+  overflow: auto;
+}
+
+.project-import-list .ant-list-item {
+  gap: 8px;
+}
+
+.project-import-list .ant-checkbox-wrapper {
+  min-width: 0;
+  flex: 1;
+}
+
+.project-import-candidate {
+  display: inline-flex;
+  flex-direction: column;
+  max-width: calc(100% - 12px);
+  vertical-align: middle;
+}
+
+.project-import-candidate .ant-typography {
+  display: block;
+}
+
+@media (max-width: 600px) {
+  .project-import-picker {
+    flex-wrap: wrap;
+  }
+  .project-import-path {
+    flex-basis: 100%;
+  }
+}

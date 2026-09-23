@@ -2,14 +2,23 @@ import React, { useCallback, useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { exit as exitApp } from "@tauri-apps/plugin-process";
 import { Button, Checkbox, Modal } from "antd";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import TitleBar from "../components/TitleBar";
 import NodeVersionDrawer from "../components/NodeVersionDrawer";
 import { listenForMacOSOpenSettings } from "../lib/macosNative";
+import { useNodeProcesses, type NodeProcessesState } from "../hooks/useNodeProcesses";
+import type { Project } from "../types/project";
 import "../App.css";
 
 type CloseBehavior = "minimize" | "quit";
+
+export interface AppShellContext {
+  nvmRefreshKey: number;
+  processState: NodeProcessesState;
+  onOpenNodeManager: () => void;
+  onViewProcesses: (project: Project) => void;
+}
 
 const CLOSE_BEHAVIOR_KEY = "devfleet.closeBehavior";
 
@@ -33,10 +42,26 @@ function saveCloseBehavior(behavior: CloseBehavior) {
 const AppShell: React.FC = () => {
   const { t } = useTranslation();
   const [nodeDrawerOpen, setNodeDrawerOpen] = useState(false);
+  const [nodeDrawerTab, setNodeDrawerTab] = useState<"versions" | "processes">("versions");
+  const [processProject, setProcessProject] = useState<Project | null>(null);
   const [nvmRefreshKey, setNvmRefreshKey] = useState(0);
   const [closePromptOpen, setClosePromptOpen] = useState(false);
   const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const processState = useNodeProcesses(location.pathname === "/" || (nodeDrawerOpen && nodeDrawerTab === "processes"));
+
+  const openNodeManager = useCallback(() => {
+    setNodeDrawerTab("versions");
+    setProcessProject(null);
+    setNodeDrawerOpen(true);
+  }, []);
+
+  const viewProjectProcesses = useCallback((project: Project) => {
+    setProcessProject(project);
+    setNodeDrawerTab("processes");
+    setNodeDrawerOpen(true);
+  }, []);
 
   const handleVersionChange = useCallback(() => {
     setNvmRefreshKey((k) => k + 1);
@@ -104,16 +129,21 @@ const AppShell: React.FC = () => {
   return (
     <div className="app">
       <TitleBar
-        onOpenNodeManager={() => setNodeDrawerOpen(true)}
+        onOpenNodeManager={openNodeManager}
         onRequestClose={() => void requestClose()}
       />
       <main className="app-main">
-        <Outlet context={{ nvmRefreshKey }} />
+        <Outlet context={{ nvmRefreshKey, processState, onOpenNodeManager: openNodeManager, onViewProcesses: viewProjectProcesses } satisfies AppShellContext} />
       </main>
       <NodeVersionDrawer
         open={nodeDrawerOpen}
         onClose={() => setNodeDrawerOpen(false)}
         onVersionChange={handleVersionChange}
+        activeTab={nodeDrawerTab}
+        onTabChange={setNodeDrawerTab}
+        processState={processState}
+        processProject={processProject}
+        onClearProcessProject={() => setProcessProject(null)}
       />
       <Modal
         open={closePromptOpen}
