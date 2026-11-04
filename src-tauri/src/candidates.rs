@@ -136,7 +136,7 @@ fn configured_launches() -> Result<HashSet<String>, String> {
         .collect();
     let automatic = match config::load_editor_cache()? {
         Some(cache) => cache,
-        None => detector::detect_editors(),
+        None => detector::detect_editor_launches(),
     };
     keys.extend(
         automatic
@@ -283,6 +283,19 @@ fn windows_candidates() -> (Vec<RawCandidate>, Vec<String>) {
     scan_windows_app_paths(&mut candidates, &mut warnings);
     scan_windows_start_menu(&mut candidates, &mut warnings);
     (candidates, warnings)
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn windows_start_menu_executables() -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    scan_windows_start_menu(&mut candidates, &mut Vec::new());
+    candidates
+        .into_iter()
+        .filter_map(|candidate| match candidate.launch {
+            EditorLaunch::Executable { path, .. } => Some(PathBuf::from(path)),
+            _ => None,
+        })
+        .collect()
 }
 
 #[cfg(target_os = "windows")]

@@ -14,7 +14,7 @@ use std::sync::{Mutex, OnceLock};
 
 // const 编译时常量，类型 &str（字符串切片）
 const CONFIG_FILE: &str = "devfleet-config.json";
-pub const EDITOR_CACHE_VERSION: u32 = 1;
+pub const EDITOR_CACHE_VERSION: u32 = 2;
 const EDITOR_CACHE_TTL_HOURS: i64 = 24;
 
 /// 获取配置文件的完整路径，如果目录不存在会自动创建

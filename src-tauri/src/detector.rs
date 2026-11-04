@@ -670,6 +670,55 @@ fn find_editor_in_path(spec: &EditorSpec) -> Option<EditorLaunch> {
     None
 }
 
+#[cfg(target_os = "windows")]
+fn populate_toolbox_icon_sources(editors: &mut HashMap<String, EditorInfo>) {
+    let pending: Vec<_> = EDITORS
+        .iter()
+        .filter_map(|spec| {
+            let (_, exe_name) = spec.win_jetbrains?;
+            let EditorLaunch::KnownWindowsBatch { adapter_id, path } =
+                editors.get(spec.id)?.launch.as_ref()?
+            else {
+                return None;
+            };
+            if adapter_id.as_str() != spec.id {
+                return None;
+            }
+            let batch = Path::new(path).canonicalize().ok()?;
+            spec.win_paths
+                .iter()
+                .filter_map(|path| expand_env_path(path)?.canonicalize().ok())
+                .any(|path| path == batch)
+                .then_some((spec.id, exe_name))
+        })
+        .collect();
+    if pending.is_empty() {
+        return;
+    }
+
+    // shortcut: only Start menu targets are visible; use a stable Toolbox mapping when available.
+    let executables = crate::candidates::windows_start_menu_executables();
+    for (id, exe_name) in pending {
+        let mut matching = executables
+            .iter()
+            .filter(|path| {
+                path.file_name()
+                    .and_then(OsStr::to_str)
+                    .is_some_and(|name| name.eq_ignore_ascii_case(exe_name))
+            })
+            .filter_map(|path| path.canonicalize().ok().map(|canonical| (canonical, path)));
+        let Some((first, source)) = matching.next() else {
+            continue;
+        };
+        if matching.any(|(path, _)| path != first) {
+            continue;
+        }
+        if let Some(editor) = editors.get_mut(id) {
+            editor.icon_source = Some(source.to_string_lossy().into_owned());
+        }
+    }
+}
+
 /// macOS: 通过 Spotlight 索引批量检测已安装的 .app（单次 mdfind 调用，毫秒级）
 /// 用于覆盖未安装在 /Applications 或 ~/Applications 的应用（如 JetBrains Toolbox 安装的 IDE）
 #[cfg(target_os = "macos")]
@@ -716,7 +765,7 @@ fn find_installed_mac_apps(specs: &[&EditorSpec]) -> HashMap<String, PathBuf> {
 }
 
 /// 检测所有已知编辑器，返回带真实启动目标的 { id: EditorInfo } 映射。
-pub fn detect_editors() -> HashMap<String, EditorInfo> {
+pub(crate) fn detect_editor_launches() -> HashMap<String, EditorInfo> {
     let mut result = HashMap::new();
     let mut unresolved: Vec<&EditorSpec> = Vec::new();
 
@@ -768,13 +817,24 @@ pub fn detect_editors() -> HashMap<String, EditorInfo> {
     result
 }
 
+pub fn detect_editors() -> HashMap<String, EditorInfo> {
+    let editors = detect_editor_launches();
+    #[cfg(target_os = "windows")]
+    let editors = {
+        let mut editors = editors;
+        populate_toolbox_icon_sources(&mut editors);
+        editors
+    };
+    editors
+}
+
 pub(crate) fn is_known_editor_id(editor_id: &str) -> bool {
     EDITORS.iter().any(|spec| spec.id == editor_id)
 }
 
 pub(crate) fn resolve_known_editor(editor_id: &str) -> Option<EditorInfo> {
     is_known_editor_id(editor_id)
-        .then(|| detect_editors().remove(editor_id))
+        .then(|| detect_editor_launches().remove(editor_id))
         .flatten()
 }
 
@@ -893,7 +953,11 @@ mod editor_tests {
                 EditorLaunch::MacApp { path } => assert!(Path::new(path).is_dir()),
             }
             match launch {
-                EditorLaunch::KnownWindowsBatch { .. } => assert!(editor.icon_source.is_none()),
+                EditorLaunch::KnownWindowsBatch { .. } => {
+                    if let Some(source) = &editor.icon_source {
+                        assert!(Path::new(source).is_file());
+                    }
+                }
                 EditorLaunch::Executable { path, .. }
                 | EditorLaunch::MacApp { path }
                 | EditorLaunch::DesktopEntry { path } => {
