@@ -43,6 +43,8 @@
 .header-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -50,11 +52,73 @@
   width: 200px;
 }
 
+.header-filter {
+  min-width: 130px;
+}
+
+.project-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.project-filter-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  color: var(--text-muted);
+}
+
 /* ── Grid ── */
 .projects-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 16px;
+}
+
+.projects-compact {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.projects-compact .project-card {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(180px, 0.8fr) minmax(190px, 0.9fr);
+  grid-template-areas: "header meta actions" "path path command" "note processes processes";
+  align-items: center;
+  gap: 6px 14px;
+  padding: 12px 14px;
+}
+.projects-compact .card-header { grid-area: header; }
+.projects-compact .card-path { grid-area: path; margin-top: 0; }
+.projects-compact .card-note { grid-area: note; margin-top: 0; }
+.projects-compact .card-meta { grid-area: meta; }
+.projects-compact .card-actions { grid-area: actions; margin-top: 0; }
+.projects-compact .card-script-command { grid-area: command; margin-top: 0; }
+.projects-compact .card-processes { grid-area: processes; margin-top: 0; }
+.projects-compact .card-divider { display: none; }
+.projects-compact .project-card > * { min-width: 0; }
+.projects-compact .card-delete { opacity: 1; }
+.projects-compact .add-project-card {
+  min-height: 48px;
+  padding: 8px 14px;
+  flex-direction: row;
+}
+.projects-compact .add-icon { width: 28px; height: 28px; font-size: 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .project-manager *,
+  .project-manager *::before,
+  .project-manager *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 /* ── Responsive ── */
@@ -75,5 +139,16 @@
   }
   .projects-grid {
     grid-template-columns: 1fr;
+  }
+  .projects-compact .project-card {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: "header header" "path path" "note note" "meta actions" "command command" "processes processes";
+  }
+}
+
+@media (max-width: 480px) {
+  .projects-compact .project-card {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "header" "path" "note" "meta" "actions" "command" "processes";
   }
 }

@@ -7,6 +7,7 @@ export interface NodeProcessesState {
   status: "loading" | "ready" | "error";
   loading: boolean;
   error: string | null;
+  portsError: string | null;
   refresh: (afterCurrent?: boolean) => Promise<void>;
 }
 
@@ -16,6 +17,7 @@ export function useNodeProcesses(enabled: boolean): NodeProcessesState {
   const [status, setStatus] = useState<NodeProcessesState["status"]>("loading");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [portsError, setPortsError] = useState<string | null>(null);
   const lifecycle = useRef({ active: false, generation: 0 });
   const inFlight = useRef<Promise<void> | null>(null);
 
@@ -33,12 +35,14 @@ export function useNodeProcesses(enabled: boolean): NodeProcessesState {
         const result = await tauriAPI.listNodeProcesses();
         if (!lifecycle.current.active || requestGeneration !== lifecycle.current.generation) return;
         if (!result.success || !result.data) throw new Error(result.error || "Node process scan failed");
-        setProcesses(result.data);
+        setProcesses(result.data.processes);
+        setPortsError(result.data.portsError ?? null);
         setError(null);
         setStatus("ready");
       } catch (e) {
         if (!lifecycle.current.active || requestGeneration !== lifecycle.current.generation) return;
         setProcesses([]);
+        setPortsError(null);
         setError(e instanceof Error ? e.message : String(e));
         setStatus("error");
       } finally {
@@ -75,5 +79,5 @@ export function useNodeProcesses(enabled: boolean): NodeProcessesState {
     };
   }, [enabled, refresh]);
 
-  return { processes, status, loading, error, refresh };
+  return { processes, status, loading, error, portsError, refresh };
 }

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { Select, Typography, Tooltip } from "antd";
 import { DeleteOutlined, PushpinOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
@@ -14,6 +14,8 @@ interface ProjectCardProps {
   defaultEditorId: string | null;
   isPinned: boolean;
   pinSaving: boolean;
+  nodeSaving: boolean;
+  selected: boolean;
   onTogglePinned: (project: Project, pinned: boolean) => void;
   nvmInfo: NvmInfo | null;
   index: number;
@@ -33,6 +35,8 @@ interface ProjectCardProps {
   onRelocate: (project: Project) => void;
   processes: NodeProcessInfo[];
   processStatus: "loading" | "ready" | "error";
+  portsError: string | null;
+  onRetryProcesses: () => void;
   onViewProcesses: (project: Project) => void;
 }
 
@@ -49,6 +53,8 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
   defaultEditorId,
   isPinned,
   pinSaving,
+  nodeSaving,
+  selected,
   onTogglePinned,
   nvmInfo,
   index,
@@ -65,15 +71,28 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
   onRelocate,
   processes,
   processStatus,
+  portsError,
+  onRetryProcesses,
   onViewProcesses,
 }) => {
   const { t } = useTranslation();
+  const editorPickerRef = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      const picker = editorPickerRef.current;
+      if (picker?.open && event.target instanceof Node && !picker.contains(event.target)) {
+        picker.open = false;
+      }
+    };
+    document.addEventListener("click", closeOnOutsideClick, true);
+    return () => document.removeEventListener("click", closeOnOutsideClick, true);
+  }, []);
+
   const pm = project.packageManager || "npm";
   const accent = PM_COLORS[pm] || PM_COLORS.npm;
-  const hasValidScript = Boolean(
-    project.selectedScript &&
-      project.scripts.some((script) => script.name === project.selectedScript),
-  );
+  const selectedScript = project.scripts.find((script) => script.name === project.selectedScript);
+  const hasValidScript = Boolean(selectedScript);
   const uniquePorts = Array.from(
     new Map(
       processes
@@ -87,6 +106,7 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
     .join(", ");
 
   const editorAction = async (editor: string) => {
+    if (editorPickerRef.current) editorPickerRef.current.open = false;
     const r = await onOpenEditor(editor, project.path);
     if (!r.success) showMsg("error", r.error || t("project.editorFailed"));
   };
@@ -110,8 +130,11 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
 
   return (
     <div
-      className="project-card"
-      style={{ animationDelay: `${index * 50}ms` }}
+      id={`project-card-${project.id}`}
+      role="group"
+      aria-label={project.name}
+      className={`project-card${selected ? " is-keyboard-selected" : ""}`}
+      style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
     >
       <div className="card-accent-bar" style={{ background: accent }} />
 
@@ -187,7 +210,23 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
 
       {/* Editors + Node */}
       <div className="card-meta">
-        <div className="card-editors">
+        <div
+          className="card-editors"
+          onBlur={(event) => {
+            if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget) && editorPickerRef.current) {
+              editorPickerRef.current.open = false;
+            }
+          }}
+          onKeyDown={(event) => {
+            const picker = editorPickerRef.current;
+            if (event.key === "Escape" && picker?.open) {
+              event.preventDefault();
+              event.stopPropagation();
+              picker.open = false;
+              picker.querySelector("summary")?.focus();
+            }
+          }}
+        >
           {defaultEditor ? (
             <EditorButton
               icon={defaultEditor[1].icon}
@@ -198,6 +237,7 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
             />
           ) : (
             <details
+              ref={editorPickerRef}
               className={`editor-picker${editorControlsDisabled ? " is-disabled" : ""}`}
               onClick={(event) => {
                 if (editorControlsDisabled) event.preventDefault();
@@ -217,6 +257,7 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
                     {t("project.defaultEditorUnavailable")}
                   </div>
                 )}
+                {secondaryEditors.length === 0 && <div className="editor-menu-message" role="status">{t("project.noEditorsHelp")}</div>}
                 {secondaryEditors.map(([id, info]) => (
                   <EditorButton
                     key={id}
@@ -232,6 +273,7 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
           )}
           {defaultEditor && secondaryEditors.length > 0 && (
             <details
+              ref={editorPickerRef}
               className={`editor-picker${editorControlsDisabled ? " is-disabled" : ""}`}
               onClick={(event) => {
                 if (editorControlsDisabled) event.preventDefault();
@@ -265,7 +307,7 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
               record={project}
               nvmInfo={nvmInfo}
               onChange={onNodeVersionChange}
-              disabled={!available || relocating || running}
+              disabled={!available || relocating || running || nodeSaving}
             />
           </div>
         )}
@@ -288,7 +330,7 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
         />
         <button
           className="run-btn"
-          disabled={!available || relocating || running || !hasValidScript}
+          disabled={!available || relocating || running || nodeSaving || !hasValidScript}
           onClick={() => onRun(project)}
         >
           <svg
@@ -304,6 +346,23 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
         </button>
       </div>
 
+      {selectedScript && (
+        <Typography.Paragraph
+          key={selectedScript.name}
+          className="card-script-command"
+          aria-label={t("project.scriptCommand")}
+          copyable={{ text: selectedScript.command, tooltips: [t("project.copyCommand"), t("common.copied")] }}
+          ellipsis={{
+            rows: 1,
+            expandable: "collapsible",
+            symbol: (expanded) => t(expanded ? "project.collapseCommand" : "project.expandCommand"),
+            tooltip: selectedScript.command,
+          }}
+        >
+          {selectedScript.command}
+        </Typography.Paragraph>
+      )}
+
       <div className="card-processes" aria-live="polite">
         {processStatus === "loading" && <span>{t("project.processesChecking")}</span>}
         {processStatus === "error" && <span>{t("project.processesUnavailable")}</span>}
@@ -314,12 +373,18 @@ const ProjectCard: React.FC<ProjectCardProps> = React.memo(({
                 ? t("project.processesDetected", { count: processes.length })
                 : t("project.noProcessesDetected")}
             </span>
-            {portSummary.length > 0 && (
+            {!portsError && portSummary.length > 0 && (
               <Tooltip title={portTooltip}>
                 <span className="card-process-ports">
                   {t("project.ports", { ports: portSummary.join(", ") })}
                 </span>
               </Tooltip>
+            )}
+            {portsError && (
+              <>
+                <Tooltip title={portsError}><span>{t("project.portsUnavailable")}</span></Tooltip>
+                <button type="button" className="card-view-processes" onClick={onRetryProcesses}>{t("common.retry")}</button>
+              </>
             )}
             {processes.length > 0 && (
               <button

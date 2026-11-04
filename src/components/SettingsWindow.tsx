@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { App, Switch } from "antd";
+import { ArrowLeftOutlined, CodeOutlined, DesktopOutlined, SkinOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../contexts/ThemeContext";
@@ -21,6 +22,7 @@ const SettingsWindow: React.FC = () => {
   const navigate = useNavigate();
   const languages = getSupportedLanguages();
   const { message } = App.useApp();
+  const [activeSection, setActiveSection] = useState("editors");
   const [autostartEnabled, setAutostartEnabledState] = useState(false);
   const [autostartSupported, setAutostartSupported] = useState(false);
   const [autostartLoading, setAutostartLoading] = useState(true);
@@ -35,11 +37,11 @@ const SettingsWindow: React.FC = () => {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        const modal = document.querySelector<HTMLElement>(".ant-modal-wrap");
-        if (modal && window.getComputedStyle(modal).display !== "none") return;
-        navigate("/");
-      }
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const hasVisibleModal = Array.from(
+        document.querySelectorAll<HTMLElement>('.ant-modal-wrap, [aria-modal="true"]'),
+      ).some((modal) => modal.getClientRects().length > 0 && window.getComputedStyle(modal).visibility !== "hidden");
+      if (!hasVisibleModal) navigate("/");
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -188,130 +190,169 @@ const SettingsWindow: React.FC = () => {
 
   return (
     <section className="settings-screen">
-      <div className="settings-backdrop" />
       <div className="settings-shell">
         <header className="settings-header">
-          <h1 className="settings-title">{t("settings.title")}</h1>
-          <p className="settings-subtitle">{t("settings.subtitle")}</p>
+          <div>
+            <h1 className="settings-title">{t("settings.title")}</h1>
+            <p className="settings-subtitle">{t("settings.subtitle")}</p>
+          </div>
+          <button className="settings-back-button" type="button" onClick={() => navigate("/")}>
+            <ArrowLeftOutlined aria-hidden="true" />
+            {t("settings.backToProjects")}
+          </button>
         </header>
 
-        <section className="settings-section">
-          <div className="settings-section-head">
-            <h2 className="settings-section-title">{t("settings.appearanceTitle")}</h2>
-            <p className="settings-section-desc">{t("settings.appearanceDesc")}</p>
+        <div className="settings-layout">
+          <nav className="settings-navigation" aria-label={t("settings.navigation")}>
+            {[
+              { id: "editors", label: t("settings.editors.title"), icon: <CodeOutlined /> },
+              { id: "appearance", label: t("settings.preferencesTitle"), icon: <SkinOutlined /> },
+              { id: "system", label: t("settings.systemTitle"), icon: <DesktopOutlined /> },
+            ].map(({ id, label, icon }) => (
+              <button
+                key={id}
+                id={`settings-nav-${id}`}
+                type="button"
+                aria-current={activeSection === id ? "page" : undefined}
+                aria-controls={`settings-panel-${id}`}
+                onClick={() => setActiveSection(id)}
+              >
+                <span aria-hidden="true">{icon}</span>
+                {label}
+              </button>
+            ))}
+          </nav>
+
+          <div className="settings-content">
+            <section id="settings-panel-editors" className="settings-panel" aria-labelledby="settings-nav-editors" hidden={activeSection !== "editors"}>
+              <EditorSettings />
+            </section>
+
+            <section id="settings-panel-appearance" className="settings-panel" aria-labelledby="settings-nav-appearance" hidden={activeSection !== "appearance"}>
+              <div className="settings-panel-heading">
+                <h2>{t("settings.preferencesTitle")}</h2>
+                <p>{t("settings.preferencesDesc")}</p>
+              </div>
+
+              <section className="settings-section">
+                <div className="settings-section-head">
+                  <h3 className="settings-section-title">{t("settings.appearanceTitle")}</h3>
+                  <p className="settings-section-desc">{t("settings.appearanceDesc")}</p>
+                </div>
+
+                <div className="settings-options-grid">
+                  {(["light", "dark"] as const).map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      className="settings-option-card"
+                      data-active={theme === option}
+                      aria-label={t(`settings.${option}Title`)}
+                      aria-pressed={theme === option}
+                      onClick={() => setTheme(option)}
+                    >
+                      <span className="settings-theme-preview" data-preview={option} aria-hidden="true">
+                        <span className="settings-preview-bar"><i /><i /><i /></span>
+                        <span className="settings-preview-body">
+                          <span className="settings-preview-nav"><i /><i /><i /></span>
+                          <span className="settings-preview-cards"><i /><i /></span>
+                        </span>
+                      </span>
+                      <span className="settings-option-label">
+                        <span className="settings-option-title">{t(`settings.${option}Title`)}</span>
+                        <span className="settings-choice-indicator" aria-hidden="true" />
+                      </span>
+                      <span className="settings-option-desc">{t(`settings.${option}Desc`)}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="settings-section">
+                <div className="settings-section-head">
+                  <h3 className="settings-section-title">{t("settings.languageTitle")}</h3>
+                  <p className="settings-section-desc">{t("settings.languageDesc")}</p>
+                </div>
+
+                <div className="settings-language-list">
+                  {languages.map((language) => {
+                    const active = i18n.language === language;
+                    return (
+                      <button
+                        key={language}
+                        type="button"
+                        className="settings-language-item"
+                        data-active={active}
+                        aria-label={LANGUAGE_LABELS[language] || language}
+                        aria-pressed={active}
+                        onClick={() => void i18n.changeLanguage(language)}
+                      >
+                        <span>
+                          <span className="settings-language-name">{LANGUAGE_LABELS[language] || language}</span>
+                          <span className="settings-language-meta">{active ? t("settings.current") : language}</span>
+                        </span>
+                        <span className="settings-choice-indicator" aria-hidden="true" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            </section>
+
+            <section id="settings-panel-system" className="settings-panel" aria-labelledby="settings-nav-system" hidden={activeSection !== "system"}>
+              <div className="settings-panel-heading">
+                <h2>{t("settings.systemTitle")}</h2>
+                <p>{t("settings.systemDesc")}</p>
+              </div>
+
+              <section className="settings-section">
+                <div className="settings-section-head">
+                  <h3 className="settings-section-title">{t("settings.startupTitle")}</h3>
+                  <p className="settings-section-desc">{t("settings.startupDesc")}</p>
+                </div>
+                <div className="settings-toggle-row">
+                  <div className="settings-toggle-copy">
+                    <span className="settings-toggle-title">{t("settings.startupToggleTitle")}</span>
+                    <span className="settings-toggle-desc" id="settings-startup-status">
+                      {autostartLoading ? t("settings.startupChecking") : autostartStatusText}
+                    </span>
+                  </div>
+                  <Switch
+                    aria-label={t("settings.startupToggleTitle")}
+                    aria-describedby="settings-startup-status"
+                    checked={autostartEnabled}
+                    disabled={!autostartSupported || autostartLoading || autostartSaving}
+                    loading={autostartLoading || autostartSaving}
+                    onChange={(checked) => void handleAutostartChange(checked)}
+                  />
+                </div>
+              </section>
+
+              <section className="settings-section">
+                <div className="settings-section-head">
+                  <h3 className="settings-section-title">{t("settings.shellMenuTitle")}</h3>
+                  <p className="settings-section-desc">{t("settings.shellMenuDesc")}</p>
+                </div>
+                <div className="settings-toggle-row">
+                  <div className="settings-toggle-copy">
+                    <span className="settings-toggle-title">{t("settings.shellMenuToggleTitle")}</span>
+                    <span className="settings-toggle-desc" id="settings-shell-menu-status">
+                      {shellMenuLoading ? t("settings.shellMenuChecking") : shellMenuStatusText}
+                    </span>
+                  </div>
+                  <Switch
+                    aria-label={t("settings.shellMenuToggleTitle")}
+                    aria-describedby="settings-shell-menu-status"
+                    checked={shellMenuEnabled}
+                    disabled={!shellMenuSupported || !shellMenuManaged || shellMenuLoading || shellMenuSaving}
+                    loading={shellMenuLoading || shellMenuSaving}
+                    onChange={(checked) => void handleShellMenuChange(checked)}
+                  />
+                </div>
+              </section>
+            </section>
           </div>
-
-          <div className="settings-options-grid">
-            <button
-              className="settings-option-card"
-              data-active={theme === "light"}
-              onClick={() => setTheme("light")}
-            >
-              <span className="settings-option-title">{t("settings.lightTitle")}</span>
-              <span className="settings-option-desc">{t("settings.lightDesc")}</span>
-            </button>
-
-            <button
-              className="settings-option-card"
-              data-active={theme === "dark"}
-              onClick={() => setTheme("dark")}
-            >
-              <span className="settings-option-title">{t("settings.darkTitle")}</span>
-              <span className="settings-option-desc">{t("settings.darkDesc")}</span>
-            </button>
-          </div>
-        </section>
-
-        <EditorSettings />
-
-        <section className="settings-section">
-          <div className="settings-section-head">
-            <h2 className="settings-section-title">{t("settings.languageTitle")}</h2>
-            <p className="settings-section-desc">{t("settings.languageDesc")}</p>
-          </div>
-
-          <div className="settings-language-list">
-            {languages.map((language) => {
-              const active = i18n.language === language;
-
-              return (
-                <button
-                  key={language}
-                  className="settings-language-item"
-                  data-active={active}
-                  onClick={() => void i18n.changeLanguage(language)}
-                >
-                  <span className="settings-language-name">
-                    {LANGUAGE_LABELS[language] || language}
-                  </span>
-                  <span className="settings-language-meta">
-                    {active ? t("settings.current") : language}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="settings-section">
-          <div className="settings-section-head">
-            <h2 className="settings-section-title">{t("settings.startupTitle")}</h2>
-            <p className="settings-section-desc">{t("settings.startupDesc")}</p>
-          </div>
-
-          <div className="settings-toggle-row">
-            <div className="settings-toggle-copy">
-              <span className="settings-toggle-title">{t("settings.startupToggleTitle")}</span>
-              <span className="settings-toggle-desc">
-                {autostartLoading ? t("settings.startupChecking") : autostartStatusText}
-              </span>
-            </div>
-
-            <Switch
-              checked={autostartEnabled}
-              disabled={!autostartSupported || autostartLoading || autostartSaving}
-              loading={autostartLoading || autostartSaving}
-              onChange={(checked) => void handleAutostartChange(checked)}
-            />
-          </div>
-        </section>
-
-        <section className="settings-section">
-          <div className="settings-section-head">
-            <h2 className="settings-section-title">{t("settings.shellMenuTitle")}</h2>
-            <p className="settings-section-desc">{t("settings.shellMenuDesc")}</p>
-          </div>
-
-          <div className="settings-toggle-row">
-            <div className="settings-toggle-copy">
-              <span className="settings-toggle-title">{t("settings.shellMenuToggleTitle")}</span>
-              <span className="settings-toggle-desc">
-                {shellMenuLoading ? t("settings.shellMenuChecking") : shellMenuStatusText}
-              </span>
-            </div>
-
-            <Switch
-              checked={shellMenuEnabled}
-              disabled={
-                !shellMenuSupported ||
-                !shellMenuManaged ||
-                shellMenuLoading ||
-                shellMenuSaving
-              }
-              loading={shellMenuLoading || shellMenuSaving}
-              onChange={(checked) => void handleShellMenuChange(checked)}
-            />
-          </div>
-        </section>
-
-        <footer className="settings-footer">
-          <button
-            className="settings-close-button"
-            onClick={() => navigate("/")}
-          >
-            {t("settings.close")}
-          </button>
-        </footer>
+        </div>
       </div>
     </section>
   );

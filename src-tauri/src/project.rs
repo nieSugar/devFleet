@@ -458,6 +458,15 @@ pub fn get_node_version(project_path: &str) -> Option<String> {
     None
 }
 
+pub fn node_version_file_path(project_path: &str, manager: &NodeVersionManager) -> PathBuf {
+    let file_name = match manager {
+        NodeVersionManager::Builtin | NodeVersionManager::Nvs => ".node-version",
+        NodeVersionManager::Nvmd => ".nvmdrc",
+        _ => ".nvmrc",
+    };
+    Path::new(project_path).join(file_name)
+}
+
 /// 设置或删除项目的 Node 版本文件
 /// node_version = Some("18.17.0") → 创建/覆盖版本文件
 /// node_version = None 或空字符串 → 删除版本文件
@@ -465,31 +474,30 @@ pub fn set_node_version_file(
     project_path: &str,
     node_version: Option<&str>,
     manager: &NodeVersionManager,
-) -> bool {
-    let file_name = match manager {
-        NodeVersionManager::Builtin => ".node-version",
-        NodeVersionManager::Nvmd => ".nvmdrc",
-        NodeVersionManager::Nvs => ".node-version",
-        _ => ".nvmrc",
-    };
-
-    let file_path = Path::new(project_path).join(file_name);
+    expected_file_path: &str,
+) -> Result<(), String> {
+    let file_path = node_version_file_path(project_path, manager);
+    // 确认期间项目可能重定位或管理器切换，不能改动用户未确认的文件。
+    if file_path != Path::new(expected_file_path) {
+        return Err("Node 版本文件已变化，请重新选择并确认".into());
+    }
 
     match node_version {
         // 模式守卫：匹配 Some 且内容非空 → 写入版本文件
         Some(v) if !v.trim().is_empty() => {
             let content = v.trim_start_matches('v');
-            fs::write(&file_path, content).is_ok()
+            fs::write(&file_path, content)
         }
         // 其他情况（None 或空字符串）→ 删除版本文件
         _ => {
             if file_path.exists() {
-                fs::remove_file(&file_path).is_ok()
+                fs::remove_file(&file_path)
             } else {
-                true
+                Ok(())
             }
         }
     }
+    .map_err(|error| format!("操作版本配置文件失败: {}", error))
 }
 
 #[cfg(test)]

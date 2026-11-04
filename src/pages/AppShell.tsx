@@ -25,7 +25,11 @@ const CLOSE_BEHAVIOR_KEY = "devfleet.closeBehavior";
 function loadCloseBehavior(): CloseBehavior | null {
   try {
     const value = window.localStorage.getItem(CLOSE_BEHAVIOR_KEY);
-    return value === "minimize" || value === "quit" ? value : null;
+    if (value === "quit") return value;
+    if (value === "minimize") {
+      window.localStorage.removeItem(CLOSE_BEHAVIOR_KEY);
+    }
+    return null;
   } catch {
     return null;
   }
@@ -33,7 +37,11 @@ function loadCloseBehavior(): CloseBehavior | null {
 
 function saveCloseBehavior(behavior: CloseBehavior) {
   try {
-    window.localStorage.setItem(CLOSE_BEHAVIOR_KEY, behavior);
+    if (behavior === "quit") {
+      window.localStorage.setItem(CLOSE_BEHAVIOR_KEY, behavior);
+    } else {
+      window.localStorage.removeItem(CLOSE_BEHAVIOR_KEY);
+    }
   } catch {
     // 忽略存储失败，确保本次关闭动作继续执行。
   }
@@ -89,7 +97,9 @@ const AppShell: React.FC = () => {
 
   const applyCloseBehavior = useCallback(
     async (behavior: CloseBehavior) => {
-      if (rememberCloseChoice) {
+      if (rememberCloseChoice && behavior === "quit") {
+        saveCloseBehavior(behavior);
+      } else if (behavior === "minimize") {
         saveCloseBehavior(behavior);
       }
 

@@ -23,6 +23,12 @@ import {
   PoweroffOutlined,
 } from "@ant-design/icons";
 import { tauriAPI } from "../lib/tauri";
+import {
+  mergeNodeVersions,
+  normalizeNodeVersion,
+  projectsUsingNodeVersion,
+  type ListedNodeVersion,
+} from "../lib/nodeVersions";
 import type { NodeProcessesState } from "../hooks/useNodeProcesses";
 import type {
   NvmInfo,
@@ -53,12 +59,7 @@ interface VersionGroup {
   ltsName?: string;
   hasCurrent: boolean;
   count: number;
-  versions: EnrichedVersion[];
-}
-
-interface EnrichedVersion extends RemoteNodeVersion {
-  isInstalled: boolean;
-  isCurrent: boolean;
+  versions: ListedNodeVersion[];
 }
 
 const MANAGER_KEYS: Record<NodeVersionManager, string> = {
@@ -369,13 +370,17 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   const { t } = useTranslation();
   const [remoteVersions, setRemoteVersions] = useState<RemoteNodeVersion[]>([]);
   const [nvmInfo, setNvmInfo] = useState<NvmInfo | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [localLoading, setLocalLoading] = useState(false);
+  const [remoteLoading, setRemoteLoading] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
+  const [localRevision, setLocalRevision] = useState(0);
+  const [remoteRevision, setRemoteRevision] = useState(0);
   const [busy, setBusy] = useState<BusyAction | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterMode>("all");
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
   const [messageApi, contextHolder] = message.useMessage();
-  const [hasFetched, setHasFetched] = useState(false);
   const [mirror, setMirror] = useState("");
   const [installDir, setInstallDir] = useState("");
   const [installDirDisplay, setInstallDirDisplay] = useState("");
@@ -383,7 +388,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   const [nodeAvailable, setNodeAvailable] = useState(true);
   const [powerShellPolicyReady, setPowerShellPolicyReady] = useState(true);
   const [pathSetupBusy, setPathSetupBusy] = useState(false);
-  const { processes: nodeProcesses, loading: processLoading, refresh: refreshProcesses } = processState;
+  const { processes: nodeProcesses, loading: processLoading, refresh: refreshProcesses, portsError } = processState;
   const [processSearch, setProcessSearch] = useState("");
   const [onlyPortProcesses, setOnlyPortProcesses] = useState(false);
   const [killingPid, setKillingPid] = useState<number | null>(null);
@@ -392,8 +397,13 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   );
   const [rememberKillChoice, setRememberKillChoice] = useState(false);
   const [skipKillConfirm, setSkipKillConfirm] = useState(loadSkipKillConfirm);
-  const versionFetchInFlightRef = useRef(false);
-  const versionFetchRequestIdRef = useRef(0);
+  const localRequestIdRef = useRef(0);
+  const remoteRequestIdRef = useRef(0);
+  const uninstallRequestIdRef = useRef(0);
+  const [pendingUninstall, setPendingUninstall] = useState<string | null>(null);
+  const [uninstallProjects, setUninstallProjects] = useState<Project[] | null>(null);
+  const [uninstallCheckLoading, setUninstallCheckLoading] = useState(false);
+  const [uninstallCheckError, setUninstallCheckError] = useState<string | null>(null);
 
   const checkPathStatus = useCallback(() => {
     tauriAPI.checkNodeInPath().then((res) => {
@@ -409,6 +419,8 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
     if (!open) {
       setPendingKillProcess(null);
       setRememberKillChoice(false);
+      uninstallRequestIdRef.current += 1;
+      setPendingUninstall(null);
     }
   }, [open]);
 
@@ -437,7 +449,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       const res = await tauriAPI.setNodeMirror(url);
       if (res.success) {
         messageApi.success(t("nodeDrawer.mirrorSwitched"));
-        setHasFetched(false);
+        setRemoteRevision((revision) => revision + 1);
       } else {
         setMirror(prev);
         messageApi.error(res.error || t("nodeDrawer.mirrorFailed"));
@@ -475,7 +487,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
         if (dirRes.success && dirRes.data) {
           setInstallDirDisplay(dirRes.data.dir);
         }
-        setHasFetched(false);
+        setLocalRevision((revision) => revision + 1);
       } else {
         setInstallDir(prev);
         messageApi.error(res.error || t("nodeDrawer.installDirFailed"));
@@ -484,78 +496,84 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
     [installDir, messageApi, t]
   );
 
-  const fetchData = useCallback(async () => {
-    if (versionFetchInFlightRef.current) return;
-
-    const requestId = versionFetchRequestIdRef.current + 1;
-    versionFetchRequestIdRef.current = requestId;
-    versionFetchInFlightRef.current = true;
-    setLoading(true);
+  const fetchRemoteVersions = useCallback(async () => {
+    const requestId = ++remoteRequestIdRef.current;
+    setRemoteLoading(true);
+    setRemoteError(null);
     try {
-      const [remoteResult, nvmResult] = await Promise.all([
-        tauriAPI.fetchRemoteNodeVersions(),
-        tauriAPI.getNvmInfo(),
-      ]);
-      if (versionFetchRequestIdRef.current !== requestId) return;
+      const remoteResult = await tauriAPI.fetchRemoteNodeVersions();
+      if (remoteRequestIdRef.current !== requestId) return;
       if (remoteResult.success && remoteResult.data) {
         setRemoteVersions(remoteResult.data);
       } else {
-        messageApi.error(remoteResult.error || t("nodeDrawer.fetchFailed"));
+        setRemoteError(remoteResult.error || t("nodeDrawer.fetchFailed"));
       }
-      if (nvmResult.success && nvmResult.data) {
-        setNvmInfo(nvmResult.data);
-      }
-      setHasFetched(true);
     } catch {
-      if (versionFetchRequestIdRef.current === requestId) {
-        messageApi.error(t("nodeDrawer.networkError"));
+      if (remoteRequestIdRef.current === requestId) {
+        setRemoteError(t("nodeDrawer.networkError"));
       }
     } finally {
-      if (versionFetchRequestIdRef.current === requestId) {
-        versionFetchInFlightRef.current = false;
-        setLoading(false);
+      if (remoteRequestIdRef.current === requestId) {
+        setRemoteLoading(false);
       }
     }
-  }, [messageApi, t]);
-
-  useEffect(() => {
-    if (!open) {
-      versionFetchRequestIdRef.current += 1;
-      versionFetchInFlightRef.current = false;
-      setLoading(false);
-      return;
-    }
-
-    if (!hasFetched) {
-      void fetchData();
-    }
-  }, [open, hasFetched, fetchData]);
+  }, [t]);
 
   const refreshNvmInfo = useCallback(async () => {
-    const nvmResult = await tauriAPI.getNvmInfo();
-    if (nvmResult.success && nvmResult.data) setNvmInfo(nvmResult.data);
-    checkPathStatus();
-  }, [checkPathStatus]);
+    const requestId = ++localRequestIdRef.current;
+    setLocalLoading(true);
+    setLocalError(null);
+    try {
+      const nvmResult = await tauriAPI.getNvmInfo();
+      if (localRequestIdRef.current !== requestId) return;
+      if (nvmResult.success && nvmResult.data) {
+        setNvmInfo(nvmResult.data);
+      } else {
+        setLocalError(nvmResult.error || t("nodeDrawer.localLoadFailed"));
+      }
+    } catch {
+      if (localRequestIdRef.current === requestId) {
+        setLocalError(t("nodeDrawer.localLoadFailed"));
+      }
+    } finally {
+      if (localRequestIdRef.current === requestId) {
+        setLocalLoading(false);
+        checkPathStatus();
+      }
+    }
+  }, [checkPathStatus, t]);
 
-  const installedSet = useMemo(() => {
-    const set = new Set<string>();
-    nvmInfo?.availableVersions?.forEach((v) => set.add(v.version));
-    return set;
-  }, [nvmInfo]);
+  useEffect(() => {
+    if (!open) return;
+    void refreshNvmInfo();
+    return () => {
+      localRequestIdRef.current += 1;
+    };
+  }, [open, localRevision, refreshNvmInfo]);
+
+  useEffect(() => {
+    if (!open) return;
+    void fetchRemoteVersions();
+    return () => {
+      remoteRequestIdRef.current += 1;
+    };
+  }, [open, remoteRevision, fetchRemoteVersions]);
+
+  const versions = useMemo(
+    () => mergeNodeVersions(remoteVersions, nvmInfo),
+    [remoteVersions, nvmInfo]
+  );
 
   const groups = useMemo(() => {
     const groupMap = new Map<number, VersionGroup>();
 
-    for (const rv of remoteVersions) {
+    for (const rv of versions) {
       const ver = rv.version.replace(/^v/, "");
       const major = parseInt(ver.split(".")[0], 10);
       if (isNaN(major)) continue;
 
-      const isInstalled = installedSet.has(ver);
-      const isCurrent = nvmInfo?.currentVersion === ver;
-
-      if (filter === "lts" && rv.lts === false) continue;
-      if (filter === "installed" && !isInstalled) continue;
+      if (filter === "lts" && typeof rv.lts !== "string") continue;
+      if (filter === "installed" && !rv.isInstalled) continue;
       if (search) {
         const q = search.toLowerCase();
         const matchVer = ver.toLowerCase().includes(q);
@@ -575,22 +593,22 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
 
       const group = groupMap.get(major)!;
       group.count++;
-      if (isCurrent) group.hasCurrent = true;
+      if (rv.isCurrent) group.hasCurrent = true;
       if (!group.ltsName && typeof rv.lts === "string") {
         group.ltsName = rv.lts;
       }
-      group.versions.push({ ...rv, isInstalled, isCurrent });
+      group.versions.push(rv);
     }
 
     return Array.from(groupMap.values()).sort((a, b) => b.major - a.major);
-  }, [remoteVersions, installedSet, nvmInfo, filter, search]);
+  }, [versions, filter, search]);
 
   const filteredNodeProcesses = useMemo(() => {
     // 从项目卡片进入时，项目筛选优先，避免旧搜索条件把相关进程藏起来。
     const q = processProject ? "" : processSearch.trim().toLowerCase();
     const visibleProcesses = processProject
       ? nodeProcesses.filter((process) => process.matchedProjectId === processProject.id)
-      : onlyPortProcesses
+      : onlyPortProcesses && !portsError
         ? nodeProcesses.filter((process) => (process.ports || []).length > 0)
         : nodeProcesses;
     if (!q) return visibleProcesses;
@@ -613,7 +631,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
         .toLowerCase()
         .includes(q);
     });
-  }, [nodeProcesses, onlyPortProcesses, processSearch, processProject]);
+  }, [nodeProcesses, onlyPortProcesses, portsError, processSearch, processProject]);
 
   const toggleGroup = (major: number) => {
     setExpandedGroups((prev) => {
@@ -644,6 +662,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
           messageApi.success(result.data.message);
           await refreshNvmInfo();
           onVersionChange?.();
+          return true;
         } else {
           messageApi.error(result.error || errorMsg);
         }
@@ -652,6 +671,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       } finally {
         setBusy(null);
       }
+      return false;
     },
     [nvmInfo, messageApi, refreshNvmInfo, onVersionChange]
   );
@@ -679,15 +699,44 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
   );
 
   const handleUninstall = useCallback(
-    (version: string) =>
-      handleVersionAction(
-        version,
-        "uninstall",
-        tauriAPI.uninstallNodeVersion,
-        t("nodeDrawer.uninstallFailed")
-      ),
-    [handleVersionAction, t]
+    async (version: string) => {
+      const requestId = ++uninstallRequestIdRef.current;
+      setPendingUninstall(version);
+      setUninstallProjects(null);
+      setUninstallCheckError(null);
+      setUninstallCheckLoading(true);
+      try {
+        const result = await tauriAPI.loadProjectConfig();
+        if (uninstallRequestIdRef.current !== requestId) return;
+        if (result.success && result.data) {
+          setUninstallProjects(projectsUsingNodeVersion(result.data.projects, version));
+        } else {
+          setUninstallCheckError(result.error || t("nodeDrawer.uninstallCheckFailed"));
+        }
+      } catch {
+        if (uninstallRequestIdRef.current === requestId) {
+          setUninstallCheckError(t("nodeDrawer.uninstallCheckFailed"));
+        }
+      } finally {
+        if (uninstallRequestIdRef.current === requestId) {
+          setUninstallCheckLoading(false);
+        }
+      }
+    },
+    [t]
   );
+
+  const handleConfirmUninstall = async () => {
+    if (!pendingUninstall || !uninstallProjects || uninstallCheckLoading || busy || localLoading || localError) return;
+    if (await handleVersionAction(
+      pendingUninstall,
+      "uninstall",
+      tauriAPI.uninstallNodeVersion,
+      t("nodeDrawer.uninstallFailed")
+    )) {
+      setPendingUninstall(null);
+    }
+  };
 
   const executeKillNodeProcess = useCallback(
     async (process: NodeProcessInfo, rememberSkipConfirm = false) => {
@@ -757,10 +806,9 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
       return;
     }
 
-    if (versionFetchInFlightRef.current) return;
-    setHasFetched(false);
     setExpandedGroups(new Set());
-    void fetchData();
+    void refreshNvmInfo();
+    void fetchRemoteVersions();
   };
 
   const filterButtons: { key: FilterMode; label: string }[] = [
@@ -769,8 +817,8 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
     { key: "installed", label: t("nodeDrawer.filterInstalled") },
   ];
 
-  const isBusy = busy !== null;
-  const isRefreshing = activeTab === "processes" ? processLoading : loading;
+  const isBusy = busy !== null || localLoading || localError !== null || nvmInfo === null;
+  const isRefreshing = activeTab === "processes" ? processLoading : localLoading;
 
   return (
     <>
@@ -832,9 +880,9 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
                   <span className="nd-current-num">v{nvmInfo.currentVersion}</span>
                 </div>
               )}
-              {remoteVersions.length > 0 && (
+              {versions.length > 0 && (
                 <span className="nd-total-count">
-                  {t("common.versions", { count: remoteVersions.length })}
+                  {t("common.versions", { count: versions.length })}
                 </span>
               )}
             </div>
@@ -940,12 +988,27 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
 
             {/* ── Content ── */}
             <div className="nd-content">
-              {loading && !hasFetched ? (
+              {localError && (
+                <div className="nd-status-banner" role="alert">
+                  <span title={localError}>{t("nodeDrawer.localLoadFailed")}</span>
+                  <button className="nd-retry-btn" disabled={localLoading} onClick={() => void refreshNvmInfo()}>{t("common.retry")}</button>
+                </div>
+              )}
+              {remoteError ? (
+                <div className="nd-status-banner" role="status">
+                  <span title={remoteError}>{t("nodeDrawer.remoteUnavailable")}</span>
+                  <button className="nd-retry-btn" disabled={remoteLoading} onClick={() => void fetchRemoteVersions()}>{t("common.retry")}</button>
+                </div>
+              ) : remoteLoading && (
+                <div className="nd-load-status" role="status"><LoadingOutlined /> {t("nodeDrawer.remoteLoading")}</div>
+              )}
+              {localLoading && !nvmInfo ? (
                 <div className="nd-loading">
                   <Spin indicator={<LoadingOutlined style={{ fontSize: 28 }} />} />
-                  <span className="nd-loading-text">{t("nodeDrawer.loading")}</span>
+                  <span className="nd-loading-text">{t("nodeDrawer.localLoading")}</span>
                 </div>
-              ) : groups.length === 0 ? (
+              ) : groups.length === 0 && (localError || (remoteLoading && filter !== "installed")) ? null
+              : groups.length === 0 ? (
                 <div className="nd-empty">
                   <CloudDownloadOutlined className="nd-empty-icon" />
                   <span className="nd-empty-text">
@@ -1040,8 +1103,8 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
               <label className="nd-port-filter">
                 <Switch
                   size="small"
-                  disabled={processProject !== null}
-                  checked={onlyPortProcesses}
+                  disabled={processProject !== null || Boolean(portsError)}
+                  checked={onlyPortProcesses && !portsError}
                   onChange={setOnlyPortProcesses}
                 />
                 <span>{t("nodeDrawer.processes.portOnly")}</span>
@@ -1049,6 +1112,12 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
             </div>
 
             <div className="nd-content">
+              {portsError && processState.status !== "error" && (
+                <div className="nd-status-banner" role="alert">
+                  <span title={portsError}>{t("nodeDrawer.processes.portsUnavailable")}</span>
+                  <button className="nd-retry-btn" disabled={processLoading} onClick={() => void refreshProcesses(true)}>{t("common.retry")}</button>
+                </div>
+              )}
               {processState.status === "error" ? (
                 <div className="nd-empty" role="alert">
                   <span className="nd-empty-text" title={processState.error || undefined}>{t("project.processesUnavailable")}</span>
@@ -1069,7 +1138,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
                       ? t("project.noProcessesDetected")
                       : processSearch
                       ? t("nodeDrawer.processes.noMatch")
-                      : onlyPortProcesses
+                      : onlyPortProcesses && !portsError
                         ? t("nodeDrawer.processes.noPortProcesses")
                         : t("nodeDrawer.processes.noProcesses")}
                   </span>
@@ -1085,6 +1154,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
                     key={process.pid}
                     process={process}
                     index={index}
+                    portsUnavailable={Boolean(portsError)}
                     killing={killingPid === process.pid}
                     onKill={handleKillNodeProcess}
                   />
@@ -1094,6 +1164,49 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
           </>
         )}
       </Drawer>
+
+      <Modal
+        open={pendingUninstall !== null}
+        zIndex={2200}
+        title={t("nodeDrawer.uninstallTitle", { version: pendingUninstall })}
+        okText={t("nodeDrawer.uninstallConfirm")}
+        okType="danger"
+        cancelText={t("common.cancel")}
+        confirmLoading={busy?.type === "uninstall"}
+        okButtonProps={{ disabled: uninstallProjects === null || uninstallCheckLoading || localLoading || Boolean(localError) || busy !== null }}
+        maskClosable={busy?.type !== "uninstall"}
+        closable={busy?.type !== "uninstall"}
+        cancelButtonProps={{ disabled: busy?.type === "uninstall" }}
+        onOk={handleConfirmUninstall}
+        onCancel={() => {
+          if (busy?.type === "uninstall") return;
+          uninstallRequestIdRef.current += 1;
+          setPendingUninstall(null);
+        }}
+      >
+        <div className="nd-process-confirm">
+          <p>{t("nodeDrawer.uninstallScope")}</p>
+          {uninstallCheckLoading ? (
+            <p role="status"><LoadingOutlined /> {t("nodeDrawer.uninstallChecking")}</p>
+          ) : uninstallCheckError ? (
+            <div className="nd-status-banner" role="alert">
+              <span title={uninstallCheckError}>{t("nodeDrawer.uninstallCheckFailed")}</span>
+              <button className="nd-retry-btn" onClick={() => pendingUninstall && void handleUninstall(pendingUninstall)}>{t("common.retry")}</button>
+            </div>
+          ) : uninstallProjects && (
+            <>
+              <p>{t(uninstallProjects.length ? "nodeDrawer.uninstallAffected" : "nodeDrawer.uninstallNoMatches", { count: uninstallProjects.length })}</p>
+              {uninstallProjects.length > 0 && (
+                <ul className="nd-uninstall-projects">
+                  {uninstallProjects.map((project) => (
+                    <li key={project.id}><strong>{project.name}</strong><code>{project.path}</code></li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
+      </Modal>
 
       <Modal
         open={pendingKillProcess !== null}
@@ -1130,7 +1243,7 @@ const NodeVersionDrawer: React.FC<NodeVersionDrawerProps> = ({
 };
 
 interface VersionRowProps {
-  v: EnrichedVersion;
+  v: ListedNodeVersion;
   vi: number;
   busy: BusyAction | null;
   isBusy: boolean;
@@ -1150,7 +1263,7 @@ const VersionRow: React.FC<VersionRowProps> = ({
 }) => {
   const { t } = useTranslation();
   const ver = v.version.replace(/^v/, "");
-  const isThisBusy = busy?.version === v.version;
+  const isThisBusy = busy !== null && normalizeNodeVersion(busy.version) === ver;
 
   return (
     <div
@@ -1196,6 +1309,7 @@ const VersionRow: React.FC<VersionRowProps> = ({
             <Tooltip title={t("nodeDrawer.uninstallVersion")}>
               <button
                 className={`nd-uninstall-btn ${isThisBusy && busy?.type === "uninstall" ? "uninstalling" : ""}`}
+                aria-label={t("nodeDrawer.uninstallVersion")}
                 onClick={() => onUninstall(ver)}
                 disabled={isBusy}
               >
@@ -1231,6 +1345,7 @@ const VersionRow: React.FC<VersionRowProps> = ({
 interface NodeProcessRowProps {
   process: NodeProcessInfo;
   index: number;
+  portsUnavailable: boolean;
   killing: boolean;
   onKill: (process: NodeProcessInfo) => void;
 }
@@ -1238,6 +1353,7 @@ interface NodeProcessRowProps {
 const NodeProcessRow: React.FC<NodeProcessRowProps> = ({
   process,
   index,
+  portsUnavailable,
   killing,
   onKill,
 }) => {
@@ -1307,7 +1423,7 @@ const NodeProcessRow: React.FC<NodeProcessRowProps> = ({
             </div>
           ) : (
             <span className="nd-process-no-port">
-              {t("nodeDrawer.processes.noPorts")}
+              {t(portsUnavailable ? "nodeDrawer.processes.portsUnknown" : "nodeDrawer.processes.noPorts")}
             </span>
           )}
 

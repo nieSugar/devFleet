@@ -19,6 +19,13 @@
 .project-card:hover {
   border-color: var(--border-default);
 }
+.project-card.is-keyboard-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.project-card {
+  scroll-margin-top: 150px;
+}
 .project-card:hover,
 .project-card:focus-within {
   z-index: 3;
@@ -350,6 +357,15 @@
 .card-actions .ant-select .ant-select-selector {
   border-radius: var(--radius-sm) !important;
 }
+.project-card .card-script-command {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 
 /* ── Run Button ── */
 .run-btn {
@@ -450,6 +466,10 @@
 .add-project-card:hover {
   border-color: var(--accent);
   background: var(--accent-subtle);
+}
+.add-project-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .add-project-card:hover .add-icon {
   color: var(--accent);

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { App, Button, Input, Modal, Select } from "antd";
+import { App, Button, Input, Modal, Radio } from "antd";
 import {
   AppstoreAddOutlined,
   DeleteOutlined,
@@ -106,38 +106,6 @@ const EditorSettings: React.FC = () => {
   // ponytail: search all 1000 records, render 200; add virtualization only if profiling needs it.
   const visibleCandidates = filteredCandidates.slice(0, 200);
 
-  const defaultEditorOptions = useMemo(() => {
-    const options = entries.map(([id, editor]) => ({
-      value: id,
-      disabled: !editor.installed && id !== defaultEditorId,
-      label: (
-        <span className="editor-default-option">
-          <span>{editor.name}</span>
-          {!editor.installed && (
-            <span className="editor-default-option-status">
-              {t("settings.editors.unavailable")}
-            </span>
-          )}
-        </span>
-      ),
-    }));
-    if (defaultEditorId && !entries.some(([id]) => id === defaultEditorId)) {
-      options.push({
-        value: defaultEditorId,
-        disabled: true,
-        label: (
-          <span className="editor-default-option">
-            <span>{defaultEditorId}</span>
-            <span className="editor-default-option-status">
-              {t("settings.editors.unavailable")}
-            </span>
-          </span>
-        ),
-      });
-    }
-    return options;
-  }, [defaultEditorId, entries, t]);
-
   const chooseProgram = async () => {
     const path = await tauriAPI.selectEditor(
       t("settings.editors.chooseProgramTitle"),
@@ -213,8 +181,8 @@ const EditorSettings: React.FC = () => {
     }
   };
 
-  const handleDefaultEditorChange = async (editorId: string | undefined) => {
-    const result = await setDefaultEditor(editorId ?? null);
+  const handleDefaultEditorChange = async (editorId: string) => {
+    const result = await setDefaultEditor(editorId || null);
     if (result.success) {
       message.success(t("settings.editors.defaultEditorSaved"));
     } else {
@@ -309,193 +277,232 @@ const EditorSettings: React.FC = () => {
   };
 
   return (
-    <section className="settings-section editor-settings-section">
-      <div className="settings-section-head editor-settings-heading">
-        <div>
-          <h2 className="settings-section-title">{t("settings.editors.title")}</h2>
-          <p className="settings-section-desc">{t("settings.editors.description")}</p>
-        </div>
-        <div className="editor-settings-actions">
-          <Button
-            icon={<ReloadOutlined />}
-            loading={loading}
-            onClick={() => void refreshEditors()}
-          >
-            {t("settings.editors.rescan")}
-          </Button>
-          <Button
-            icon={<AppstoreAddOutlined />}
-            loading={candidateScanning}
-            onClick={() => void handleDiscoverCandidates()}
-          >
-            {t("settings.editors.candidates.scan")}
-          </Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => void handleAdd()}>
-            {t("settings.editors.add")}
-          </Button>
-        </div>
+    <section className="editor-settings-section">
+      <div className="settings-panel-heading">
+        <h2>{t("settings.editors.title")}</h2>
+        <p>{t("settings.editors.description")}</p>
       </div>
 
-      {error && <div className="editor-settings-error">{error}</div>}
-      <div className="editor-default-setting">
+      {error && <div className="editor-settings-error" role="alert">{error}</div>}
+      <div
+        className="settings-section editor-default-setting"
+        role="radiogroup"
+        aria-label={t("settings.editors.defaultEditor")}
+        aria-describedby="editor-default-hint"
+        aria-busy={loading || defaultEditorLoading}
+      >
         <div className="editor-default-copy">
-          <strong>{t("settings.editors.defaultEditor")}</strong>
-          <span>{t("settings.editors.defaultEditorHint")}</span>
-          {defaultEditorId && !editors?.[defaultEditorId]?.installed && (
-            <small className="editor-default-error" role="status">
-              {t("settings.editors.defaultEditorUnavailable")}
-            </small>
-          )}
-          {defaultEditorError && (
-            <small className="editor-default-error">{defaultEditorError}</small>
-          )}
+          <h3>{t("settings.editors.defaultEditor")}</h3>
+          <p id="editor-default-hint">{t("settings.editors.defaultEditorHint")}</p>
         </div>
-        <Select
-          className="editor-default-select"
-          allowClear
-          loading={defaultEditorLoading}
-          disabled={defaultEditorLoading}
-          value={defaultEditorId ?? undefined}
-          placeholder={t("settings.editors.noDefaultEditor")}
-          options={defaultEditorOptions}
-          onChange={(value) => void handleDefaultEditorChange(value)}
-          aria-label={t("settings.editors.defaultEditor")}
-        />
-      </div>
-      <div className="editor-settings-list" aria-busy={loading}>
-        {!loading && entries.length === 0 && (
-          <div className="editor-settings-empty">{t("settings.editors.empty")}</div>
-        )}
-        {entries.map(([id, editor]) => (
-          <article className="editor-settings-item" key={id}>
-            <EditorGlyph icon={editor.icon} name={editor.name} />
-            <div className="editor-settings-copy">
-              <div className="editor-settings-name-row">
-                <strong>{editor.name}</strong>
-                <span className="editor-settings-source">
-                  {t(`settings.editors.source.${editor.source}`)}
-                </span>
-                <span
-                  className="editor-settings-status"
-                  data-available={editor.installed}
-                >
-                  {editor.installed
-                    ? t("settings.editors.available")
-                    : t("settings.editors.unavailable")}
-                </span>
-              </div>
-              <span className="editor-settings-path" title={editor.path}>
-                {editor.path || t("settings.editors.noPath")}
+        <Radio.Group
+          className="editor-default-options"
+          name="default-editor"
+          disabled={loading || defaultEditorLoading}
+          value={defaultEditorId ?? ""}
+          onChange={(event) => void handleDefaultEditorChange(event.target.value)}
+        >
+          <Radio className="editor-default-card" value="">
+            <span className="editor-default-card-content">
+              <span className="editor-settings-icon" aria-hidden="true"><AppstoreAddOutlined /></span>
+              <span className="editor-default-card-copy">
+                <strong>{t("settings.editors.chooseEachTime")}</strong>
+                <small>{t("settings.editors.chooseEachTimeHint")}</small>
               </span>
-            </div>
-            {editor.source === "custom" && (
-              <div className="editor-settings-item-actions">
-                <Button
-                  aria-label={t("settings.editors.edit")}
-                  icon={<EditOutlined />}
-                  onClick={() => handleEdit(id, editor)}
-                />
-                <Button
-                  danger
-                  aria-label={t("common.delete")}
-                  icon={<DeleteOutlined />}
-                  onClick={() => handleDelete(id, editor.name)}
-                />
-              </div>
-            )}
-          </article>
-        ))}
+            </span>
+          </Radio>
+          {entries.filter(([id, editor]) => editor.installed || id === defaultEditorId).map(([id, editor]) => (
+            <Radio className="editor-default-card" value={id} key={id} disabled={!editor.installed || loading || defaultEditorLoading}>
+              <span className="editor-default-card-content">
+                <EditorGlyph icon={editor.icon} name={editor.name} />
+                <span className="editor-default-card-copy">
+                  <strong>{editor.name}</strong>
+                  <small>{t(editor.installed ? `settings.editors.source.${editor.source}` : "settings.editors.unavailable")}</small>
+                </span>
+              </span>
+            </Radio>
+          ))}
+          {defaultEditorId && !editors?.[defaultEditorId] && (
+            <Radio className="editor-default-card" value={defaultEditorId} disabled>
+              <span className="editor-default-card-copy">
+                <strong>{defaultEditorId}</strong>
+                <small>{t("settings.editors.unavailable")}</small>
+              </span>
+            </Radio>
+          )}
+        </Radio.Group>
+        {loading || defaultEditorLoading ? (
+          <p className="editor-default-status" role="status">{t("common.loading")}</p>
+        ) : defaultEditorId && !editors?.[defaultEditorId]?.installed ? (
+          <p className="editor-default-error" role="status">{t("settings.editors.defaultEditorUnavailable")}</p>
+        ) : null}
+        {defaultEditorError && <p className="editor-default-error" role="alert">{defaultEditorError}</p>}
       </div>
 
-      {candidateDiscovery && (
-        <div className="editor-candidates">
-          <div className="editor-candidates-head">
-            <div>
-              <h3>{t("settings.editors.candidates.title")}</h3>
-              <p>{t("settings.editors.candidates.disclaimer")}</p>
-            </div>
-            <div className="editor-candidates-modes" role="group">
-              <button
-                type="button"
-                data-active={candidateMode === "recommended"}
-                onClick={() => setCandidateMode("recommended")}
-              >
-                {t("settings.editors.candidates.recommended")}
-              </button>
-              <button
-                type="button"
-                data-active={candidateMode === "all"}
-                onClick={() => setCandidateMode("all")}
-              >
-                {t("settings.editors.candidates.all")}
-              </button>
-            </div>
+      <section className="settings-section">
+        <div className="editor-settings-heading">
+          <div className="editor-default-copy">
+            <h3>{t("settings.editors.manageTitle")}</h3>
+            <p>{t("settings.editors.manageHint")}</p>
           </div>
-          <Input
-            allowClear
-            value={candidateQuery}
-            placeholder={t("settings.editors.candidates.search")}
-            onChange={(event) => setCandidateQuery(event.target.value)}
-          />
-          {candidateDiscovery.warnings.length > 0 && (
-            <div className="editor-candidates-warning">
-              {candidateDiscovery.warnings.join(" · ")}
-            </div>
+          <div className="editor-settings-actions">
+            <Button
+              icon={<ReloadOutlined />}
+              loading={loading}
+              onClick={() => void refreshEditors()}
+            >
+              {t("settings.editors.rescan")}
+            </Button>
+            <Button
+              icon={<AppstoreAddOutlined />}
+              loading={candidateScanning}
+              onClick={() => void handleDiscoverCandidates()}
+            >
+              {t("settings.editors.candidates.scan")}
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => void handleAdd()}>
+              {t("settings.editors.add")}
+            </Button>
+          </div>
+        </div>
+
+        <div className="editor-settings-list" aria-busy={loading}>
+          {!loading && entries.length === 0 && (
+            <div className="editor-settings-empty">{t("settings.editors.empty")}</div>
           )}
-          <div className="editor-candidates-list">
-            {visibleCandidates.length === 0 && (
-              <div className="editor-settings-empty">
-                {t("settings.editors.candidates.empty")}
-              </div>
-            )}
-            {visibleCandidates.map((candidate: EditorCandidate) => (
-              <article className="editor-candidate-item" key={candidate.id}>
-                <span className="editor-candidate-icon" aria-hidden="true">
-                  APP
-                </span>
-                <div className="editor-settings-copy">
-                  <div className="editor-settings-name-row">
-                    <strong>{candidate.name}</strong>
-                    {candidate.recommended && (
-                      <span className="editor-candidate-recommended">
-                        {t("settings.editors.candidates.suggested")}
-                      </span>
-                    )}
-                    <span className="editor-settings-source">
-                      {t(
-                        `settings.editors.candidates.source.${candidate.source}`,
-                      )}
-                    </span>
-                  </div>
-                  <span className="editor-settings-path" title={candidate.path}>
-                    {candidate.path}
+          {entries.map(([id, editor]) => (
+            <article className="editor-settings-item" key={id}>
+              <EditorGlyph icon={editor.icon} name={editor.name} />
+              <div className="editor-settings-copy">
+                <div className="editor-settings-name-row">
+                  <strong>{editor.name}</strong>
+                  {id === defaultEditorId && <span className="editor-settings-default-badge">{t("settings.editors.defaultBadge")}</span>}
+                  <span className="editor-settings-source">
+                    {t(`settings.editors.source.${editor.source}`)}
+                  </span>
+                  <span
+                    className="editor-settings-status"
+                    data-available={editor.installed}
+                  >
+                    {editor.installed
+                      ? t("settings.editors.available")
+                      : t("settings.editors.unavailable")}
                   </span>
                 </div>
-                <Button
-                  icon={<ImportOutlined />}
-                  disabled={candidate.added}
-                  loading={candidateImporting === candidate.id}
-                  onClick={() =>
-                    setImportDraft({ id: candidate.id, name: candidate.name })
-                  }
-                >
-                  {candidate.added
-                    ? t("settings.editors.candidates.added")
-                    : t("settings.editors.candidates.import")}
-                </Button>
-              </article>
-            ))}
-          </div>
-          {filteredCandidates.length > visibleCandidates.length && (
-            <p className="editor-candidates-limit">
-              {t("settings.editors.candidates.renderLimit", {
-                shown: visibleCandidates.length,
-                total: filteredCandidates.length,
-              })}
-            </p>
-          )}
+                <span className="editor-settings-path" title={editor.path}>
+                  {editor.path || t("settings.editors.noPath")}
+                </span>
+              </div>
+              {editor.source === "custom" && (
+                <div className="editor-settings-item-actions">
+                  <Button
+                    aria-label={t("settings.editors.edit")}
+                    icon={<EditOutlined />}
+                    onClick={() => handleEdit(id, editor)}
+                  />
+                  <Button
+                    danger
+                    aria-label={t("common.delete")}
+                    icon={<DeleteOutlined />}
+                    onClick={() => handleDelete(id, editor.name)}
+                  />
+                </div>
+              )}
+            </article>
+          ))}
         </div>
-      )}
+
+        {candidateDiscovery && (
+          <div className="editor-candidates">
+            <div className="editor-candidates-head">
+              <div>
+                <h3>{t("settings.editors.candidates.title")}</h3>
+                <p>{t("settings.editors.candidates.disclaimer")}</p>
+              </div>
+              <div className="editor-candidates-modes" role="group">
+                <button
+                  type="button"
+                  data-active={candidateMode === "recommended"}
+                  onClick={() => setCandidateMode("recommended")}
+                >
+                  {t("settings.editors.candidates.recommended")}
+                </button>
+                <button
+                  type="button"
+                  data-active={candidateMode === "all"}
+                  onClick={() => setCandidateMode("all")}
+                >
+                  {t("settings.editors.candidates.all")}
+                </button>
+              </div>
+            </div>
+            <Input
+              allowClear
+              value={candidateQuery}
+              placeholder={t("settings.editors.candidates.search")}
+              onChange={(event) => setCandidateQuery(event.target.value)}
+            />
+            {candidateDiscovery.warnings.length > 0 && (
+              <div className="editor-candidates-warning">
+                {candidateDiscovery.warnings.join(" · ")}
+              </div>
+            )}
+            <div className="editor-candidates-list">
+              {visibleCandidates.length === 0 && (
+                <div className="editor-settings-empty">
+                  {t("settings.editors.candidates.empty")}
+                </div>
+              )}
+              {visibleCandidates.map((candidate: EditorCandidate) => (
+                <article className="editor-candidate-item" key={candidate.id}>
+                  <span className="editor-candidate-icon" aria-hidden="true">
+                    APP
+                  </span>
+                  <div className="editor-settings-copy">
+                    <div className="editor-settings-name-row">
+                      <strong>{candidate.name}</strong>
+                      {candidate.recommended && (
+                        <span className="editor-candidate-recommended">
+                          {t("settings.editors.candidates.suggested")}
+                        </span>
+                      )}
+                      <span className="editor-settings-source">
+                        {t(
+                          `settings.editors.candidates.source.${candidate.source}`,
+                        )}
+                      </span>
+                    </div>
+                    <span className="editor-settings-path" title={candidate.path}>
+                      {candidate.path}
+                    </span>
+                  </div>
+                  <Button
+                    icon={<ImportOutlined />}
+                    disabled={candidate.added}
+                    loading={candidateImporting === candidate.id}
+                    onClick={() =>
+                      setImportDraft({ id: candidate.id, name: candidate.name })
+                    }
+                  >
+                    {candidate.added
+                      ? t("settings.editors.candidates.added")
+                      : t("settings.editors.candidates.import")}
+                  </Button>
+                </article>
+              ))}
+            </div>
+            {filteredCandidates.length > visibleCandidates.length && (
+              <p className="editor-candidates-limit">
+                {t("settings.editors.candidates.renderLimit", {
+                  shown: visibleCandidates.length,
+                  total: filteredCandidates.length,
+                })}
+              </p>
+            )}
+          </div>
+        )}
+
+      </section>
 
       <Modal
         open={draft !== null}

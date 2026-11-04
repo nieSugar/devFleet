@@ -87,11 +87,18 @@ pub fn set_default_editor(editor_id: Option<String>) -> IpcResponse {
     }
 }
 
-fn project_config_response(cfg: ProjectConfig) -> IpcResponse {
+fn project_config_response(mut cfg: ProjectConfig) -> IpcResponse {
     let availability: std::collections::HashMap<_, _> = cfg
         .projects
-        .iter()
-        .map(|p| (p.id.clone(), project::is_valid_path(&p.path)))
+        .iter_mut()
+        .map(|p| {
+            let available = project::is_valid_path(&p.path);
+            // 版本文件可能被编辑器或 Git 改动；只更新响应，不写回用户配置。
+            if available {
+                p.node_version = project::get_node_version(&p.path);
+            }
+            (p.id.clone(), available)
+        })
         .collect();
     let mut pinned_project_ids = cfg
         .settings
@@ -505,7 +512,7 @@ pub async fn list_node_processes() -> IpcResponse {
     tokio::task::spawn_blocking(|| {
         let cfg = config::load();
         match crate::node_processes::list_node_processes(&cfg.projects) {
-            Ok(processes) => IpcResponse::ok(processes),
+            Ok(snapshot) => IpcResponse::ok(snapshot),
             Err(e) => IpcResponse::err(e),
         }
     })
@@ -859,9 +866,32 @@ pub fn set_node_install_dir(dir: String) -> IpcResponse {
     }
 }
 
-/// 设置项目的 Node 版本（写入对应的版本文件，如 .nvmrc）
+/// 预览版本修改影响；只读取配置，不创建或删除项目文件。
 #[tauri::command]
-pub fn set_project_node_version(project_id: String, node_version: Option<String>) -> IpcResponse {
+pub fn get_project_node_version_file(project_id: String) -> IpcResponse {
+    let cfg = match config::load_checked() {
+        Ok(cfg) => cfg,
+        Err(error) => return IpcResponse::err(error),
+    };
+    let Some(item) = cfg.projects.iter().find(|item| item.id == project_id) else {
+        return IpcResponse::err("项目不存在");
+    };
+    if !project::is_valid_path(&item.path) {
+        return IpcResponse::err("项目路径不可用，请先重新定位");
+    }
+    let manager = resolve_manager_or_builtin(None);
+    IpcResponse::ok(serde_json::json!({
+        "filePath": project::node_version_file_path(&item.path, &manager),
+    }))
+}
+
+/// 设置项目的 Node 版本（写入用户已确认的版本文件，如 .nvmrc）
+#[tauri::command]
+pub fn set_project_node_version(
+    project_id: String,
+    node_version: Option<String>,
+    expected_file_path: String,
+) -> IpcResponse {
     let mut manager = detector::detect_node_version_manager();
     if manager == NodeVersionManager::None {
         manager = NodeVersionManager::Builtin;
@@ -874,10 +904,8 @@ pub fn set_project_node_version(project_id: String, node_version: Option<String>
         if !project::is_valid_path(&item.path) {
             return Err("项目路径不可用，请先重新定位".into());
         }
-        if !project::set_node_version_file(&item.path, nv, &manager) {
-            return Err("操作版本配置文件失败".into());
-        }
-        item.node_version = nv.filter(|v| !v.trim().is_empty()).map(str::to_string);
+        project::set_node_version_file(&item.path, nv, &manager, &expected_file_path)?;
+        item.node_version = project::get_node_version(&item.path);
         Ok(())
     }) {
         Ok(project) => project,

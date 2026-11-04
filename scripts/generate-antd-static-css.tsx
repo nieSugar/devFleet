@@ -23,6 +23,7 @@ type AntdRuntime = Pick<
   | "List"
   | "message"
   | "Modal"
+  | "Radio"
   | "Result"
   | "Select"
   | "Spin"
@@ -45,6 +46,7 @@ function StaticAntdStyleFixture(
     List,
     message,
     Modal,
+    Radio,
     Result,
     Select,
     Spin,
@@ -71,6 +73,10 @@ function StaticAntdStyleFixture(
         React.createElement(Button, { icon: React.createElement("span", null, "+") }, ""),
         React.createElement(Button, { danger: true }, "Danger"),
         React.createElement(Checkbox, { checked: true }, "Remember choice"),
+        React.createElement(Radio.Group, { value: "default" },
+          React.createElement(Radio, { value: "default" }, "Default editor"),
+          React.createElement(Radio, { value: "unavailable", disabled: true }, "Unavailable"),
+        ),
         React.createElement(Switch, { checked: true }),
         React.createElement(Tag, { color: "processing" }, "Tag"),
         React.createElement(Tag, { color: "blue" }, "Project"),

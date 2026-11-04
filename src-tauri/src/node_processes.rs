@@ -1,4 +1,4 @@
-use crate::models::{NodeProcessInfo, NodeProcessPort, Project};
+use crate::models::{NodeProcessInfo, NodeProcessPort, NodeProcessSnapshot, Project};
 #[cfg(target_os = "windows")]
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -25,13 +25,30 @@ struct RawProcessSnapshot {
     command_line: Option<String>,
 }
 
-pub fn list_node_processes(projects: &[Project]) -> Result<Vec<NodeProcessInfo>, String> {
-    let mut processes = platform_list_node_processes()?;
+pub fn list_node_processes(projects: &[Project]) -> Result<NodeProcessSnapshot, String> {
+    let processes = platform_list_node_processes()?;
     let process_snapshots = platform_list_process_snapshots().unwrap_or_default();
-    let mut ports_by_pid = platform_list_process_ports().unwrap_or_default();
+    Ok(build_process_snapshot(
+        processes,
+        projects,
+        &process_snapshots,
+        platform_list_process_ports(),
+    ))
+}
+
+fn build_process_snapshot(
+    mut processes: Vec<RawNodeProcess>,
+    projects: &[Project],
+    process_snapshots: &HashMap<u32, RawProcessSnapshot>,
+    ports: Result<HashMap<u32, Vec<NodeProcessPort>>, String>,
+) -> NodeProcessSnapshot {
+    let (mut ports_by_pid, ports_error) = match ports {
+        Ok(ports) => (ports, None),
+        Err(error) => (HashMap::new(), Some(error)),
+    };
 
     for process in &mut processes {
-        process.launch_command = infer_launch_command(process, &process_snapshots);
+        process.launch_command = infer_launch_command(process, process_snapshots);
         process.ports = ports_by_pid.remove(&process.pid).unwrap_or_default();
         process.ports.sort_by_key(|port| {
             (
@@ -53,10 +70,13 @@ pub fn list_node_processes(projects: &[Project]) -> Result<Vec<NodeProcessInfo>,
         )
     });
 
-    Ok(processes
-        .into_iter()
-        .map(|process| enrich_process(process, projects))
-        .collect())
+    NodeProcessSnapshot {
+        processes: processes
+            .into_iter()
+            .map(|process| enrich_process(process, projects))
+            .collect(),
+        ports_error,
+    }
 }
 
 pub fn kill_node_process(
@@ -581,6 +601,85 @@ mod tests {
             node_version: None,
             note: None,
         }
+    }
+
+    fn process_without_ports() -> RawNodeProcess {
+        RawNodeProcess {
+            pid: 42,
+            parent_pid: None,
+            name: "node".into(),
+            executable: None,
+            command_line: Some("node E:/repo/server.js".into()),
+            launch_command: None,
+            started_at: Some("started".into()),
+            ports: vec![],
+        }
+    }
+
+    #[test]
+    fn port_failure_preserves_processes_and_reports_unavailable_ports() {
+        let snapshot = build_process_snapshot(
+            vec![process_without_ports()],
+            &[project("E:/repo")],
+            &HashMap::new(),
+            Err("port fixture failed".into()),
+        );
+
+        assert_eq!(snapshot.processes.len(), 1);
+        assert_eq!(snapshot.processes[0].pid, 42);
+        assert_eq!(
+            snapshot.processes[0].matched_project_id.as_deref(),
+            Some("E:/repo")
+        );
+        assert!(snapshot.processes[0].ports.is_empty());
+        assert_eq!(snapshot.ports_error.as_deref(), Some("port fixture failed"));
+        assert_eq!(
+            serde_json::to_value(snapshot).unwrap()["portsError"],
+            "port fixture failed"
+        );
+    }
+
+    #[test]
+    fn successful_scan_without_ports_has_no_warning() {
+        let snapshot = build_process_snapshot(
+            vec![process_without_ports()],
+            &[],
+            &HashMap::new(),
+            Ok(HashMap::new()),
+        );
+
+        assert_eq!(snapshot.processes.len(), 1);
+        assert!(snapshot.processes[0].ports.is_empty());
+        assert!(snapshot.ports_error.is_none());
+        assert!(serde_json::to_value(snapshot)
+            .unwrap()
+            .get("portsError")
+            .is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn lsof_distinguishes_no_listeners_from_failures_and_partial_results() {
+        use std::os::unix::process::ExitStatusExt;
+
+        let mut output = std::process::Output {
+            status: std::process::ExitStatus::from_raw(1 << 8),
+            stdout: vec![],
+            stderr: vec![],
+        };
+        assert!(parse_lsof_output(&output).unwrap().is_empty());
+        output.stderr = b"permission denied".to_vec();
+        assert!(parse_lsof_output(&output)
+            .unwrap_err()
+            .contains("permission denied"));
+        output.status = std::process::ExitStatus::from_raw(0);
+        output.stdout = b"p42\nPtcp\nn127.0.0.1:3000\n".to_vec();
+        assert!(parse_lsof_output(&output).is_err());
+        output.stderr.clear();
+        assert_eq!(parse_lsof_output(&output).unwrap()[&42][0].local_port, 3000);
+        output.status = std::process::ExitStatus::from_raw(2 << 8);
+        output.stdout.clear();
+        assert!(parse_lsof_output(&output).is_err());
     }
 
     #[test]
@@ -1159,29 +1258,23 @@ fn parse_windows_snapshot_value(value: &Value) -> Option<RawProcessSnapshot> {
 }
 
 #[cfg(target_os = "windows")]
-fn platform_list_process_ports() -> Result<HashMap<u32, Vec<NodeProcessPort>>, String> {
-    let script = r#"
-$tcp = @()
-$udp = @()
-try {
-  $tcp = Get-NetTCPConnection -State Listen -ErrorAction Stop |
+const WINDOWS_PROCESS_PORTS_SCRIPT: &str = r#"
+$tcp = @(Get-NetTCPConnection -ErrorAction Stop |
+    Where-Object { $_.State -eq 'Listen' } |
     Select-Object `
       @{Name='pid'; Expression={[uint32]$_.OwningProcess}},
       @{Name='protocol'; Expression={'tcp'}},
       @{Name='localAddress'; Expression={$_.LocalAddress}},
       @{Name='localPort'; Expression={[uint16]$_.LocalPort}},
-      @{Name='state'; Expression={$_.State.ToString()}}
-} catch {}
-try {
-  $udp = Get-NetUDPEndpoint -ErrorAction Stop |
+      @{Name='state'; Expression={$_.State.ToString()}})
+$udp = @(Get-NetUDPEndpoint -ErrorAction Stop |
     Select-Object `
       @{Name='pid'; Expression={[uint32]$_.OwningProcess}},
       @{Name='protocol'; Expression={'udp'}},
       @{Name='localAddress'; Expression={$_.LocalAddress}},
       @{Name='localPort'; Expression={[uint16]$_.LocalPort}},
-      @{Name='state'; Expression={'Listen'}}
-} catch {}
-$items = @($tcp) + @($udp)
+      @{Name='state'; Expression={'Listen'}})
+$items = $tcp + $udp
 if ($items.Count -eq 0) {
   '[]'
 } else {
@@ -1189,7 +1282,9 @@ if ($items.Count -eq 0) {
 }
 "#;
 
-    let output = powershell_output(script, "读取端口占用失败")?;
+#[cfg(target_os = "windows")]
+fn platform_list_process_ports() -> Result<HashMap<u32, Vec<NodeProcessPort>>, String> {
+    let output = powershell_output(WINDOWS_PROCESS_PORTS_SCRIPT, "读取端口占用失败")?;
 
     parse_port_json(&String::from_utf8_lossy(&output.stdout))
 }
@@ -1357,12 +1452,22 @@ fn parse_ps_snapshot_line(line: &str) -> Option<RawProcessSnapshot> {
 #[cfg(unix)]
 fn platform_list_process_ports() -> Result<HashMap<u32, Vec<NodeProcessPort>>, String> {
     let output = Command::new("lsof")
-        .args(["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "Pn"])
+        .args(["+w", "-nP", "-iTCP", "-sTCP:LISTEN", "-F", "Pn"])
         .output()
         .map_err(|e| format!("读取端口占用失败: {}", e))?;
 
-    if !output.status.success() {
-        return Err(command_error("读取端口占用失败", &output));
+    parse_lsof_output(&output)
+}
+
+#[cfg(unix)]
+fn parse_lsof_output(
+    output: &std::process::Output,
+) -> Result<HashMap<u32, Vec<NodeProcessPort>>, String> {
+    // lsof 用退出码 1 表示没有匹配项；有诊断输出时仍须报告检测失败。
+    let no_listeners =
+        output.status.code() == Some(1) && output.stdout.is_empty() && output.stderr.is_empty();
+    if (!output.status.success() && !no_listeners) || !output.stderr.is_empty() {
+        return Err(command_error("读取端口占用失败", output));
     }
 
     Ok(parse_lsof_ports(&String::from_utf8_lossy(&output.stdout)))

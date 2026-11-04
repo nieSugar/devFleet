@@ -14,6 +14,7 @@ import type {
   ImportEditorCandidateInput,
   UpsertCustomEditorInput,
   NodeProcessInfo,
+  NodeProcessSnapshot,
   ProjectScanResult,
 } from "../types/project";
 
@@ -28,6 +29,7 @@ type RunScriptParams = {
 type SetNodeVersionParams = {
   projectId: string;
   nodeVersion: string | null | undefined;
+  expectedFilePath: string;
 };
 
 export interface ScriptRunResult {
@@ -80,7 +82,7 @@ export const tauriAPI = {
   runScript: (params: RunScriptParams): Promise<IpcResponse<ScriptRunResult>> =>
     invoke("run_script", params),
 
-  listNodeProcesses: (): Promise<IpcResponse<NodeProcessInfo[]>> =>
+  listNodeProcesses: (): Promise<IpcResponse<NodeProcessSnapshot>> =>
     invoke("list_node_processes"),
 
   killNodeProcess: (process: NodeProcessInfo): Promise<IpcResponse<MessageResult>> =>
@@ -171,6 +173,11 @@ export const tauriAPI = {
     projectPath: string
   ): Promise<IpcResponse<DetectedVersion>> =>
     invoke("detect_project_node_version", { projectPath }),
+
+  getProjectNodeVersionFile: (
+    projectId: string,
+  ): Promise<IpcResponse<{ filePath: string }>> =>
+    invoke("get_project_node_version_file", { projectId }),
 
   setProjectNodeVersion: (
     params: SetNodeVersionParams

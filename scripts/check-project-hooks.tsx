@@ -40,8 +40,8 @@ function check(condition: boolean, message: string) {
   checks.push(message);
 }
 
-const resolveScan = (index: number, success = true) => pending[index](success
-  ? { success: true, data: [{ pid: index + 1, name: "node", ports: [] }] }
+const resolveScan = (index: number, success = true, portsError?: string) => pending[index](success
+  ? { success: true, data: { processes: [{ pid: index + 1, name: "node", ports: [] }], portsError } }
   : { success: false, error: "fixture scan failed" });
 
 try {
@@ -50,12 +50,12 @@ try {
   await act(async () => { intervals.forEach(tick => tick()); intervals.forEach(tick => tick()); });
   check(pending.length === 1, "slow IPC requests do not overlap");
   await act(async () => { resolveScan(0); });
-  check(latest!.status === "ready" && latest!.processes[0]?.pid === 1, "successful response populates state");
+  check(latest!.status === "ready" && latest!.processes[0]?.pid === 1 && latest!.portsError === null, "successful response without ports is not a scan failure");
   await act(async () => { intervals.forEach(tick => tick()); });
   await act(async () => { visible = false; document.dispatchEvent(new Event("visibilitychange")); });
   check(intervals.size === 0, "hidden page stops polling timer");
-  await act(async () => { resolveScan(1); });
-  check(latest!.processes[0]?.pid === 1, "response from an old visibility generation is ignored");
+  await act(async () => { resolveScan(1, true, "stale port failure"); });
+  check(latest!.processes[0]?.pid === 1 && latest!.portsError === null, "response and warning from an old visibility generation are ignored");
   await act(async () => { visible = true; document.dispatchEvent(new Event("visibilitychange")); });
   check(pending.length === 3 && intervals.size === 1, "returning to the page restarts exactly one scan");
   await act(async () => { resolveScan(2, false); });
@@ -63,9 +63,20 @@ try {
   await act(async () => { void latest!.refresh(); });
   await act(async () => { resolveScan(3); });
   check(latest!.status === "ready" && latest!.processes[0]?.pid === 4, "retry recovers after failure");
+  await act(async () => { void latest!.refresh(); });
+  await act(async () => { resolveScan(4, true, "fixture port scan failed"); });
+  check(latest!.status === "ready" && latest!.processes[0]?.pid === 5 && latest!.error === null && latest!.portsError === "fixture port scan failed", "port scan failure preserves processes and exposes a separate warning");
+  await act(async () => { void latest!.refresh(); });
+  await act(async () => { resolveScan(5); });
+  check(latest!.portsError === null && latest!.processes[0]?.pid === 6, "successful retry clears the port warning");
+  await act(async () => { void latest!.refresh(); });
+  await act(async () => { resolveScan(6, true, "fixture port scan failed"); });
+  await act(async () => { void latest!.refresh(); });
+  await act(async () => { resolveScan(7, false); });
+  check(latest!.status === "error" && latest!.processes.length === 0 && latest!.portsError === null, "process scan failure clears the obsolete port warning");
   await act(async () => { root.render(<Harness enabled={false} />); });
   await act(async () => { await latest!.refresh(); });
-  check(intervals.size === 0 && pending.length === 4, "no consumers means no polling or manual scan");
+  check(intervals.size === 0 && pending.length === 8, "no consumers means no polling or manual scan");
   await act(async () => { root.unmount(); });
   check(intervals.size === 0, "unmount removes polling timer");
   output.dataset.status = "passed";

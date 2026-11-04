@@ -4,6 +4,7 @@ import { NodeProcessInfo, Project } from "../types/project";
 import type { NodeProcessesState } from "../hooks/useNodeProcesses";
 import { listenForMacOSAddProject } from "../lib/macosNative";
 import { listenForProjectsChanged } from "../lib/projectEvents";
+import { tauriAPI } from "../lib/tauri";
 import { useProjects } from "../hooks/useProjects";
 import { useEditors } from "../hooks/useEditors";
 import { useNvmInfo } from "../hooks/useNvmInfo";
@@ -12,7 +13,7 @@ import ProjectHeader from "./ProjectHeader";
 import ProjectImportModal from "./ProjectImportModal";
 import ProjectCard from "./ProjectCard";
 import { PlusOutlined, FolderOpenOutlined } from "@ant-design/icons";
-import { App, Button } from "antd";
+import { App, Button, Typography, type InputRef } from "antd";
 import "./ProjectManager.css";
 
 interface ProjectManagerProps {
@@ -44,12 +45,20 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey, processS
   const { modal, message: messageApi } = App.useApp();
   const { t } = useTranslation();
   const [searchText, setSearchText] = useState("");
+  const [projectFilter, setProjectFilter] = useState<"all" | "processes" | "unavailable">("all");
+  const [compact, setCompact] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const searchRef = useRef<InputRef>(null);
+  const openingEditor = useRef(false);
   const [importOpen, setImportOpen] = useState(false);
   const [relocatingId, setRelocatingId] = useState<string | null>(null);
   const [runningIds, setRunningIds] = useState<Set<string>>(new Set());
   const pendingRuns = useRef(new Set<string>());
   const pendingPins = useRef(new Set<string>());
   const [pinningIds, setPinningIds] = useState<Set<string>>(new Set());
+  const pendingNodeChanges = useRef(new Set<string>());
+  const [nodeSavingIds, setNodeSavingIds] = useState<Set<string>>(new Set());
   const refreshProcesses = processState.refresh;
 
   const processesByProject = useMemo(() => {
@@ -97,6 +106,7 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey, processS
   useKeyboardShortcuts({
     onAddProject: () => handleAdd(),
     onRefresh: handleRefresh,
+    onFocusSearch: () => searchRef.current?.focus({ cursor: "all" }),
   });
 
   const showMsg = useCallback((type: "success" | "error", text: string) => {
@@ -177,13 +187,33 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey, processS
     projectId: string,
     nodeVersion: string | null | undefined,
   ) => {
+    if (pendingNodeChanges.current.has(projectId) || pendingRuns.current.has(projectId)) return;
+    pendingNodeChanges.current.add(projectId);
+    setNodeSavingIds(new Set(pendingNodeChanges.current));
     try {
-      const result = await changeNodeVersion(projectId, nodeVersion);
+      const preview = await tauriAPI.getProjectNodeVersionFile(projectId);
+      if (!preview.success || !preview.data) {
+        showMsg("error", preview.error || t("project.nodeVersionFailed"));
+        return;
+      }
+      const confirmed = await modal.confirm({
+        title: t(nodeVersion ? "project.nodeVersionWriteTitle" : "project.nodeVersionRemoveTitle"),
+        content: <>
+          <p>{t(nodeVersion ? "project.nodeVersionWriteContent" : "project.nodeVersionRemoveContent", { version: nodeVersion })}</p>
+          <Typography.Text code copyable style={{ overflowWrap: "anywhere" }}>{preview.data.filePath}</Typography.Text>
+        </>,
+        okText: t("common.confirm"),
+        okType: nodeVersion ? "primary" : "danger",
+        cancelText: t("common.cancel"),
+      });
+      if (!confirmed) return;
+      const result = await changeNodeVersion(projectId, nodeVersion, preview.data.filePath);
       if (result.success && result.data) {
+        const savedVersion = result.data.project.nodeVersion;
         setProjects((prev) =>
           prev.map((p) =>
             p.id === projectId
-              ? { ...p, nodeVersion: nodeVersion || undefined }
+              ? { ...p, nodeVersion: savedVersion }
               : p,
           ),
         );
@@ -193,11 +223,14 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey, processS
       }
     } catch {
       showMsg("error", t("project.nodeVersionError"));
+    } finally {
+      pendingNodeChanges.current.delete(projectId);
+      setNodeSavingIds(new Set(pendingNodeChanges.current));
     }
-  }, [changeNodeVersion, setProjects, showMsg, t]);
+  }, [changeNodeVersion, modal, setProjects, showMsg, t]);
 
   const handleRun = useCallback(async (project: Project) => {
-    if (pendingRuns.current.has(project.id)) return;
+    if (pendingRuns.current.has(project.id) || pendingNodeChanges.current.has(project.id)) return;
     pendingRuns.current.add(project.id);
     setRunningIds(new Set(pendingRuns.current));
     try {
@@ -263,15 +296,15 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey, processS
   }, [updateNote, showMsg, t]);
 
   const filteredProjects = useMemo(() => {
-    if (!searchText.trim()) return projects;
-    const q = searchText.toLowerCase();
-    return projects.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
+    const q = searchText.trim().toLowerCase();
+    return projects.filter((p) => {
+      if (projectFilter === "processes" && !processesByProject.has(p.id)) return false;
+      if (projectFilter === "unavailable" && availability[p.id] !== false) return false;
+      return !q || p.name.toLowerCase().includes(q) ||
         p.path.toLowerCase().includes(q) ||
-        (p.note && p.note.toLowerCase().includes(q)),
-    );
-  }, [projects, searchText]);
+        Boolean(p.note && p.note.toLowerCase().includes(q));
+    });
+  }, [projects, searchText, projectFilter, processesByProject, availability]);
 
   const orderedProjects = useMemo(() => {
     const pinned = new Set(pinnedProjectIds);
@@ -284,6 +317,51 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey, processS
       .map(({ project }) => project);
   }, [filteredProjects, pinnedProjectIds]);
 
+  const selectedProject = orderedProjects.find((project) => project.id === selectedProjectId) || orderedProjects[0];
+  useEffect(() => {
+    if (!searchFocused || !selectedProject) return;
+    document.getElementById(`project-card-${selectedProject.id}`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [searchFocused, selectedProject]);
+
+  const handleSearchKeyDown = async (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (event.key === "Escape") {
+      event.currentTarget.blur();
+      return;
+    }
+    if (!selectedProject) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const index = orderedProjects.indexOf(selectedProject);
+      const next = (index + (event.key === "ArrowDown" ? 1 : -1) + orderedProjects.length) % orderedProjects.length;
+      setSelectedProjectId(orderedProjects[next].id);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      if (event.repeat || openingEditor.current || relocatingId === selectedProject.id || runningIds.has(selectedProject.id)) return;
+      if (availability[selectedProject.id] !== true) {
+        showMsg("error", t("project.pathUnavailable"));
+        return;
+      }
+      if (!defaultEditorId || !editors?.[defaultEditorId]?.installed) {
+        const picker = document.getElementById(`project-card-${selectedProject.id}`)?.querySelector<HTMLDetailsElement>(".editor-picker");
+        if (picker) {
+          picker.open = true;
+          picker.querySelector("summary")?.focus();
+        }
+        return;
+      }
+      openingEditor.current = true;
+      try {
+        const result = await openInEditor(defaultEditorId, selectedProject.path);
+        if (!result.success) showMsg("error", result.error || t("project.editorFailed"));
+      } catch {
+        showMsg("error", t("project.editorFailed"));
+      } finally {
+        openingEditor.current = false;
+      }
+    }
+  };
+
   return (
     <div className="project-manager">
 
@@ -292,14 +370,32 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey, processS
         projectCount={filteredProjects.length}
         totalCount={projects.length}
         searchText={searchText}
+        searchRef={searchRef}
+        onSearchKeyDown={handleSearchKeyDown}
+        onSearchFocus={() => setSearchFocused(true)}
+        onSearchBlur={() => setSearchFocused(false)}
+        projectFilter={projectFilter}
+        onFilterChange={(filter) => { setProjectFilter(filter); setSelectedProjectId(null); }}
+        compact={compact}
+        onCompactChange={setCompact}
         onAdd={handleAdd}
         onImport={() => setImportOpen(true)}
         onRefresh={handleRefresh}
-        onSearch={setSearchText}
+        onSearch={(text) => { setSearchText(text); setSelectedProjectId(null); }}
       />
 
+      <span id="project-search-selection" className="project-sr-only" role="status">
+        {searchFocused && selectedProject ? t("project.searchSelection", { name: selectedProject.name }) : ""}
+      </span>
+      {projectFilter === "processes" && processState.status !== "ready" && (
+        <div className="project-filter-status" role="status">
+          {t(processState.status === "loading" ? "project.processesChecking" : "project.processesUnavailable")}
+          {processState.status === "error" && <Button size="small" onClick={() => void refreshProcesses(true)}>{t("common.retry")}</Button>}
+        </div>
+      )}
+
       {filteredProjects.length > 0 ? (
-        <div className="projects-grid">
+        <div id="project-results" className={`projects-grid${compact ? " projects-compact" : ""}`}>
           {orderedProjects.map((project, i) => (
             <ProjectCard
               key={project.id}
@@ -308,6 +404,8 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey, processS
               defaultEditorId={defaultEditorId}
               isPinned={pinnedProjectIds.includes(project.id)}
               pinSaving={pinningIds.has(project.id)}
+              nodeSaving={nodeSavingIds.has(project.id)}
+              selected={searchFocused && selectedProject?.id === project.id}
               onTogglePinned={handleTogglePinned}
               nvmInfo={nvmInfo}
               index={i}
@@ -324,14 +422,17 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey, processS
               onRelocate={handleRelocate}
               processes={processesByProject.get(project.id) || []}
               processStatus={processState.status}
+              portsError={processState.portsError}
+              onRetryProcesses={() => void refreshProcesses(true)}
               onViewProcesses={onViewProcesses}
             />
           ))}
-          <div
+          <button
+            type="button"
             className="add-project-card"
             onClick={handleAdd}
             style={{
-              animationDelay: `${filteredProjects.length * 50}ms`,
+              animationDelay: `${Math.min(filteredProjects.length * 50, 300)}ms`,
             }}
           >
             <div className="add-icon">
@@ -339,10 +440,10 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey, processS
             </div>
             <span className="add-label">{t("project.addProject")}</span>
             <span className="add-shortcut">{t("project.addShortcut")}</span>
-          </div>
+          </button>
         </div>
       ) : projects.length === 0 ? (
-        <div className="empty-state">
+        <div id="project-results" className="empty-state">
           <div className="empty-icon">
             <FolderOpenOutlined />
           </div>
@@ -360,8 +461,10 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey, processS
           </Button>
           <span className="empty-shortcut">{t("project.emptyShortcut")}</span>
         </div>
+      ) : projectFilter === "processes" && processState.status !== "ready" ? (
+        <div id="project-results" />
       ) : (
-        <div className="empty-state">
+        <div id="project-results" className="empty-state">
           <div className="empty-title">{t("project.noMatch")}</div>
           <div className="empty-desc">{t("project.noMatchDesc")}</div>
         </div>

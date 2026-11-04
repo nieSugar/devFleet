@@ -364,6 +364,14 @@ pub struct NodeProcessInfo {
     pub matched_project_path: Option<String>,
 }
 
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeProcessSnapshot {
+    pub processes: Vec<NodeProcessInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ports_error: Option<String>,
+}
+
 // ── 远程 Node 版本（nodejs.org dist API） ──
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

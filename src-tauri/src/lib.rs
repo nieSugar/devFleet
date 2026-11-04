@@ -969,6 +969,7 @@ pub fn run() {
             commands::import_editor_candidate,
             commands::get_nvm_info,
             commands::detect_project_node_version,
+            commands::get_project_node_version_file,
             commands::set_project_node_version,
             commands::fetch_remote_node_versions,
             commands::install_node_version,

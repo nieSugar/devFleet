@@ -105,3 +105,94 @@ fn node_engine_range_is_preserved_by_project_detection() {
         Some(">=22.0.0")
     );
 }
+
+#[test]
+fn node_version_preview_uses_the_same_file_as_the_writer() {
+    let project = TestProjectDir::new(r#"{"name":"version-preview"}"#);
+    for (manager, name) in [
+        (NodeVersionManager::Builtin, ".node-version"),
+        (NodeVersionManager::Nvs, ".node-version"),
+        (NodeVersionManager::Nvmd, ".nvmdrc"),
+        (NodeVersionManager::Nvm, ".nvmrc"),
+        (NodeVersionManager::NvmWindows, ".nvmrc"),
+    ] {
+        let preview =
+            crate::project::node_version_file_path(project.path.to_str().unwrap(), &manager);
+        assert_eq!(preview, project.path.join(name));
+        assert!(!preview.exists(), "preview must not create files");
+    }
+}
+
+#[test]
+fn project_snapshot_checks_current_node_files_without_writing_them() {
+    let dir = TestProjectDir::new(r#"{"name":"version-impact"}"#);
+    let version_file = dir.path.join(".node-version");
+    fs::write(&version_file, "20.1.0").unwrap();
+    let project = crate::project::create_project(dir.path.to_str().unwrap()).unwrap();
+    let cfg: ProjectConfig = serde_json::from_value(serde_json::json!({
+        "projects": [project], "lastUpdated": "fixture",
+    }))
+    .unwrap();
+    fs::write(&version_file, "22.1.0").unwrap();
+    let response = project_config_response(cfg.clone());
+    assert_eq!(
+        response.data.unwrap()["projects"][0]["nodeVersion"],
+        "22.1.0"
+    );
+    assert_eq!(cfg.projects[0].node_version.as_deref(), Some("20.1.0"));
+    assert_eq!(fs::read_to_string(&version_file).unwrap(), "22.1.0");
+    fs::remove_file(dir.path.join("package.json")).unwrap();
+    let response = project_config_response(cfg);
+    assert_eq!(
+        response.data.unwrap()["projects"][0]["nodeVersion"],
+        "20.1.0"
+    );
+}
+
+#[test]
+fn node_version_change_requires_the_confirmed_file() {
+    let project = TestProjectDir::new(r#"{"name":"version-confirm"}"#);
+    let root = project.path.to_str().unwrap();
+    let confirmed = project.path.join(".nvmrc");
+    fs::write(&confirmed, "20.1.0").unwrap();
+    for version in [Some("22.1.0"), None] {
+        let result = crate::project::set_node_version_file(
+            root,
+            version,
+            &NodeVersionManager::Builtin,
+            confirmed.to_str().unwrap(),
+        );
+        assert!(
+            result.is_err(),
+            "manager change must require a new confirmation"
+        );
+        assert!(!project.path.join(".node-version").exists());
+        assert_eq!(fs::read_to_string(&confirmed).unwrap(), "20.1.0");
+    }
+}
+
+#[test]
+fn confirmed_node_version_change_only_touches_the_named_file() {
+    let project = TestProjectDir::new(r#"{"name":"version-change"}"#);
+    let root = project.path.to_str().unwrap();
+    let confirmed = project.path.join(".node-version");
+    let other = project.path.join(".nvmrc");
+    fs::write(&other, "20.1.0").unwrap();
+    crate::project::set_node_version_file(
+        root,
+        Some("v22.1.0"),
+        &NodeVersionManager::Builtin,
+        confirmed.to_str().unwrap(),
+    )
+    .unwrap();
+    assert_eq!(fs::read_to_string(&confirmed).unwrap(), "22.1.0");
+    crate::project::set_node_version_file(
+        root,
+        None,
+        &NodeVersionManager::Builtin,
+        confirmed.to_str().unwrap(),
+    )
+    .unwrap();
+    assert!(!confirmed.exists());
+    assert_eq!(fs::read_to_string(&other).unwrap(), "20.1.0");
+}

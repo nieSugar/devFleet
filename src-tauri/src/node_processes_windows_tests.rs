@@ -8,6 +8,46 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+fn mock_port_scan(tcp: &str, udp: &str) -> Result<HashMap<u32, Vec<NodeProcessPort>>, String> {
+    let script = format!(
+        "function Get-NetTCPConnection {{ {} }}\nfunction Get-NetUDPEndpoint {{ {} }}\n{}",
+        tcp, udp, WINDOWS_PROCESS_PORTS_SCRIPT
+    );
+    let output = powershell_output(&script, "读取端口占用失败")?;
+    parse_port_json(&String::from_utf8_lossy(&output.stdout))
+}
+
+#[test]
+fn empty_port_scan_is_successful() {
+    assert!(mock_port_scan("", "").unwrap().is_empty());
+}
+
+#[test]
+fn tcp_and_udp_failures_are_reported() {
+    for (tcp, udp) in [
+        ("throw 'TCP fixture failed'", ""),
+        ("", "throw 'UDP fixture failed'"),
+    ] {
+        assert!(mock_port_scan(tcp, udp)
+            .unwrap_err()
+            .contains("fixture failed"));
+    }
+}
+
+#[test]
+fn port_scan_keeps_listeners_and_udp_endpoints() {
+    let ports = mock_port_scan(
+        "[pscustomobject]@{ OwningProcess=42; LocalAddress='127.0.0.1'; LocalPort=3000; State='Listen' }; [pscustomobject]@{ OwningProcess=42; LocalAddress='127.0.0.1'; LocalPort=4000; State='Established' }",
+        "[pscustomobject]@{ OwningProcess=42; LocalAddress='0.0.0.0'; LocalPort=5000 }",
+    )
+    .unwrap();
+    assert_eq!(ports[&42].len(), 2);
+    assert_eq!(ports[&42][0].protocol, "tcp");
+    assert_eq!(ports[&42][0].local_port, 3000);
+    assert_eq!(ports[&42][1].protocol, "udp");
+    assert_eq!(ports[&42][1].local_port, 5000);
+}
+
 struct TestTree {
     temp_root: PathBuf,
     directory: PathBuf,

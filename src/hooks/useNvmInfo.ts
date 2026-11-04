@@ -36,10 +36,11 @@ export function useNvmInfo() {
   }, [fetchNvmInfo]);
 
   const changeNodeVersion = useCallback(
-    async (projectId: string, nodeVersion: string | null | undefined) => {
+    async (projectId: string, nodeVersion: string | null | undefined, expectedFilePath: string) => {
       return tauriAPI.setProjectNodeVersion({
         projectId,
         nodeVersion: nodeVersion ?? null,
+        expectedFilePath,
       });
     },
     []

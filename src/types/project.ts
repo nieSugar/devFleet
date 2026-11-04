@@ -54,6 +54,11 @@ export interface NodeProcessInfo {
   matchedProjectPath?: string;
 }
 
+export interface NodeProcessSnapshot {
+  processes: NodeProcessInfo[];
+  portsError?: string;
+}
+
 export interface IpcResponse<T = unknown> {
   success: boolean;
   code?: string;
