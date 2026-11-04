@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { App, Button, Input, Modal, Radio } from "antd";
 import {
   AppstoreAddOutlined,
+  AppstoreOutlined,
   DeleteOutlined,
   EditOutlined,
   FolderOpenOutlined,
@@ -304,7 +305,7 @@ const EditorSettings: React.FC = () => {
         >
           <Radio className="editor-default-card" value="">
             <span className="editor-default-card-content">
-              <span className="editor-settings-icon" aria-hidden="true"><AppstoreAddOutlined /></span>
+              <span className="editor-settings-icon" aria-hidden="true"><AppstoreOutlined /></span>
               <span className="editor-default-card-copy">
                 <strong>{t("settings.editors.chooseEachTime")}</strong>
                 <small>{t("settings.editors.chooseEachTimeHint")}</small>
@@ -324,9 +325,12 @@ const EditorSettings: React.FC = () => {
           ))}
           {defaultEditorId && !editors?.[defaultEditorId] && (
             <Radio className="editor-default-card" value={defaultEditorId} disabled>
-              <span className="editor-default-card-copy">
-                <strong>{defaultEditorId}</strong>
-                <small>{t("settings.editors.unavailable")}</small>
+              <span className="editor-default-card-content">
+                <EditorGlyph name={defaultEditorId} />
+                <span className="editor-default-card-copy">
+                  <strong>{defaultEditorId}</strong>
+                  <small>{t("settings.editors.unavailable")}</small>
+                </span>
               </span>
             </Radio>
           )}
