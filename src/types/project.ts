@@ -166,6 +166,10 @@ export interface ImportEditorCandidateInput {
   name?: string;
 }
 
+export interface ProjectScanRequest {
+  rootPath: string;
+}
+
 export interface ProjectScanCandidate {
   path: string;
   name: string;

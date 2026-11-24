@@ -3,11 +3,13 @@ import { Alert, Button, Checkbox, List, Modal, Spin, Tag, Typography } from "ant
 import { FolderOpenOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { tauriAPI } from "../lib/tauri";
-import type { ProjectScanCandidate, ProjectScanResult } from "../types/project";
+import type { ProjectScanCandidate, ProjectScanRequest, ProjectScanResult } from "../types/project";
 import "./ProjectImportModal.css";
 
 interface ProjectImportModalProps {
   open: boolean;
+  scanRequest?: ProjectScanRequest | null;
+  onScanRequestHandled: (request: ProjectScanRequest) => void;
   onClose: () => void;
   onImported: () => void;
 }
@@ -15,7 +17,9 @@ interface ProjectImportModalProps {
 type ImportState = "success" | "error";
 type ImportOutcome = { state: ImportState; message: string };
 
-const ProjectImportModal: React.FC<ProjectImportModalProps> = ({ open, onClose, onImported }) => {
+const ProjectImportModal: React.FC<ProjectImportModalProps> = ({
+  open, scanRequest, onScanRequestHandled, onClose, onImported,
+}) => {
   const { t } = useTranslation();
   const [rootPath, setRootPath] = useState("");
   const [result, setResult] = useState<ProjectScanResult | null>(null);
@@ -26,6 +30,7 @@ const ProjectImportModal: React.FC<ProjectImportModalProps> = ({ open, onClose, 
   const [error, setError] = useState("");
   const [scanCancelled, setScanCancelled] = useState(false);
   const generation = useRef(0);
+  const pendingCancellation = useRef<Promise<unknown> | null>(null);
 
   const reset = useCallback(() => {
     setRootPath("");
@@ -36,18 +41,26 @@ const ProjectImportModal: React.FC<ProjectImportModalProps> = ({ open, onClose, 
     setScanCancelled(false);
   }, []);
 
+  const stopScan = useCallback(() => {
+    generation.current += 1;
+    setScanning(false);
+    pendingCancellation.current = tauriAPI.cancelProjectScan()
+      .catch((error) => console.warn("Failed to cancel project scan", error));
+  }, []);
+
   useEffect(() => {
     if (!open) {
-      generation.current += 1;
-      if (scanning) void tauriAPI.cancelProjectScan();
+      if (scanning) stopScan();
+      else generation.current += 1;
       reset();
     }
-  }, [open, reset, scanning]);
+  }, [open, reset, scanning, stopScan]);
 
   const chooseFolder = useCallback(async () => {
+    const requestId = generation.current;
     try {
       const path = await tauriAPI.selectFolder();
-      if (!path) return;
+      if (!path || requestId !== generation.current) return;
       setRootPath(path);
       setResult(null);
       setSelected(new Set());
@@ -55,13 +68,15 @@ const ProjectImportModal: React.FC<ProjectImportModalProps> = ({ open, onClose, 
       setError("");
       setScanCancelled(false);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("project.import.chooseFolderFailed"));
+      if (requestId === generation.current)
+        setError(cause instanceof Error ? cause.message : t("project.import.chooseFolderFailed"));
     }
   }, [t]);
 
-  const scan = useCallback(async () => {
-    if (!rootPath || scanning || importing) return;
+  const scan = useCallback(async (path: string) => {
+    if (!path || scanning || importing) return;
     const requestId = ++generation.current;
+    setRootPath(path);
     setScanning(true);
     setResult(null);
     setSelected(new Set());
@@ -69,7 +84,11 @@ const ProjectImportModal: React.FC<ProjectImportModalProps> = ({ open, onClose, 
     setError("");
     setScanCancelled(false);
     try {
-      const response = await tauriAPI.scanProjectCandidates(rootPath);
+      if (pendingCancellation.current) {
+        await pendingCancellation.current;
+        if (requestId !== generation.current) return;
+      }
+      const response = await tauriAPI.scanProjectCandidates(path);
       if (requestId !== generation.current) return;
       if (response.success && response.data) setResult(response.data);
       else setError(response.error || t("project.import.scanFailed"));
@@ -79,14 +98,18 @@ const ProjectImportModal: React.FC<ProjectImportModalProps> = ({ open, onClose, 
     } finally {
       if (requestId === generation.current) setScanning(false);
     }
-  }, [importing, rootPath, scanning, t]);
+  }, [importing, scanning, t]);
+
+  useEffect(() => {
+    if (!open || !scanRequest || scanning || importing) return;
+    onScanRequestHandled(scanRequest);
+    void scan(scanRequest.rootPath);
+  }, [importing, onScanRequestHandled, open, scan, scanRequest, scanning]);
 
   const cancelScan = useCallback(() => {
-    generation.current += 1;
-    setScanning(false);
+    stopScan();
     setScanCancelled(true);
-    void tauriAPI.cancelProjectScan();
-  }, []);
+  }, [stopScan]);
 
   const close = useCallback(() => {
     if (importing) return;
@@ -173,7 +196,7 @@ const ProjectImportModal: React.FC<ProjectImportModalProps> = ({ open, onClose, 
           <Button icon={<FolderOpenOutlined />} onClick={chooseFolder} disabled={scanning || importing}>
             {t("project.import.chooseFolder")}
           </Button>
-          <Button type="primary" onClick={scan} disabled={!rootPath || scanning || importing}>
+          <Button type="primary" onClick={() => void scan(rootPath)} disabled={!rootPath || scanning || importing}>
             {scanning ? t("project.import.scanning") : t("project.import.scan")}
           </Button>
           {scanning && <Button onClick={cancelScan}>{t("project.import.cancelScan")}</Button>}

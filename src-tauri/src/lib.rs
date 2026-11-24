@@ -4,8 +4,9 @@ use include_dir::{include_dir, Dir};
 use serde::{Deserialize, Serialize};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::collections::HashSet;
+use std::sync::Mutex;
 #[cfg(target_os = "macos")]
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 use std::{
     io::{Read, Write},
@@ -48,6 +49,8 @@ const TRAY_QUIT_MENU_ID: &str = "tray-quit-app";
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 const PROJECTS_CHANGED_EVENT: &str = "projects://changed";
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+const PROJECT_SCAN_REQUESTED_EVENT: &str = "projects://scan-requested";
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 const COMMAND_MAGIC: &str = "DEVFLEET_COMMAND_V1";
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 const COMMAND_PORT_BASE: u16 = 49152;
@@ -61,6 +64,16 @@ const COMMAND_APP_ID: &str = "com.niesugar.devfleet";
 #[serde(tag = "type", rename_all = "kebab-case")]
 enum AppCommand {
     AddProject { path: String },
+    ScanProjects { path: String },
+}
+
+struct PendingProjectScan {
+    path: Mutex<Option<String>>,
+}
+
+#[tauri::command]
+fn take_pending_project_scan(state: tauri::State<'_, PendingProjectScan>) -> Option<String> {
+    state.path.lock().ok()?.take()
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -193,17 +206,14 @@ fn startup_project_path_from_args(
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-fn forward_startup_project_to_running_instance(path: &std::path::Path) -> bool {
+fn forward_command_to_running_instance(command: &AppCommand) -> bool {
     let Ok(mut stream) =
         TcpStream::connect_timeout(&command_server_addr(), Duration::from_millis(200))
     else {
         return false;
     };
 
-    let command = AppCommand::AddProject {
-        path: path.to_string_lossy().to_string(),
-    };
-    let Ok(body) = serde_json::to_string(&command) else {
+    let Ok(body) = serde_json::to_string(command) else {
         return false;
     };
 
@@ -257,7 +267,10 @@ fn command_response_is_success(response: &str) -> bool {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-fn handle_app_command<R: Runtime>(app: &tauri::AppHandle<R>, command: AppCommand) {
+fn handle_app_command<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    command: AppCommand,
+) -> Result<(), String> {
     match command {
         AppCommand::AddProject { path } => {
             let path = std::path::PathBuf::from(path);
@@ -265,9 +278,20 @@ fn handle_app_command<R: Runtime>(app: &tauri::AppHandle<R>, command: AppCommand
             if outcome.changed() {
                 emit_projects_changed(app);
             }
-            show_main_window(app);
+        }
+        AppCommand::ScanProjects { path } => {
+            let root = std::path::Path::new(&path);
+            if !root.is_absolute() || !root.is_dir() {
+                return Err("invalid project scan directory".to_string());
+            }
+            let state = app.state::<PendingProjectScan>();
+            *state.path.lock().map_err(|e| e.to_string())? = Some(path);
+            let _ = app.emit_to("main", PROJECT_SCAN_REQUESTED_EVENT, ());
         }
     }
+
+    show_main_window(app);
+    Ok(())
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
@@ -287,8 +311,7 @@ fn handle_command_stream<R: Runtime>(app: &tauri::AppHandle<R>, mut stream: TcpS
 
         let command: AppCommand =
             serde_json::from_str(body).map_err(|e| format!("invalid command payload: {e}"))?;
-        handle_app_command(app, command);
-        Ok(())
+        handle_app_command(app, command)
     })();
 
     match result {
@@ -865,7 +888,13 @@ fn normalize_unix_gui_environment() {
 /// 应用主入口，构建并启动 Tauri 应用
 pub fn run() {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    let startup_project = match args.as_slice() {
+    let (startup_project, startup_scan) = match args.as_slice() {
+        [arg] if arg == "--scan-projects" => {
+            let Ok(path) = std::env::current_dir() else {
+                return;
+            };
+            (None, Some(path.to_string_lossy().into_owned()))
+        }
         [arg] if arg == "--add-nearest-project" => {
             let Some(path) = std::env::current_dir()
                 .ok()
@@ -873,20 +902,32 @@ pub fn run() {
             else {
                 return;
             };
-            Some(path)
+            (Some(path), None)
         }
-        _ => startup_project_path_from_args(args),
+        _ => (startup_project_path_from_args(args), None),
     };
 
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-    if startup_project
-        .as_deref()
-        .is_some_and(forward_startup_project_to_running_instance)
     {
-        return;
+        let command = match (&startup_project, &startup_scan) {
+            (Some(path), _) => Some(AppCommand::AddProject {
+                path: path.to_string_lossy().into_owned(),
+            }),
+            (_, Some(path)) => Some(AppCommand::ScanProjects { path: path.clone() }),
+            _ => None,
+        };
+        if command
+            .as_ref()
+            .is_some_and(forward_command_to_running_instance)
+        {
+            return;
+        }
     }
 
     let builder = tauri::Builder::default()
+        .manage(PendingProjectScan {
+            path: Mutex::new(startup_scan),
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init());
@@ -965,6 +1006,7 @@ pub fn run() {
             commands::set_project_pinned,
             commands::sync_app_language,
             commands::add_project_to_config,
+            take_pending_project_scan,
             commands::scan_project_candidates,
             commands::cancel_project_scan,
             commands::remove_project_from_config,
@@ -1099,6 +1141,17 @@ mod tests {
 
         assert_eq!(json["type"], "add-project");
         assert_eq!(json["path"], path);
+    }
+
+    #[test]
+    fn app_command_scan_projects_round_trips_with_the_root_path() {
+        let message = serde_json::json!({
+            "type": "scan-projects",
+            "path": r"C:\Dev Tools\workspace",
+        });
+        let command: AppCommand = serde_json::from_value(message.clone()).unwrap();
+
+        assert_eq!(serde_json::to_value(command).unwrap(), message);
     }
 
     #[test]

@@ -7,8 +7,9 @@ import { useTranslation } from "react-i18next";
 import TitleBar from "../components/TitleBar";
 import NodeVersionDrawer from "../components/NodeVersionDrawer";
 import { listenForMacOSOpenSettings } from "../lib/macosNative";
+import { listenForProjectScanRequests } from "../lib/projectEvents";
 import { useNodeProcesses, type NodeProcessesState } from "../hooks/useNodeProcesses";
-import type { Project } from "../types/project";
+import type { Project, ProjectScanRequest } from "../types/project";
 import "../App.css";
 
 type CloseBehavior = "minimize" | "quit";
@@ -18,6 +19,8 @@ export interface AppShellContext {
   processState: NodeProcessesState;
   onOpenNodeManager: () => void;
   onViewProcesses: (project: Project) => void;
+  scanRequest: ProjectScanRequest | null;
+  onScanRequestHandled: (request: ProjectScanRequest) => void;
 }
 
 const CLOSE_BEHAVIOR_KEY = "devfleet.closeBehavior";
@@ -53,11 +56,37 @@ const AppShell: React.FC = () => {
   const [nodeDrawerTab, setNodeDrawerTab] = useState<"versions" | "processes">("versions");
   const [processProject, setProcessProject] = useState<Project | null>(null);
   const [nvmRefreshKey, setNvmRefreshKey] = useState(0);
+  const [scanRequest, setScanRequest] = useState<ProjectScanRequest | null>(null);
   const [closePromptOpen, setClosePromptOpen] = useState(false);
   const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const processState = useNodeProcesses(location.pathname === "/" || (nodeDrawerOpen && nodeDrawerTab === "processes"));
+
+  const handleScanRequest = useCallback((request: ProjectScanRequest) => {
+    setScanRequest((pending) => pending === request ? null : pending);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    void listenForProjectScanRequests((rootPath) => {
+      if (cancelled) return;
+      setScanRequest({ rootPath });
+      setNodeDrawerOpen(false);
+      setClosePromptOpen(false);
+      void navigate("/", { replace: true });
+    }).then((cleanup) => {
+      if (cancelled) cleanup();
+      else unlisten = cleanup;
+    }).catch((error) => console.warn("Failed to listen for project scan requests", error));
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [navigate]);
 
   const openNodeManager = useCallback(() => {
     setNodeDrawerTab("versions");
@@ -143,7 +172,14 @@ const AppShell: React.FC = () => {
         onRequestClose={() => void requestClose()}
       />
       <main className="app-main">
-        <Outlet context={{ nvmRefreshKey, processState, onOpenNodeManager: openNodeManager, onViewProcesses: viewProjectProcesses } satisfies AppShellContext} />
+        <Outlet context={{
+          nvmRefreshKey,
+          processState,
+          onOpenNodeManager: openNodeManager,
+          onViewProcesses: viewProjectProcesses,
+          scanRequest,
+          onScanRequestHandled: handleScanRequest,
+        } satisfies AppShellContext} />
       </main>
       <NodeVersionDrawer
         open={nodeDrawerOpen}

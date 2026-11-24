@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { NodeProcessInfo, Project } from "../types/project";
+import { NodeProcessInfo, Project, type ProjectScanRequest } from "../types/project";
 import type { NodeProcessesState } from "../hooks/useNodeProcesses";
 import { listenForMacOSAddProject } from "../lib/macosNative";
 import { listenForProjectsChanged } from "../lib/projectEvents";
@@ -21,9 +21,13 @@ interface ProjectManagerProps {
   processState: NodeProcessesState;
   onOpenNodeManager: () => void;
   onViewProcesses: (project: Project) => void;
+  scanRequest?: ProjectScanRequest | null;
+  onScanRequestHandled?: (request: ProjectScanRequest) => void;
 }
 
-const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey, processState, onOpenNodeManager, onViewProcesses }) => {
+const ProjectManager: React.FC<ProjectManagerProps> = ({
+  nvmRefreshKey, processState, onOpenNodeManager, onViewProcesses, scanRequest, onScanRequestHandled,
+}) => {
   const {
     projects,
     availability,
@@ -96,6 +100,11 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey, processS
       if (r && !r.success) messageApi.error(r.error || t("project.refreshFailed"));
     });
   }, [refreshEditors, refreshProjects, messageApi, t]);
+
+  const startRequestedScan = useCallback((request: ProjectScanRequest) => {
+    setImportOpen(true);
+    onScanRequestHandled?.(request);
+  }, [onScanRequestHandled]);
 
   const handleImported = useCallback(() => {
     refreshProjects().then((r) => {
@@ -471,8 +480,13 @@ const ProjectManager: React.FC<ProjectManagerProps> = ({ nvmRefreshKey, processS
       )}
 
       <ProjectImportModal
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
+        open={importOpen || Boolean(scanRequest)}
+        scanRequest={scanRequest}
+        onScanRequestHandled={startRequestedScan}
+        onClose={() => {
+          setImportOpen(false);
+          if (scanRequest) onScanRequestHandled?.(scanRequest);
+        }}
         onImported={handleImported}
       />
 
