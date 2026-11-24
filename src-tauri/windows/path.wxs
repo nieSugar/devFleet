@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Fragment>
+        <DirectoryRef Id="INSTALLDIR">
+            <Component Id="DevFleetTerminalPath" Guid="D6682C7E-8B3F-4CBE-B794-3E7ABE439147" KeyPath="yes">
+                <Environment Id="DevFleetPathEntry" Name="PATH" Action="set" Part="last" System="yes" Value="[INSTALLDIR]bin" />
+            </Component>
+        </DirectoryRef>
+    </Fragment>
+</Wix>

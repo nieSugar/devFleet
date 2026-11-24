@@ -53,9 +53,13 @@
       "icons/icon.ico"
     ],
     "windows": {
-      "wix": null,
+      "wix": {
+        "fragmentPaths": ["windows/path.wxs"],
+        "componentRefs": ["DevFleetTerminalPath"]
+      },
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerHooks": "windows/hooks.nsh"
       }
     }
   }

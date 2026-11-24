@@ -1,0 +1,7 @@
+{
+  "bundle": {
+    "resources": {
+      "windows/df.cmd": "bin/df.cmd"
+    }
+  }
+}

@@ -222,6 +222,9 @@ jobs:
 
           New-Item -ItemType Directory -Path $portableDir | Out-Null
           Copy-Item $exe -Destination (Join-Path $portableDir "devFleet.exe")
+          $portableBin = Join-Path $portableDir "bin"
+          New-Item -ItemType Directory -Path $portableBin | Out-Null
+          Copy-Item "src-tauri/windows/df.cmd" -Destination $portableBin
 
           if (Test-Path "LICENSE") {
             Copy-Item "LICENSE" -Destination (Join-Path $portableDir "LICENSE")

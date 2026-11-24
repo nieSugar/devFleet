@@ -185,22 +185,15 @@ where
     })
 }
 
-fn startup_project_path_from_args() -> Option<std::path::PathBuf> {
-    startup_project_path_from_args_with(std::env::args_os().skip(1), |path| path.is_dir())
-}
-
-fn add_startup_project_from_args() {
-    if let Some(path) = startup_project_path_from_args() {
-        add_project_path_to_config(path, "shell context menu");
-    }
+fn startup_project_path_from_args(
+    args: impl IntoIterator<Item = std::ffi::OsString>,
+) -> Option<std::path::PathBuf> {
+    let path = startup_project_path_from_args_with(args, |path| path.is_dir())?;
+    std::path::absolute(path).ok()
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-fn forward_startup_project_to_running_instance() -> bool {
-    let Some(path) = startup_project_path_from_args() else {
-        return false;
-    };
-
+fn forward_startup_project_to_running_instance(path: &std::path::Path) -> bool {
     let Ok(mut stream) =
         TcpStream::connect_timeout(&command_server_addr(), Duration::from_millis(200))
     else {
@@ -871,8 +864,13 @@ fn normalize_unix_gui_environment() {
 
 /// 应用主入口，构建并启动 Tauri 应用
 pub fn run() {
+    let startup_project = startup_project_path_from_args(std::env::args_os().skip(1));
+
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-    if forward_startup_project_to_running_instance() {
+    if startup_project
+        .as_deref()
+        .is_some_and(forward_startup_project_to_running_instance)
+    {
         return;
     }
 
@@ -889,8 +887,10 @@ pub fn run() {
         .on_menu_event(handle_macos_menu_event);
 
     builder
-        .setup(|app| {
-            add_startup_project_from_args();
+        .setup(move |app| {
+            if let Some(path) = startup_project {
+                add_project_path_to_config(path, "startup argument");
+            }
 
             #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             start_command_server(app.handle().clone());
@@ -1037,6 +1037,14 @@ mod tests {
         );
 
         assert_eq!(result, Some(folder));
+    }
+
+    #[test]
+    fn startup_project_path_resolves_dot_before_forwarding() {
+        let path = startup_project_path_from_args([os(".")]).unwrap();
+
+        assert!(path.is_absolute());
+        assert_eq!(path, std::env::current_dir().unwrap());
     }
 
     #[test]
