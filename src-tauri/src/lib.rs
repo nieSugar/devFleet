@@ -864,7 +864,19 @@ fn normalize_unix_gui_environment() {
 
 /// 应用主入口，构建并启动 Tauri 应用
 pub fn run() {
-    let startup_project = startup_project_path_from_args(std::env::args_os().skip(1));
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    let startup_project = match args.as_slice() {
+        [arg] if arg == "--add-nearest-project" => {
+            let Some(path) = std::env::current_dir()
+                .ok()
+                .and_then(|dir| project::nearest_project_dir(&dir))
+            else {
+                return;
+            };
+            Some(path)
+        }
+        _ => startup_project_path_from_args(args),
+    };
 
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     if startup_project

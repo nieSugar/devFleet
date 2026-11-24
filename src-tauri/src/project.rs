@@ -93,6 +93,13 @@ fn read_package_object(project_path: &Path) -> Option<serde_json::Value> {
     package.is_object().then_some(package)
 }
 
+pub fn nearest_project_dir(start: &Path) -> Option<PathBuf> {
+    start
+        .ancestors()
+        .find(|dir| dir.join("package.json").is_file())
+        .map(Path::to_path_buf)
+}
+
 pub fn has_valid_package_json(project_path: &str) -> bool {
     read_package_object(Path::new(project_path)).is_some()
 }
@@ -524,6 +531,21 @@ mod tests {
     fn package(path: &Path, content: &str) {
         fs::create_dir_all(path).expect("project directory should be created");
         fs::write(path.join("package.json"), content).expect("package should be written");
+    }
+
+    #[test]
+    fn nearest_project_dir_stops_at_the_first_package_file() {
+        let root = temp_root("nearest");
+        let project = root.join("app");
+        let nested = project.join("src").join("components");
+        package(&root, r#"{"name":"workspace"}"#);
+        package(&project, r#"{"name":"app"}"#);
+        fs::create_dir_all(nested.join("package.json"))
+            .expect("nested directories should be created");
+
+        assert_eq!(nearest_project_dir(&nested), Some(project.clone()));
+        assert_eq!(nearest_project_dir(&project), Some(project));
+        fs::remove_dir_all(root).expect("owned temp root should be removable");
     }
 
     #[test]
