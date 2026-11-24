@@ -663,7 +663,7 @@ dependencies = [
 
 [[package]]
 name = "devfleet"
-version = "2.1.19"
+version = "2.1.20"
 dependencies = [
  "base64 0.22.1",
  "chrono",
