@@ -69,9 +69,6 @@ fn is_directory_link(path: &Path) -> bool {
     let Ok(metadata) = fs::symlink_metadata(path) else {
         return true;
     };
-    if metadata.file_type().is_symlink() {
-        return true;
-    }
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::fs::MetadataExt;
@@ -80,7 +77,7 @@ fn is_directory_link(path: &Path) -> bool {
             return true;
         }
     }
-    false
+    metadata.file_type().is_symlink()
 }
 
 fn read_package_object(project_path: &Path) -> Option<serde_json::Value> {
